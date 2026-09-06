@@ -1,0 +1,39 @@
+MIT License
+
+Copyright (c) 2026 krane
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+The Plymouth boot theme under `pkgs/plymouth-lone/theme/` is a derivative of
+adi1090x's Plymouth themes and is licensed separately under the GNU General
+Public License v3.0 — see `pkgs/plymouth-lone/theme/LICENSE` for the full
+text. It is not covered by the MIT license above.
+
+`config/nvim/` is derived from the LazyVim starter template
+(https://github.com/LazyVim/starter), licensed under the Apache License,
+Version 2.0 (https://raw.githubusercontent.com/LazyVim/starter/main/LICENSE).
+It is not covered by the MIT license above; see the upstream repository for
+the full Apache-2.0 text and its attribution notices.
+
+`config/zsh/p10k.zsh` is based on `config/p10k-rainbow.zsh` from
+romkatv/powerlevel10k (https://github.com/romkatv/powerlevel10k), licensed
+under the MIT license. Copyright (c) 2019 Roman Perepelitsa and
+contributors; see the upstream repository for its full licence text.
