@@ -1,0 +1,39 @@
+# sops-nix key/recipient map. See secrets/README.md for what each secret holds.
+#
+# Every recipient below is a placeholder. It cannot decrypt anything.
+# scripts/bootstrap-sops.sh replaces each one with the real recipient: the
+# admin's personal age key, and each host's age key derived from that
+# host's own SSH host key. Never hand-edit a recipient here.
+keys:
+  - &admin_krane age1PLACEHOLDER_ADMIN_KRANE_REPLACE_VIA_BOOTSTRAP_SOPS_SH
+  - &host_tariognatha age1PLACEHOLDER_HOST_TARIOGNATHA_REPLACE_VIA_BOOTSTRAP_SOPS_SH
+  - &host_tarmantria age1PLACEHOLDER_HOST_TARMANTRIA_REPLACE_VIA_BOOTSTRAP_SOPS_SH
+  - &host_taractias age1PLACEHOLDER_HOST_TARACTIAS_REPLACE_VIA_BOOTSTRAP_SOPS_SH
+
+creation_rules:
+  # Shared secrets any host may need. Nothing consumes one yet.
+  - path_regex: secrets/shared\.yaml$
+    key_groups:
+      - age:
+          - *admin_krane
+          - *host_tariognatha
+          - *host_tarmantria
+          - *host_taractias
+
+  - path_regex: secrets/tariognatha\.yaml$
+    key_groups:
+      - age:
+          - *admin_krane
+          - *host_tariognatha
+
+  - path_regex: secrets/tarmantria\.yaml$
+    key_groups:
+      - age:
+          - *admin_krane
+          - *host_tarmantria
+
+  - path_regex: secrets/taractias\.yaml$
+    key_groups:
+      - age:
+          - *admin_krane
+          - *host_taractias
