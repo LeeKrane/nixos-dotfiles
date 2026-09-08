@@ -25,13 +25,13 @@ just check
 To install onto real hardware, boot a NixOS unstable minimal ISO, clone this repo, then preview the installer before running it for real:
 
 ```sh
-./install.sh --dry-run
+sudo ./install.sh --dry-run
 ```
 
-**`./install.sh` without `--dry-run` erases the disk you select and takes 20-60+ minutes**, longer on the CUDA host (`tariognatha`), because `nixos-install` compiles quickshell from source. It asks for typed confirmation before touching anything.
+**`sudo ./install.sh` without `--dry-run` erases the disk you select and takes 20-60+ minutes**, longer on the CUDA host (`tariognatha`), because `nixos-install` compiles quickshell from source. It asks for typed confirmation before touching anything. The live install must run as root; the script aborts if not.
 
 ```sh
-./install.sh
+sudo ./install.sh
 ```
 
 See [docs/INSTALL.md](docs/INSTALL.md) for the full runbook.

@@ -18,6 +18,11 @@ if ! command -v gum >/dev/null 2>&1 && [ -z "${KRANE_INSTALL_REEXEC:-}" ]; then
         --command bash "$0" "$@"
 fi
 
+# The minimal live ISO ships nix without flakes; the installed system
+# enables them via modules/nixos/nix-settings.nix. extra- merges with
+# any existing setting instead of replacing it.
+export NIX_CONFIG="extra-experimental-features = nix-command flakes"
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG="/tmp/krane-install-$(date +%Y%m%d-%H%M%S)-$$.log"
 LOG_WRITABLE=true

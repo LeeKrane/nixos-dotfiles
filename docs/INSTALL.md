@@ -24,10 +24,10 @@ cd ~/.dotfiles
 ## 1. Run `./install.sh`
 
 ```sh
-./install.sh
+sudo ./install.sh
 ```
 
-With no flags, `install.sh` detects a live ISO and walks through a live install:
+Install mode must run as root; the preflight check aborts if not. With no flags, `install.sh` detects a live ISO and walks through a live install:
 
 1. Preflight checks root, UEFI boot, network, and required tools. Missing `dmidecode`/`lspci` only skips host suggestion and PRIME detection. It does not abort.
 2. Host: suggests one of `tariognatha`, `tarmantria`, `taractias` from the chassis, in a `gum choose` list you can override.
@@ -52,7 +52,7 @@ Log in, then from `~/.dotfiles`:
 ./install.sh
 ```
 
-On an already-installed system this runs setup mode:
+Do not run setup mode with sudo — the script refuses, because `scripts/bootstrap-sops.sh` writes your personal age key under `$HOME`. On an already-installed system this runs setup mode:
 
 1. Bootstraps sops-nix (`scripts/bootstrap-sops.sh <host>`), deriving this host's age recipient and offering to commit `.sops.yaml`. Decline and commit later with Appendix A step 9's commands. sshd exists only so `sshd-keygen` generates this host's SSH key at boot. `openFirewall = false`.
 2. Offers to edit `secrets/<host>.yaml` with `sops`, skipped under `--yes`/`--dry-run`. An uncommitted secrets file evaluates as absent to sops-nix, so commit it. See [secrets/README.md](../secrets/README.md) for what each key holds.
