@@ -5,10 +5,10 @@
 # admin's personal age key, and each host's age key derived from that
 # host's own SSH host key. Never hand-edit a recipient here.
 keys:
-  - &admin_krane age1PLACEHOLDER_ADMIN_KRANE_REPLACE_VIA_BOOTSTRAP_SOPS_SH
+  - &admin_krane age1jwlqpsyazly7u24h5nwegaznc9mlgqnnek0xxn9nksmgxft3pg9sph75al
   - &host_tariognatha age1PLACEHOLDER_HOST_TARIOGNATHA_REPLACE_VIA_BOOTSTRAP_SOPS_SH
   - &host_tarmantria age1PLACEHOLDER_HOST_TARMANTRIA_REPLACE_VIA_BOOTSTRAP_SOPS_SH
-  - &host_taractias age1PLACEHOLDER_HOST_TARACTIAS_REPLACE_VIA_BOOTSTRAP_SOPS_SH
+  - &host_taractias age18ln7hrxrhx59dk5cn4p8d9gndnftkcpyauvfkhttfhphu6kg3adq8q8wsf
 
 creation_rules:
   # Shared secrets any host may need. Nothing consumes one yet.
