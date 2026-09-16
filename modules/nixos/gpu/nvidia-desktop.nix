@@ -4,6 +4,18 @@
 {
   services.xserver.videoDrivers = [ "nvidia" ];
 
+  # CUDA packages are unfree, not on cache.nixos.org, and slow to compile from
+  # source. Pinned here (not in nix-settings.nix) so only the CUDA host trusts it.
+  # cache.nixos-cuda.org is the NixOS CUDA team's cache, key confirmed
+  # independently. Do not re-add the cachix-hosted CUDA cache: it
+  # returns 401 on every request.
+  nix.settings = {
+    substituters = [ "https://cache.nixos-cuda.org" ];
+    trusted-public-keys = [
+      "cache.nixos-cuda.org:74DUi4Ye579gUqzH4ziL9IyiJBlDpMRn9MBN8oNan9M="
+    ];
+  };
+
   hardware.graphics = {
     enable = true;
     enable32Bit = true;

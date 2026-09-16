@@ -192,6 +192,8 @@ runs `luac -p` over every rendered file for all three hosts.
 Unknown keys in `hl.config` and unknown fields in `hl.monitor`/`hl.device`
 are hard errors at Hyprland start. Neither `nix flake check` nor `luac -p`
 catches them. `hyprctl configerrors` after first login is the only gate.
+Use the underscore spelling of every Hyprland option in `krane.hypr.settings`,
+for example `tap_to_click`, never the hyphenated hyprlang name.
 
 ## Verifying on the target
 

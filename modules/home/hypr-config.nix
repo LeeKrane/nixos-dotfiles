@@ -55,8 +55,9 @@ let
     + builtins.replaceStrings [ "\\" ''"'' "\n" "\t" "\r" ] [ "\\\\" ''\"'' "\\n" "\\t" "\\r" ] s
     + ''"'';
 
-  # Hyprland config keys are not all valid Lua identifiers, such as the dashed
-  # `input:touchpad:tap-to-click`, so those become `["key"] = value` instead.
+  # Hyprland's Lua config exposes every option with underscores: it rewrites `-` to
+  # `_` and `:` to `.` when registering config keys, so settings keys here are plain
+  # identifiers. The bracket form is kept only for keys that collide with Lua keywords.
   luaKey = k: if isLuaIdent k then k else "[${luaStr k}]";
 
   luaValue =

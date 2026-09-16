@@ -18,9 +18,7 @@
       kb_variant = "nodeadkeys";
       touchpad = {
         natural_scroll = true;
-        # Dashed key: Hyprland spells this input:touchpad:tap-to-click, not a bare Lua
-        # identifier, so the renderer emits ["tap-to-click"] instead.
-        "tap-to-click" = true;
+        tap_to_click = true;
       };
     };
 
