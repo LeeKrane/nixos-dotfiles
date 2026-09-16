@@ -15,6 +15,10 @@
     noto-fonts-color-emoji
     liberation_ttf
     rubik
+    # The soymou module installs Material Symbols only into the user profile,
+    # which system fontconfig never reads, so ii renders icon names as text.
+    # Installing it here makes it visible everywhere.
+    material-symbols
   ];
 
   fonts.enableDefaultPackages = true;
