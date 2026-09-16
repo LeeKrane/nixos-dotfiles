@@ -5,7 +5,7 @@
   disko.devices.disk.main = {
     # CHANGE-ME: fill in the real target disk at install time, such as
     # "/dev/disk/by-id/nvme-Samsung_SSD_..." (prefer by-id over /dev/sdX so it survives reordering).
-    device = "/dev/CHANGE-ME";
+    device = "/dev/disk/by-id/ata-HFS256G32TNF-N3A0A_MJ86N42331010646B";
     type = "disk";
     content = {
       type = "gpt";
