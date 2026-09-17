@@ -35,6 +35,13 @@ let
   # own hardcoded targetPath, or our overrides land somewhere ii never reads.
   hyprDir = "${config.home.homeDirectory}/.config/hypr";
 
+  # ii pins dots-hyprland at a revision whose generate_colors_material.py still reads
+  # material_colors['primary_paletteKeyColor'], but nixpkgs' python3Packages.materialyoucolor
+  # (3.0.4) renamed that key to primaryPaletteKeyColor, so every switchwall.sh run throws
+  # KeyError and leaves material_colors.scss (and kitty's generated theme) empty. Remove this
+  # once ii's pinned rev or the packaged materialyoucolor version makes the names agree again.
+  materialColorsScript = "${config.home.homeDirectory}/.config/quickshell/ii/scripts/colors/generate_colors_material.py";
+
   # Drops everything from the sentinel to EOF first, so a stale block from an older generation
   # never sits above the fresh one. A store script, not inline: a shell redirect can't be
   # prefixed with $DRY_RUN_CMD, so dry-run mode would still write. `cat`, not `mv`, preserves
@@ -118,4 +125,14 @@ in
     + lib.concatMapStrings installOwned ownedFiles
     + lib.concatMapStrings appendBlock appendedFiles
   );
+
+  # Sibling to kraneIiOverrides rather than folded into it: this patches a quickshell script,
+  # not a Hyprland file, and doesn't fit the owned/appended/assertion machinery above.
+  home.activation.kraneIiMaterialColorsPatch =
+    lib.hm.dag.entryAfter [ "copyIllogicalImpulseConfigs" ]
+      ''
+        if [ -f "${materialColorsScript}" ]; then
+          $DRY_RUN_CMD ${pkgs.gnused}/bin/sed -i 's/primary_paletteKeyColor/primaryPaletteKeyColor/g' "${materialColorsScript}"
+        fi
+      '';
 }

@@ -195,6 +195,18 @@ catches them. `hyprctl configerrors` after first login is the only gate.
 Use the underscore spelling of every Hyprland option in `krane.hypr.settings`,
 for example `tap_to_click`, never the hyphenated hyprlang name.
 
+## Patched files
+
+Besides the owned/appended Hyprland files above, `kraneIiMaterialColorsPatch`
+(also `entryAfter [ "copyIllogicalImpulseConfigs" ]`) sed-patches
+`~/.config/quickshell/ii/scripts/colors/generate_colors_material.py`:
+`s/primary_paletteKeyColor/primaryPaletteKeyColor/g`. ii's pinned rev reads
+the old `materialyoucolor` key name; nixpkgs' packaged `materialyoucolor`
+(3.0.4) renamed it, so unpatched `switchwall.sh` throws `KeyError` and
+leaves `material_colors.scss` empty. Runs after every copy, since the copy
+step recreates the file from scratch each switch. Remove once the pinned
+rev or the packaged version makes the names agree again.
+
 ## Verifying on the target
 
 See [docs/VERIFY.md](VERIFY.md)'s on-target checklist for the commands,
