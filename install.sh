@@ -955,12 +955,75 @@ preflight_setup() {
     fi
 }
 
+# True when $1 (a .sops.yaml path) still contains $2's unreplaced
+# bootstrap-sops.sh placeholder recipient. Mirrors the placeholder shape
+# scripts/bootstrap-sops.sh derives from HOST (see its HOST_PLACEHOLDER). A
+# missing .sops.yaml counts as "placeholder present" too, i.e. not yet
+# bootstrapped: bootstrap-sops.sh must still run, and hits its own "not
+# found" guard if it has nothing to work from.
+sops_placeholder_present() {
+    local sops_yaml="$1" host="$2" host_upper placeholder
+    [ -f "$sops_yaml" ] || return 0
+    host_upper=$(printf '%s' "$host" | tr '[:lower:]' '[:upper:]')
+    placeholder="age1PLACEHOLDER_HOST_${host_upper}_REPLACE_VIA_BOOTSTRAP_SOPS_SH"
+    grep -qF "$placeholder" "$sops_yaml" 2>/dev/null
+}
+
+# True when $2, in the worktree of the git repo at $1, has no uncommitted
+# change at all -- modified, untracked, staged, or deleted. Reads the
+# worktree/index via `git status --porcelain` so callers can decide whether
+# there is anything to commit BEFORE staging: `git add` only runs once the
+# user has confirmed the commit, so a declined confirm leaves nothing
+# staged. Works with no HEAD too (an unborn branch still reports an
+# untracked path via `??`), unlike an index-vs-HEAD diff.
+git_path_clean() {
+    local repo="$1" path="$2"
+    [ -z "$(git -C "$repo" status --porcelain -- "$path" 2>/dev/null)" ]
+}
+
+# Setup mode must be safely re-runnable: a prior run may have already
+# patched .sops.yaml and committed it, in which case bootstrap-sops.sh has
+# nothing left to do and `git commit` on a clean tree would exit 1 and
+# abort the rest of setup (edit_host_secrets, setup_rust, ...).
 run_bootstrap_sops() {
     log_step "Bootstrapping sops-nix recipients for $HOST"
-    run_sh "\"$REPO_ROOT/scripts/bootstrap-sops.sh\" \"$HOST\""
+    local key_file="${SOPS_AGE_KEY_FILE:-$HOME/.config/sops/age/keys.txt}"
+    if sops_placeholder_present "$REPO_ROOT/.sops.yaml" "$HOST"; then
+        run_sh "\"$REPO_ROOT/scripts/bootstrap-sops.sh\" \"$HOST\""
+    elif [ -f "$key_file" ]; then
+        if $DRY_RUN; then
+            log_info "would skip bootstrap: sops already bootstrapped for $HOST"
+        else
+            log_info "sops already bootstrapped for $HOST, skipping"
+        fi
+    else
+        # The host placeholder is gone but the admin key that decrypts
+        # existing secrets is missing. Re-running bootstrap-sops.sh here
+        # would generate a fresh admin key that never becomes a recipient
+        # (the admin placeholder is already replaced too), silently
+        # locking secrets out from under the new key. Fail loudly instead.
+        local msg="sops already bootstrapped for $HOST but admin key $key_file is missing; restore it from your backup (see secrets/README.md) or re-add the age1PLACEHOLDER_ADMIN_KRANE_REPLACE_VIA_BOOTSTRAP_SOPS_SH placeholder to .sops.yaml and rerun"
+        if $DRY_RUN; then
+            log_warn "$msg"
+        else
+            die "$msg"
+        fi
+    fi
+    if git_path_clean "$REPO_ROOT" .sops.yaml; then
+        if $DRY_RUN; then
+            log_info "would skip: nothing to commit for .sops.yaml"
+        else
+            log_info "nothing to commit for .sops.yaml"
+        fi
+        return 0
+    fi
     if confirm "Commit .sops.yaml now?"; then
-        run git -C "$REPO_ROOT" add .sops.yaml
-        run git -C "$REPO_ROOT" commit -m "Add $HOST sops recipient"
+        run git -C "$REPO_ROOT" add -- .sops.yaml
+        if git -C "$REPO_ROOT" diff --cached --quiet HEAD -- .sops.yaml 2>/dev/null; then
+            log_info "nothing to commit for .sops.yaml after staging"
+        else
+            run git -C "$REPO_ROOT" commit -m "Add $HOST sops recipient"
+        fi
     fi
 }
 
@@ -971,11 +1034,35 @@ edit_host_secrets() {
         return
     fi
     if confirm "Edit $secrets_file with sops now?"; then
-        run_sh "sops \"$secrets_file\""
+        run_sh "sops \"$secrets_file\"" || {
+            # sops exits 200 "File has not changed, exiting." when the user
+            # quits without editing; tolerate only that. Anything else
+            # (e.g. 128 on an undecryptable file with sops 3.13.3) is a
+            # real failure and must abort setup rather than be silently
+            # skipped. Clear LAST_CMD ourselves, same as run_soft, so a
+            # later unrelated failure in this function is never blamed on
+            # this handled one; die() itself never re-triggers the ERR
+            # trap since it's reached via `||`, exempting it, and die only
+            # runs log_error/print_fail_box/exit from there.
+            local rc=$?
+            LAST_CMD=""
+            [ "$rc" -eq 200 ] || die "sops failed on $secrets_file (exit $rc)"
+            log_warn "sops left $secrets_file unchanged, skipping commit"
+            return 0
+        }
         log_warn "uncommitted secrets evaluate as ABSENT to sops-nix, commit $secrets_file before rebuilding"
+        [ -f "$secrets_file" ] || { log_info "no $secrets_file to commit"; return 0; }
+        if git_path_clean "$REPO_ROOT" "secrets/$HOST.yaml"; then
+            log_info "nothing to commit for $HOST secrets"
+            return
+        fi
         if confirm "Commit $secrets_file now?"; then
-            run git -C "$REPO_ROOT" add "$secrets_file"
-            run git -C "$REPO_ROOT" commit -m "Add $HOST secrets"
+            run git -C "$REPO_ROOT" add -- "secrets/$HOST.yaml"
+            if git -C "$REPO_ROOT" diff --cached --quiet HEAD -- "secrets/$HOST.yaml" 2>/dev/null; then
+                log_info "nothing to commit for secrets/$HOST.yaml after staging"
+            else
+                run git -C "$REPO_ROOT" commit -m "Add $HOST secrets"
+            fi
         fi
     fi
 }
@@ -1262,6 +1349,104 @@ self_test() {
     HOST="$saved_host"
     if $opt_ok; then
         echo "OK: flake_config_opt true only for tariognatha" >&2
+    else
+        SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
+    fi
+
+    echo "== self-test: sops_placeholder_present detects an unreplaced placeholder ==" >&2
+    local ph_tmp ph_ok=true
+    ph_tmp=$(mktemp "${TMPDIR:-/tmp}/krane-install-selftest-sops.XXXXXX")
+    printf 'age1PLACEHOLDER_HOST_TARACTIAS_REPLACE_VIA_BOOTSTRAP_SOPS_SH\n' >"$ph_tmp"
+    sops_placeholder_present "$ph_tmp" taractias \
+        || { echo "FAIL: placeholder present was not detected" >&2; ph_ok=false; }
+    printf 'age18ln7hrxrhx59dk5cn4p8d9gndnftkcpyauvfkhttfhphu6kg3adq8q8wsf\n' >"$ph_tmp"
+    ! sops_placeholder_present "$ph_tmp" taractias \
+        || { echo "FAIL: a real recipient was misread as the placeholder" >&2; ph_ok=false; }
+    rm -f "$ph_tmp"
+    if $ph_ok; then
+        echo "OK: sops_placeholder_present distinguishes placeholder from real recipient" >&2
+    else
+        SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
+    fi
+
+    echo "== self-test: git_path_clean decides commit vs skip from the worktree ==" >&2
+    local git_tmp clean_ok=true
+    git_tmp=$(mktemp -d "${TMPDIR:-/tmp}/krane-install-selftest-git.XXXXXX")
+    (
+        cd "$git_tmp"
+        git init -q
+        git -c user.email=t@t -c user.name=t -c commit.gpgsign=false commit -q --allow-empty -m init
+        echo one >tracked.yaml
+        git add tracked.yaml
+        git -c user.email=t@t -c user.name=t -c commit.gpgsign=false commit -q -m add
+    )
+    # Committed, worktree matches HEAD, nothing staged: clean.
+    if git_path_clean "$git_tmp" tracked.yaml; then
+        echo "OK: a clean committed file reads as nothing to commit" >&2
+    else
+        echo "FAIL: a clean committed file did not read as clean" >&2
+        clean_ok=false
+    fi
+    # Modified in the worktree, not staged: dirty.
+    echo modified >"$git_tmp/tracked.yaml"
+    if ! git_path_clean "$git_tmp" tracked.yaml; then
+        echo "OK: a modified, unstaged file reads as dirty" >&2
+    else
+        echo "FAIL: a modified, unstaged file read as clean" >&2
+        clean_ok=false
+    fi
+    git -C "$git_tmp" checkout -q -- tracked.yaml
+    # Untracked, not staged: dirty.
+    echo new >"$git_tmp/untracked.yaml"
+    if ! git_path_clean "$git_tmp" untracked.yaml; then
+        echo "OK: an untracked file reads as dirty" >&2
+    else
+        echo "FAIL: an untracked file read as clean" >&2
+        clean_ok=false
+    fi
+    # Staged new file: dirty.
+    git -C "$git_tmp" add -- untracked.yaml
+    if ! git_path_clean "$git_tmp" untracked.yaml; then
+        echo "OK: a staged new file reads as dirty" >&2
+    else
+        echo "FAIL: a staged new file read as clean" >&2
+        clean_ok=false
+    fi
+    git -C "$git_tmp" -c user.email=t@t -c user.name=t -c commit.gpgsign=false commit -q -m add-untracked
+    # Staged deletion (`git rm --cached`) with the worktree copy left
+    # identical to HEAD: still dirty, because the index no longer matches
+    # HEAD -- `git status --porcelain` reports both the index-level D and
+    # an untracked ?? for the same path. A real run would then `git add`
+    # (restoring the index to match HEAD and the worktree) before
+    # committing; the caller re-checks `git diff --cached --quiet HEAD`
+    # after that `add` and, finding nothing staged, skips the commit
+    # instead of running it and hitting exit 1 "nothing to commit".
+    git -C "$git_tmp" rm -q --cached tracked.yaml
+    if ! git_path_clean "$git_tmp" tracked.yaml; then
+        echo "OK: a staged deletion with worktree identical to HEAD reads as dirty" >&2
+    else
+        echo "FAIL: a staged deletion with worktree identical to HEAD read as clean" >&2
+        clean_ok=false
+    fi
+    git -C "$git_tmp" add -- tracked.yaml
+    # No HEAD at all (unborn branch) with an untracked file: dirty, not an
+    # error -- `git status --porcelain` needs no HEAD to report `??`.
+    local no_head_tmp
+    no_head_tmp=$(mktemp -d "${TMPDIR:-/tmp}/krane-install-selftest-git-nohead.XXXXXX")
+    (
+        cd "$no_head_tmp"
+        git init -q
+        echo one >staged.yaml
+    )
+    if ! git_path_clean "$no_head_tmp" staged.yaml; then
+        echo "OK: a repo with no HEAD and an untracked file reads as dirty" >&2
+    else
+        echo "FAIL: a repo with no HEAD and an untracked file read as clean" >&2
+        clean_ok=false
+    fi
+    rm -rf "$git_tmp" "$no_head_tmp"
+    if $clean_ok; then
+        echo "OK: git_path_clean covers committed/modified/untracked/staged/deleted/no-HEAD" >&2
     else
         SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
     fi
