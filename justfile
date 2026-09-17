@@ -31,7 +31,7 @@ docker-build HOST:
 docker-clean:
     docker volume rm nixstore
 
-# nix fmt, nixfmt-rfc-style, over the whole tree, in docker.
+# nix fmt, nixfmt, over the whole tree, in docker.
 fmt:
     scripts/docker-check.sh fmt
 

@@ -93,7 +93,7 @@
 
       overlays.default = nixpkgs.lib.composeManyExtensions overlaysList;
 
-      formatter.${system} = pkgs.nixfmt-rfc-style;
+      formatter.${system} = pkgs.nixfmt;
 
       devShells.${system}.default = pkgs.mkShell {
         packages = with pkgs; [
@@ -101,7 +101,7 @@
           age
           ssh-to-age
           just
-          nixfmt-rfc-style
+          nixfmt
           deadnix
           statix
           gum

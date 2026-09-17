@@ -33,7 +33,7 @@
 
     # nix
     nixd
-    nixfmt-rfc-style # same derivation as pkgs.nixfmt under nixpkgs' new name, kept for readability at the call site
+    nixfmt # same derivation as pkgs.nixfmt under nixpkgs' new name, kept for readability at the call site
 
     # web / json / yaml / tailwind
     vscode-langservers-extracted
