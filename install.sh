@@ -227,6 +227,27 @@ run_sh() {
     return "$rc"
 }
 
+# Like run_sh, but for full-screen interactive programs (sops's $EDITOR)
+# that get confused by output going through the tee pipe set up on stdout
+# and stderr near the top of the script. When a real tty is available,
+# runs straight against /dev/tty instead; otherwise falls back to run_sh's
+# own behaviour.
+run_tty() {
+    if $DRY_RUN; then
+        printf '+ %s\n' "$1" >&2
+        return 0
+    fi
+    LAST_CMD="$1"
+    if $HAVE_TTY; then
+        bash -o pipefail -c "$1" </dev/tty >/dev/tty 2>&1
+    else
+        bash -o pipefail -c "$1"
+    fi
+    local rc=$?
+    [ "$rc" -eq 0 ] && LAST_CMD=""
+    return "$rc"
+}
+
 capture() {
     if $DRY_RUN; then
         printf '+ %s\n' "$(printf '%q ' "$@")" >&2
@@ -1034,7 +1055,8 @@ edit_host_secrets() {
         return
     fi
     if confirm "Edit $secrets_file with sops now?"; then
-        run_sh "sops \"$secrets_file\"" || {
+        log_info "opening sops editor for secrets/$HOST.yaml (output goes to the terminal, not the log)"
+        run_tty "sops \"$secrets_file\"" || {
             # sops exits 200 "File has not changed, exiting." when the user
             # quits without editing; tolerate only that. Anything else
             # (e.g. 128 on an undecryptable file with sops 3.13.3) is a
@@ -1273,6 +1295,35 @@ self_test() {
     else
         echo "FAIL: run_sh 'false | true' returned success, pipefail not honoured" >&2
         SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
+    fi
+
+    echo "== self-test: run_tty ==" >&2
+    local saved_dry_run2="$DRY_RUN" rc5=0 out5
+    DRY_RUN=true
+    out5=$(run_tty 'false' 2>&1)
+    rc5=$?
+    DRY_RUN="$saved_dry_run2"
+    if [ "$rc5" -eq 0 ] && printf '%s' "$out5" | grep -qF '+ false'; then
+        echo "OK: run_tty 'false' under DRY_RUN=true returned 0 and printed '+ false'" >&2
+    else
+        echo "FAIL: run_tty 'false' under DRY_RUN=true was rc=$rc5 out=$out5" >&2
+        SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
+    fi
+    if { : </dev/tty; } 2>/dev/null; then
+        local saved_have_tty="$HAVE_TTY" rc6=0 tty_out_file
+        HAVE_TTY=true
+        tty_out_file=$(mktemp "${TMPDIR:-/tmp}/krane-install-selftest-tty.XXXXXX")
+        run_tty '[ -t 1 ] && [ -t 0 ]' >"$tty_out_file" 2>&1 || rc6=$?
+        HAVE_TTY="$saved_have_tty"
+        rm -f "$tty_out_file"
+        if [ "$rc6" -eq 0 ]; then
+            echo "OK: run_tty ran the stub against a real /dev/tty (rc=0)" >&2
+        else
+            echo "FAIL: run_tty against a real /dev/tty returned rc=$rc6" >&2
+            SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
+        fi
+    else
+        echo "OK: skipped (no tty)" >&2
     fi
 
     echo "== self-test: ERR trap fires inside a function ==" >&2
