@@ -153,4 +153,29 @@ in
   home.activation.kraneIiPatches = lib.hm.dag.entryAfter [ "copyIllogicalImpulseConfigs" ] (
     lib.concatMapStrings patchFile iiPatches
   );
+
+  # copyIllogicalImpulseConfigs rm -rf's ~/.config/fish before recopying it, taking
+  # fish_variables (universal vars, incl. __fish_initialized) with it. That retriggers
+  # fish's 4.3 upgrade notice and conf.d/fish_frozen_key_bindings.fish every activation.
+  # Save it before the wipe, restore it after. See docs/II-INTEGRATION.md "Preserved files".
+  # A fish instance that runs set -U between the save and ii's rm -rf loses that write; acceptable.
+  home.activation.kraneIiSaveFishVars =
+    lib.hm.dag.entryBetween [ "copyIllogicalImpulseConfigs" ] [ "writeBoundary" ]
+      ''
+        src="${config.home.homeDirectory}/.config/fish/fish_variables"
+        dst="${config.home.homeDirectory}/.local/state/krane/fish_variables"
+        if [ -f "$src" ]; then
+          $DRY_RUN_CMD ${pkgs.coreutils}/bin/mkdir -p "$(${pkgs.coreutils}/bin/dirname "$dst")"
+          $DRY_RUN_CMD ${pkgs.coreutils}/bin/cp -f "$src" "$dst"
+        fi
+      '';
+
+  home.activation.kraneIiRestoreFishVars = lib.hm.dag.entryAfter [ "copyIllogicalImpulseConfigs" ] ''
+    src="${config.home.homeDirectory}/.config/fish/fish_variables"
+    dst="${config.home.homeDirectory}/.local/state/krane/fish_variables"
+    if [ -f "$dst" ]; then
+      $DRY_RUN_CMD ${pkgs.coreutils}/bin/mkdir -p "${config.home.homeDirectory}/.config/fish"
+      $DRY_RUN_CMD ${pkgs.coreutils}/bin/cp -f "$dst" "$src"
+    fi
+  '';
 }

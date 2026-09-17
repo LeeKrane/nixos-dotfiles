@@ -215,6 +215,17 @@ file is skipped rather than failing activation:
   file would emit a bat frame instead of raw OSC sequences. The patch
   makes that one line call `command cat` to bypass the alias.
 
+### Preserved files
+
+`kraneIiSaveFishVars` (runs after `writeBoundary` and before `copyIllogicalImpulseConfigs`) and
+`kraneIiRestoreFishVars` (runs after `copyIllogicalImpulseConfigs`)
+save and restore `~/.config/fish/fish_variables` around the copy step.
+That file holds fish's universal variables, including
+`__fish_initialized`; the copy step's `rm -rf` wipes it, which retriggers
+fish's 4.3 upgrade notice and `conf.d/fish_frozen_key_bindings.fish` on
+every new terminal after each activation. The backup lives at
+`~/.local/state/krane/fish_variables`.
+
 ## Verifying on the target
 
 See [docs/VERIFY.md](VERIFY.md)'s on-target checklist for the commands,
