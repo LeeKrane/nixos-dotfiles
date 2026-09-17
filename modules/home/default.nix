@@ -14,6 +14,7 @@
     ./zsh-fallback.nix
     ./proton-drive.nix
     ./fallback-vendoring.nix
+    ./wallpapers.nix
   ];
 
   home.stateVersion = "26.05";
