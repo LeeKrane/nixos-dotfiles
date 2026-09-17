@@ -35,12 +35,33 @@ let
   # own hardcoded targetPath, or our overrides land somewhere ii never reads.
   hyprDir = "${config.home.homeDirectory}/.config/hypr";
 
-  # ii pins dots-hyprland at a revision whose generate_colors_material.py still reads
-  # material_colors['primary_paletteKeyColor'], but nixpkgs' python3Packages.materialyoucolor
-  # (3.0.4) renamed that key to primaryPaletteKeyColor, so every switchwall.sh run throws
-  # KeyError and leaves material_colors.scss (and kitty's generated theme) empty. Remove this
-  # once ii's pinned rev or the packaged materialyoucolor version makes the names agree again.
-  materialColorsScript = "${config.home.homeDirectory}/.config/quickshell/ii/scripts/colors/generate_colors_material.py";
+  # Files this repo sed-patches after ii (re)writes them, since ii's copy step recreates
+  # each one from scratch every switch. See docs/II-INTEGRATION.md "Patched files".
+  iiPatches = [
+    {
+      # ii pins dots-hyprland at a revision whose generate_colors_material.py still reads
+      # material_colors['primary_paletteKeyColor'], but nixpkgs' python3Packages.materialyoucolor
+      # (3.0.4) renamed that key to primaryPaletteKeyColor, so every switchwall.sh run throws
+      # KeyError and leaves material_colors.scss (and kitty's generated theme) empty. Remove this
+      # once ii's pinned rev or the packaged materialyoucolor version makes the names agree again.
+      file = "${config.home.homeDirectory}/.config/quickshell/ii/scripts/colors/generate_colors_material.py";
+      sed = "s/primary_paletteKeyColor/primaryPaletteKeyColor/g";
+      why = "materialyoucolor 3.0.4 renamed primary_paletteKeyColor to primaryPaletteKeyColor";
+    }
+    {
+      # modules/nixos/shells.nix aliases cat to bat at NixOS level (/etc/fish loads first);
+      # ii's config.fish must bypass that alias to print raw OSC sequences, not a bat frame.
+      file = "${config.home.homeDirectory}/.config/fish/config.fish";
+      sed = ''s|^\(\s*\)cat \(~/.local/state/quickshell/user/generated/terminal/sequences.txt\)|\1command cat \2|'';
+      why = "modules/nixos/shells.nix aliases cat to bat; bypass it for raw OSC sequences";
+    }
+  ];
+
+  patchFile = entry: ''
+    if [ -f "${entry.file}" ]; then
+      $DRY_RUN_CMD ${pkgs.gnused}/bin/sed -i '${entry.sed}' "${entry.file}"
+    fi
+  '';
 
   # Drops everything from the sentinel to EOF first, so a stale block from an older generation
   # never sits above the fresh one. A store script, not inline: a shell redirect can't be
@@ -126,13 +147,10 @@ in
     + lib.concatMapStrings appendBlock appendedFiles
   );
 
-  # Sibling to kraneIiOverrides rather than folded into it: this patches a quickshell script,
-  # not a Hyprland file, and doesn't fit the owned/appended/assertion machinery above.
-  home.activation.kraneIiMaterialColorsPatch =
-    lib.hm.dag.entryAfter [ "copyIllogicalImpulseConfigs" ]
-      ''
-        if [ -f "${materialColorsScript}" ]; then
-          $DRY_RUN_CMD ${pkgs.gnused}/bin/sed -i 's/primary_paletteKeyColor/primaryPaletteKeyColor/g' "${materialColorsScript}"
-        fi
-      '';
+  # Sibling to kraneIiOverrides rather than folded into it: these patch files ii itself
+  # writes or wipes, not a Hyprland file, and don't fit the owned/appended/assertion
+  # machinery above.
+  home.activation.kraneIiPatches = lib.hm.dag.entryAfter [ "copyIllogicalImpulseConfigs" ] (
+    lib.concatMapStrings patchFile iiPatches
+  );
 }

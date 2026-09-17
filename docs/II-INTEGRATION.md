@@ -197,15 +197,23 @@ for example `tap_to_click`, never the hyphenated hyprlang name.
 
 ## Patched files
 
-Besides the owned/appended Hyprland files above, `kraneIiMaterialColorsPatch`
-(also `entryAfter [ "copyIllogicalImpulseConfigs" ]`) sed-patches
-`~/.config/quickshell/ii/scripts/colors/generate_colors_material.py`:
-`s/primary_paletteKeyColor/primaryPaletteKeyColor/g`. ii's pinned rev reads
-the old `materialyoucolor` key name; nixpkgs' packaged `materialyoucolor`
-(3.0.4) renamed it, so unpatched `switchwall.sh` throws `KeyError` and
-leaves `material_colors.scss` empty. Runs after every copy, since the copy
-step recreates the file from scratch each switch. Remove once the pinned
-rev or the packaged version makes the names agree again.
+Besides the owned/appended Hyprland files above, `kraneIiPatches` (also
+`entryAfter [ "copyIllogicalImpulseConfigs" ]`) sed-patches files ii itself
+writes or wipes on every switch, guarded by `[ -f "<file>" ]` so a missing
+file is skipped rather than failing activation:
+
+- `~/.config/quickshell/ii/scripts/colors/generate_colors_material.py`:
+  `s/primary_paletteKeyColor/primaryPaletteKeyColor/g`. ii's pinned rev
+  reads the old `materialyoucolor` key name; nixpkgs' packaged
+  `materialyoucolor` (3.0.4) renamed it, so unpatched `switchwall.sh`
+  throws `KeyError` and leaves `material_colors.scss` empty. Remove once
+  the pinned rev or the packaged version makes the names agree again.
+- `~/.config/fish/config.fish`:
+  `s|^\(\s*\)cat \(~/.local/state/quickshell/user/generated/terminal/sequences.txt\)|\1command cat \2|`.
+  `modules/nixos/shells.nix` aliases `cat` to `bat --color=always` at
+  NixOS level (`/etc/fish` loads first), so ii's own line printing that
+  file would emit a bat frame instead of raw OSC sequences. The patch
+  makes that one line call `command cat` to bypass the alias.
 
 ## Verifying on the target
 
