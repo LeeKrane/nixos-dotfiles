@@ -443,14 +443,15 @@ host_uses_cuda() {
     grep -q 'gpu/nvidia-desktop' "$REPO_ROOT/hosts/$HOST/default.nix" 2>/dev/null
 }
 
-# Prints the --option accept-flake-config flag nix/nixos-rebuild take.
-# True trusts flake.nix's nixConfig, which is only worth it on the host
-# that actually pulls packages from the CUDA cache.
+# Prints the --option flags that add the CUDA cache substituter, so the
+# CUDA host doesn't have to build its packages from source at install
+# time. flake.nix carries no nixConfig (it prompted on every nix
+# invocation and hung direnv), so this is the only place that grants the
+# cache, and only for the host that actually pulls packages from it.
+# Values must be kept in sync with modules/nixos/gpu/nvidia-desktop.nix.
 flake_config_opt() {
     if host_uses_cuda; then
-        printf -- '--option accept-flake-config true'
-    else
-        printf -- '--option accept-flake-config false'
+        printf -- '--option extra-substituters https://cache.nixos-cuda.org --option extra-trusted-public-keys cache.nixos-cuda.org:74DUi4Ye579gUqzH4ziL9IyiJBlDpMRn9MBN8oNan9M='
     fi
 }
 
@@ -704,8 +705,9 @@ patch_disko() {
 run_disko() {
     log_step "Running disko for $HOST (formats $DISK)"
     local disko_script
+    # shellcheck disable=SC2046 # flake_config_opt's words must split into separate --option args.
     disko_script=$(capture_with_spin "Evaluating disko script for $HOST" \
-        nix build --no-link --print-out-paths --accept-flake-config \
+        nix build --no-link --print-out-paths $(flake_config_opt) \
         "$REPO_ROOT#nixosConfigurations.$HOST.config.system.build.diskoScript")
     # No spinner or extra tee here, both need to stream live output directly.
     run_sh "\"$disko_script\" 2>&1" || { LAST_CMD=""; die "disko run failed for $HOST, see $LOG"; }
@@ -848,7 +850,7 @@ commit_hardware_config() {
 run_nixos_install() {
     log_step "Running nixos-install for $HOST"
     if host_uses_cuda; then
-        log_info "$HOST has CUDA packages, accept-flake-config true"
+        log_info "$HOST has CUDA packages, passing cache.nixos-cuda.org substituter options"
     else
         log_info "host has no CUDA packages, CUDA cache disabled for this install"
     fi
@@ -1190,7 +1192,7 @@ verify_checks() {
 second_switch() {
     log_step "Second nixos-rebuild switch"
     if host_uses_cuda; then
-        log_info "$HOST has CUDA packages, accept-flake-config true"
+        log_info "$HOST has CUDA packages, passing cache.nixos-cuda.org substituter options"
     else
         log_info "host has no CUDA packages, CUDA cache disabled for this switch"
     fi
@@ -1401,15 +1403,17 @@ self_test() {
     local opt_ok=true got
     HOST=tariognatha
     got=$(flake_config_opt)
-    [ "$got" = "--option accept-flake-config true" ] \
-        || { echo "FAIL: flake_config_opt for tariognatha was '$got'" >&2; opt_ok=false; }
+    case "$got" in
+        *extra-substituters*) ;;
+        *) echo "FAIL: flake_config_opt for tariognatha was '$got'" >&2; opt_ok=false ;;
+    esac
     HOST=taractias
     got=$(flake_config_opt)
-    [ "$got" = "--option accept-flake-config false" ] \
+    [ -z "$got" ] \
         || { echo "FAIL: flake_config_opt for taractias was '$got'" >&2; opt_ok=false; }
     HOST="$saved_host"
     if $opt_ok; then
-        echo "OK: flake_config_opt true only for tariognatha" >&2
+        echo "OK: flake_config_opt has extra-substituters only for tariognatha" >&2
     else
         SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
     fi

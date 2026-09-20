@@ -191,11 +191,11 @@ btrfs filesystem mkswapfile --size 8g /mnt/swapfile
 swapon /mnt/swapfile
 ```
 
-5. Install. `--option accept-flake-config true` trusts `flake.nix`'s CUDA substituter, `cache.nixos-cuda.org`, and its key without prompting. Use `true` only on `tariognatha`, the one host with CUDA packages; pass `false` on `tarmantria` and `taractias` so nothing prompts to trust a cache they never query.
+5. Install. `flake.nix` carries no `nixConfig` (it made nix prompt to allow it on every invocation and hung direnv), so the CUDA cache is granted explicitly instead: pass `--option extra-substituters https://cache.nixos-cuda.org --option extra-trusted-public-keys cache.nixos-cuda.org:74DUi4Ye579gUqzH4ziL9IyiJBlDpMRn9MBN8oNan9M=` only on `tariognatha`, the one host with CUDA packages; pass nothing extra on `tarmantria` and `taractias` since they never query that cache.
 
     ```sh
-    nixos-install --flake "$PWD#<host>" --option accept-flake-config true   # tariognatha
-    nixos-install --flake "$PWD#<host>" --option accept-flake-config false  # tarmantria, taractias
+    nixos-install --flake "$PWD#<host>" --option extra-substituters https://cache.nixos-cuda.org --option extra-trusted-public-keys cache.nixos-cuda.org:74DUi4Ye579gUqzH4ziL9IyiJBlDpMRn9MBN8oNan9M=   # tariognatha
+    nixos-install --flake "$PWD#<host>"                                                                                                                                                             # tarmantria, taractias
     ```
 
     Remove the swapfile after, if you created one.
@@ -277,7 +277,7 @@ Mode detection (`detect_mode`) picks `install` if `/iso` exists, `/etc/NIXOS` is
 - `generate_hardware_config`: `nixos-generate-config`, checked for `availableKernelModules` and the absence of `fileSystems`.
 - `patch_prime`: on `tarmantria` only, converts `lspci -D` addresses to `PCI:B:D:F` decimal and patches `krane.prime.intelBusId`/`nvidiaBusId`, once per bus ID.
 - `commit_hardware_config`: commits with a throwaway `krane@localhost` identity if none is already configured.
-- `run_nixos_install`: `nixos-install --flake "$REPO_ROOT#$HOST" --no-root-passwd`, plus `flake_config_opt`'s `--option accept-flake-config true` on the CUDA host or `false` elsewhere. Retries up to 3 times on failure, 10 seconds apart, confirmed each time.
+- `run_nixos_install`: `nixos-install --flake "$REPO_ROOT#$HOST" --no-root-passwd`, plus `flake_config_opt`'s `--option extra-substituters ... --option extra-trusted-public-keys ...` on the CUDA host, nothing on the others. Retries up to 3 times on failure, 10 seconds apart, confirmed each time.
 - `finish_install`: copies the repo to `/mnt/home/krane/.dotfiles`, chowns it, verifies `flake.nix` landed, sets krane's password, offers a reboot.
 
 ### Setup mode (`run_setup_mode`)
@@ -287,7 +287,7 @@ Mode detection (`detect_mode`) picks `install` if `/iso` exists, `/etc/NIXOS` is
 - `edit_host_secrets`: offers `sops secrets/$HOST.yaml`, skipped under `--yes`, then offers to commit it.
 - `setup_rust` and `check_flathub`: offer the Rust toolchain and the flathub remote, each independently.
 - `verify_checks`: each check independently reports OK, WARN, or SKIP.
-- `second_switch`: `sudo nixos-rebuild switch --flake $REPO_ROOT#$HOST`, plus `flake_config_opt`'s `--option accept-flake-config` flag, then `verify_checks` again.
+- `second_switch`: `sudo nixos-rebuild switch --flake $REPO_ROOT#$HOST`, plus `flake_config_opt`'s CUDA substituter options, then `verify_checks` again.
 
 ### Dry-run invariants
 

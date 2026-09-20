@@ -1,17 +1,6 @@
 {
   description = "NixOS + Hyprland (illogical-impulse) dotfiles flake for tariognatha, tarmantria and taractias";
 
-  # Mirrors nix-settings.nix's CUDA substituter for install time too.
-  # Untrusted users: pass `--accept-flake-config` to skip the prompt.
-  nixConfig = {
-    extra-substituters = [
-      "https://cache.nixos-cuda.org"
-    ];
-    extra-trusted-public-keys = [
-      "cache.nixos-cuda.org:74DUi4Ye579gUqzH4ziL9IyiJBlDpMRn9MBN8oNan9M="
-    ];
-  };
-
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
