@@ -3,3 +3,6 @@ result-*
 .direnv/
 *.hm-bak
 secrets/*.key
+
+# Claude Code session state and worktrees
+.claude/
