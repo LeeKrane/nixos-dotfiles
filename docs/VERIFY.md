@@ -55,10 +55,10 @@ hardware:
   `copyIllogicalImpulseConfigs`. On-target only: docker only evaluates the
   activation script text, never runs it.
 - Quickshell rendering a working shell. On-target only.
-- greetd/tuigreet presenting a session picker. On-target only. `taractias`
-  skips the picker: greetd autologins into Hyprland, which locks itself at
-  session start, so the ii lock screen is what's on-target to check there.
-  Its reboot/poweroff buttons skip the password prompt unless
+- greetd/tuigreet presenting a session picker. On-target only. Every host
+  skips the picker at boot: greetd autologins into Hyprland, which locks
+  itself at session start, so the ii lock screen is what's on-target to
+  check there. Its reboot/poweroff buttons skip the password prompt unless
   `requirePasswordToPower` is `true` in
   `~/.config/illogical-impulse/config.json` (ii-owned state, currently
   `false`).
@@ -69,6 +69,32 @@ Run these on a real install, after two consecutive `nixos-rebuild switch`
 runs. The first switch's illogical-impulse (ii) dotfiles-copy step has to
 run once before the second switch's `kraneIiOverrides` activation entry
 means anything to check. See [docs/II-INTEGRATION.md](II-INTEGRATION.md).
+
+### Autologin and lock-on-start
+
+Every host autologins into Hyprland and locks itself at session start
+(`modules/nixos/desktop.nix`'s `initial_session`,
+`modules/home/lock-on-start.nix`). Don't trust a systemd session property
+like `loginctl`'s `LockedHint` for this: that flag just reflects whatever
+last called `loginctl lock-session`/`unlock-session`, not whether ii's own
+lock surface is actually drawn on screen, so it can read locked while the
+compositor shows a bare desktop underneath. Check instead:
+
+- After a fresh reboot, look at the screen: the ii lock panel itself must
+  be visible, not a bare Hyprland desktop and not tuigreet.
+- `journalctl --user -b | grep krane-lock-on-start` must produce no
+  output. Any line from it means the hyprlock fallback fired, i.e. ii's
+  lock IPC handler (`qs -c ii ipc show`'s `target lock`) never appeared
+  within the script's poll window, and the fallback plain-`hyprlock`
+  path was used instead of the ii lock screen.
+- After the first unlock, run
+  `~/.config/quickshell/ii/scripts/keyring/is_unlocked.sh` and confirm it
+  prints `Keyring is unlocked`. Autologin gives PAM no password, so
+  nothing unlocks the login keyring the normal way; ii's lock screen
+  unlocks it itself via `scripts/keyring/unlock.sh` when
+  `security.unlockKeyring` is `true`. If the script instead prints that
+  the keyring is locked, expect a keyring prompt later from
+  NetworkManager or a browser.
 
 | Check | Command | Host |
 | --- | --- | --- |

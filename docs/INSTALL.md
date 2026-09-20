@@ -52,7 +52,7 @@ With no flags, `install.sh` detects a live ISO and walks through a live install:
 
 The greeter is tuigreet. "Hyprland (UWSM)" is the normal session, plain "Hyprland" a fallback. See [docs/II-INTEGRATION.md "Rollback and escape hatches"](II-INTEGRATION.md#rollback-and-escape-hatches) if you need it.
 
-`taractias` is the exception: it autologins straight into Hyprland at boot and locks the session immediately, so the ii lock screen, not tuigreet, is the first thing you see after a reboot. tuigreet still appears after you log out.
+Every host autologins straight into the plain (non-UWSM) Hyprland session at boot and locks it immediately, so the ii lock screen, not tuigreet, is the first thing you see after a reboot. This is acceptable only because none of these hosts encrypt their disk: there is no disk-encryption password gate at boot to preserve, so trading the greeter's password gate for the lock screen's costs nothing. tuigreet still appears if you log out, or after `systemctl restart greetd`.
 
 Log in, then from `~/.dotfiles`:
 

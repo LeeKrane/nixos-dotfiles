@@ -15,6 +15,7 @@
     ./proton-drive.nix
     ./fallback-vendoring.nix
     ./wallpapers.nix
+    ./lock-on-start.nix
   ];
 
   home.stateVersion = "26.05";

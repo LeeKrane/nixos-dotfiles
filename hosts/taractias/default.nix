@@ -3,7 +3,6 @@
 # tariognatha/tarmantria, since those are Intel and these AMD profiles would be no-ops there at best.
 {
   inputs,
-  pkgs,
   ...
 }:
 {
@@ -28,15 +27,6 @@
 
   # display.nix is a home-manager module (sets krane.hypr.*), so it is imported at the user level.
   home-manager.users.krane.imports = [ ./display.nix ];
-
-  # Boot straight into krane's Hyprland session; the session locks itself at start
-  # (krane.hypr.execOnce in display.nix), so the ii lock screen is the first screen.
-  # tuigreet stays as default_session for logout. The disk is not encrypted, so this
-  # trades the greeter's password gate for the lock screen's. See docs/INSTALL.md.
-  services.greetd.settings.initial_session = {
-    command = "${pkgs.uwsm}/bin/uwsm start -e -D Hyprland hyprland.desktop";
-    user = "krane";
-  };
 
   # Explicit rather than left to common-gpu-amd's mkDefault, so this reads correctly standalone.
   hardware.graphics = {

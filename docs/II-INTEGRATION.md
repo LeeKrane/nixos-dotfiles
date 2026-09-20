@@ -260,6 +260,10 @@ block in place of the `PATH` fixes.
 - UWSM session misbehaves: set `programs.hyprland.withUWSM = false` in
   `modules/nixos/desktop.nix`. The plain Hyprland session is already on
   the greeter, so this is a one-line, one-rebuild rollback.
+- Autologin/lock-on-start misbehaves: `systemctl restart greetd` gives you
+  tuigreet back, not another autologin, because greetd's
+  `/run/greetd.run` runfile blocks a second autologin within the same
+  boot.
 - A single override misbehaves: delete the option value. The next
   switch re-renders the file without it. Appended files need no
   hand-editing, since the copy step recreates them from scratch and our
