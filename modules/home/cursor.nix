@@ -13,6 +13,7 @@ let
 in
 {
   home.pointerCursor = {
+    enable = true;
     package = pkgs.bibata-cursors;
     inherit name size;
     gtk.enable = true;
