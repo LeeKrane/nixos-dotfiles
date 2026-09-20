@@ -16,6 +16,7 @@
     ./fallback-vendoring.nix
     ./wallpapers.nix
     ./lock-on-start.nix
+    ./cursor.nix
   ];
 
   home.stateVersion = "26.05";
