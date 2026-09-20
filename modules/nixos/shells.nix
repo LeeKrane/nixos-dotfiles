@@ -89,5 +89,8 @@
     nix-direnv.enable = true;
     # Drop the "export +AR +AS ..." dump printed on every directory change.
     settings.global.hide_env_diff = true;
+    # Also drop the "direnv: loading/using flake" chatter. Note: this hides
+    # "direnv: error .envrc is blocked" too; run `direnv allow` if a shell seems stale.
+    silent = true;
   };
 }
