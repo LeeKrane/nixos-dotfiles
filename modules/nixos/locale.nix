@@ -17,7 +17,8 @@
     LC_TIME = "de_AT.UTF-8";
   };
 
-  console.keyMap = "at-nodeadkeys";
+  # NixOS derives the TTY keymap from the xkb settings below; kbd ships no at-* console maps.
+  console.useXkbConfig = true;
   console.font = "eurlatgr";
 
   # Hyprland reads this even without an X server.
