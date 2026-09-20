@@ -87,5 +87,7 @@
   programs.direnv = {
     enable = true;
     nix-direnv.enable = true;
+    # Drop the "export +AR +AS ..." dump printed on every directory change.
+    settings.global.hide_env_diff = true;
   };
 }
