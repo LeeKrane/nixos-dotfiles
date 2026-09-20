@@ -1403,17 +1403,16 @@ self_test() {
     local opt_ok=true got
     HOST=tariognatha
     got=$(flake_config_opt)
-    case "$got" in
-        *extra-substituters*) ;;
-        *) echo "FAIL: flake_config_opt for tariognatha was '$got'" >&2; opt_ok=false ;;
-    esac
+    expected="--option extra-substituters https://cache.nixos-cuda.org --option extra-trusted-public-keys cache.nixos-cuda.org:74DUi4Ye579gUqzH4ziL9IyiJBlDpMRn9MBN8oNan9M="
+    [ "$got" = "$expected" ] \
+        || { echo "FAIL: flake_config_opt for tariognatha was '$got'" >&2; opt_ok=false; }
     HOST=taractias
     got=$(flake_config_opt)
     [ -z "$got" ] \
         || { echo "FAIL: flake_config_opt for taractias was '$got'" >&2; opt_ok=false; }
     HOST="$saved_host"
     if $opt_ok; then
-        echo "OK: flake_config_opt has extra-substituters only for tariognatha" >&2
+        echo "OK: flake_config_opt matches expected substituter options" >&2
     else
         SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
     fi
