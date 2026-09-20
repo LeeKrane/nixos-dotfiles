@@ -33,6 +33,17 @@ holds per-host secrets, decryptable by that host's own key plus the admin's.
 The secret alone does not bring up WireGuard: also uncomment and fill in
 the `address` and `peers` block in `modules/nixos/networking.nix`.
 
+Both sections are optional per host: `modules/nixos/sops.nix` only declares
+a `sops.secrets` entry for a section that's actually present in
+`secrets/<host>.yaml`. To disable WireGuard or the Proton Drive seed on a
+host, delete that whole top-level section (`wireguard:` or `rclone:`) with
+`sops secrets/<host>.yaml`. Leaving the value empty is not enough: sops
+encrypts values but not key names, so Nix can read which top-level sections
+exist at eval time, but it cannot read an encrypted value to tell whether
+it's empty. The gate checks only the top-level section name; the leaf key
+names listed above (`wg0-private-key`, `config-seed`) must match exactly or
+the build still fails with `cannot be found`.
+
 ## How to create one
 
 Every recipient in `.sops.yaml` starts as an `age1PLACEHOLDER_...` value

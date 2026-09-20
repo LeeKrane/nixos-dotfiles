@@ -123,7 +123,9 @@ cat <<EOF
 
      sops "$HOST_SECRETS_FILE"
 
-   Fill in this skeleton. See secrets/README.md for what each key is for:
+   Fill in this skeleton. See secrets/README.md for what each key is for.
+   Both sections are optional: delete a whole section below to disable
+   that feature on this host.
 
      wireguard:
          wg0-private-key: <real WireGuard private key>

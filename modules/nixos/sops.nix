@@ -14,6 +14,20 @@ let
   # real store path.
   hostSecretsFile = ../../secrets/${hostName}.yaml;
   hostSecretsExist = builtins.pathExists hostSecretsFile;
+
+  # sops encrypts values, not key names, so the top-level sections are readable at eval time.
+  # A section absent from the file means that feature is off on this host; an empty value
+  # cannot be detected (it is encrypted like any other).
+  secretFileLines = lib.optionals hostSecretsExist (
+    lib.splitString "\n" (builtins.readFile hostSecretsFile)
+  );
+  hasSection =
+    name:
+    lib.any (p: lib.any (lib.hasPrefix p) secretFileLines) [
+      "${name}:"
+      "\"${name}\":"
+      "'${name}':"
+    ];
 in
 {
   sops = {
@@ -25,19 +39,24 @@ in
   // lib.optionalAttrs hostSecretsExist {
     defaultSopsFile = hostSecretsFile;
 
-    secrets = {
+    # Each declaration is also gated on its own top-level section being present:
+    # sops-nix validates every declared key at build time, and a section a host
+    # doesn't use would otherwise fail the build.
+    secrets =
       # Consumed by modules/nixos/networking.nix's wg0 template.
-      "wireguard/wg0-private-key" = {
-        owner = "root";
-        mode = "0400";
-      };
-
+      lib.optionalAttrs (hasSection "wireguard") {
+        "wireguard/wg0-private-key" = {
+          owner = "root";
+          mode = "0400";
+        };
+      }
       # Owned by krane, not root: copied verbatim into krane's own rclone.conf.
-      "rclone/config-seed" = {
-        owner = "krane";
-        mode = "0400";
+      // lib.optionalAttrs (hasSection "rclone") {
+        "rclone/config-seed" = {
+          owner = "krane";
+          mode = "0400";
+        };
       };
-    };
   };
 
   # Also on $PATH on the installed system for scripts/bootstrap-sops.sh

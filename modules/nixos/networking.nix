@@ -2,7 +2,6 @@
 {
   config,
   lib,
-  hostName,
   ...
 }:
 {
@@ -22,9 +21,12 @@
   # Opens its own firewall range. No manual firewall rules needed.
   programs.kdeconnect.enable = true;
 
-  # TEMPLATE: gated on the secrets file existing, so `nix flake check` passes before it exists.
+  # TEMPLATE: gated on the wireguard secrets section being present, so `nix flake check`
+  # passes before it exists and hosts that never fill it in (no `wireguard:` section in
+  # secrets/<host>.yaml) don't get a wg0 interface with no key to point at.
   # Fill in real values once it does.
-  networking.wg-quick.interfaces.wg0 = lib.mkIf (builtins.pathExists ../../secrets/${hostName}.yaml) {
+  # Reads config.sops.secrets: keep sops.secrets gated on file contents only, never on config.networking.*, or this recurses.
+  networking.wg-quick.interfaces.wg0 = lib.mkIf (config.sops.secrets ? "wireguard/wg0-private-key") {
     # address = [ "10.0.0.X/24" ]; # CHANGE-ME: this host's tunnel address
     autostart = false; # flipped to true once the secrets file is real
     privateKeyFile = config.sops.secrets."wireguard/wg0-private-key".path;
