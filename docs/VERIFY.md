@@ -55,7 +55,13 @@ hardware:
   `copyIllogicalImpulseConfigs`. On-target only: docker only evaluates the
   activation script text, never runs it.
 - Quickshell rendering a working shell. On-target only.
-- greetd/tuigreet presenting a session picker. On-target only.
+- greetd/tuigreet presenting a session picker. On-target only. `taractias`
+  skips the picker: greetd autologins into Hyprland, which locks itself at
+  session start, so the ii lock screen is what's on-target to check there.
+  Its reboot/poweroff buttons skip the password prompt unless
+  `requirePasswordToPower` is `true` in
+  `~/.config/illogical-impulse/config.json` (ii-owned state, currently
+  `false`).
 
 ## 2. On-target checklist
 

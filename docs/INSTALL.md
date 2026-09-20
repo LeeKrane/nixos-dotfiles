@@ -52,6 +52,8 @@ With no flags, `install.sh` detects a live ISO and walks through a live install:
 
 The greeter is tuigreet. "Hyprland (UWSM)" is the normal session, plain "Hyprland" a fallback. See [docs/II-INTEGRATION.md "Rollback and escape hatches"](II-INTEGRATION.md#rollback-and-escape-hatches) if you need it.
 
+`taractias` is the exception: it autologins straight into Hyprland at boot and locks the session immediately, so the ii lock screen, not tuigreet, is the first thing you see after a reboot. tuigreet still appears after you log out.
+
 Log in, then from `~/.dotfiles`:
 
 ```sh
