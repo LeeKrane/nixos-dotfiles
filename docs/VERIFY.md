@@ -69,7 +69,8 @@ means anything to check. See [docs/II-INTEGRATION.md](II-INTEGRATION.md).
 | Owned Hyprland files carry the generated header (`modules/home/hypr-config.nix`'s `header` function) | `head -4 ~/.config/hypr/custom/keybinds.lua` | All |
 | Override block appears exactly once in `env.lua`, want `1` | `grep -c -- '-- >>> krane overrides >>>' ~/.config/hypr/custom/env.lua` | All |
 | Override block appears exactly once in `general.lua`, want `1` | `grep -c -- '-- >>> krane overrides >>>' ~/.config/hypr/custom/general.lua` | All |
-| Hyprland accepted the whole config, no unknown-key errors | `hyprctl configerrors` | All |
+| Hyprland accepted the whole config, no unknown-key errors: output of `hyprctl configerrors` is empty | `hyprctl configerrors` | All |
+| Keybinds survived the switch (no latched emergency mode) | `hyprctl binds \| head -5` | All |
 | Monitor layout matches `hosts/<host>/display.nix` | `hyprctl monitors -j \| jq '.[] \| {name, width, height, refreshRate, scale, transform}'` | All |
 | Logitech G502 libinput device name matches `display.nix`'s `devices[].name` | `hyprctl devices \| grep -i logitech` | tariognatha |
 | Built-in ELAN I2C touchpad shows up with no extra config | `hyprctl devices \| grep -i touchpad` | taractias |

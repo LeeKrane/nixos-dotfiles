@@ -1146,7 +1146,10 @@ verify_checks() {
         bash -c '[ "$(grep -c -- "-- >>> krane overrides >>>" "$HOME/.config/hypr/custom/general.lua" 2>/dev/null || echo 0)" = 1 ]'
 
     if [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
-        verify_check "Hyprland config has no errors" hyprctl configerrors
+        # hyprctl exits 0 even when it prints errors; test the output instead. hyprctl prints
+        # connect errors to stdout and "command not found" to stderr, so capture both.
+        # shellcheck disable=SC2016
+        verify_check "Hyprland config has no errors" bash -c 'out=$(hyprctl configerrors 2>&1) && [ -z "$out" ]'
         # shellcheck disable=SC2016
         verify_check "Monitor layout is queryable" bash -c 'hyprctl monitors -j >/dev/null'
     else
