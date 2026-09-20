@@ -215,6 +215,19 @@ file is skipped rather than failing activation:
   file would emit a bat frame instead of raw OSC sequences. The patch
   makes that one line call `command cat` to bypass the alias.
 
+`kraneIiHyprReload` (`entryAfter [ "kraneIiOverrides" "kraneIiPatches" ]`)
+runs `hyprctl reload config-only` once the `~/.config/hypr` tree and our
+overrides are fully written. `copyIllogicalImpulseConfigs`'s `rm -rf` + `cp -r`
+is non-atomic, so a running Hyprland can reload mid-copy on the first inotify
+event, hit `module 'hyprland.lib' not found`, and latch emergency mode (no
+binds) until the next explicit reload — this entry is that reload. It works
+both interactively, where `HYPRLAND_INSTANCE_SIGNATURE` is already set, and
+under `nixos-rebuild switch`'s `home-manager-krane.service` (logs as
+`hm-activate-krane`), where it isn't, by scanning `$XDG_RUNTIME_DIR/hypr` for
+a candidate instance directory. The reload itself is the liveness test, each
+candidate socket dir is tried until one answers; a stale dir from a crashed
+instance is skipped. No-op when no Hyprland instance is running.
+
 ### Preserved files
 
 `kraneIiSaveFishVars` (runs after `writeBoundary` and before `copyIllogicalImpulseConfigs`) and
