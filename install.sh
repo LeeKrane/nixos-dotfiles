@@ -1155,7 +1155,14 @@ verify_checks() {
     fi
 
     if command -v bootctl >/dev/null 2>&1; then
-        verify_check "systemd-boot entries present" bootctl list
+        # bootctl list needs root: the ESP is mounted umask=0077 (hosts/*/disko.nix).
+        # Cache the credential first; sudo reads the password straight from
+        # /dev/tty, so it works despite the tee pipe on stdout/stderr. run_tty
+        # no-ops under --dry-run and fails fast with no tty, in which case the
+        # `sudo -n` below just WARNs instead of stalling the checklist.
+        log_info "caching sudo credential for on-target checks"
+        run_tty "sudo -v" || LAST_CMD=""
+        verify_check "systemd-boot entries present" sudo -n bootctl list
     else
         verify_skip "systemd-boot entries present" "bootctl not found"
     fi

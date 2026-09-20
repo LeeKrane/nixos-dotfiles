@@ -116,14 +116,14 @@ If Hyprland fails to start with a black screen after switching, try these in ord
 `boot.loader.systemd-boot` auto-discovers a Windows install on the same ESP with no extra config. Check what's there after install:
 
 ```sh
-bootctl list
+sudo bootctl list
 ```
 
 If Windows lives on a second, separate ESP, systemd-boot won't find it automatically. `modules/nixos/boot.nix` has a commented `extraEntries` template for that case. Uncomment it, then re-derive the correct values:
 
 ```sh
 efibootmgr -v                 # confirm the Windows boot entry exists
-bootctl list                  # after adding the entry, confirm it shows up
+sudo bootctl list                  # after adding the entry, confirm it shows up
 ```
 
 The HD index in that template has to be re-derived per machine: it depends on the exact disk and partition layout at install time.

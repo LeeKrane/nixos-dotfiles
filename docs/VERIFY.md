@@ -78,7 +78,7 @@ means anything to check. See [docs/II-INTEGRATION.md](II-INTEGRATION.md).
 | PRIME offload reaches the dGPU | `nvidia-offload glxinfo \| grep vendor` | tarmantria |
 | Wi-Fi came up after the first reboot | `nmcli device status \| grep -i wifi` | tarmantria, taractias |
 | Bluetooth came up after the first reboot | `bluetoothctl show \| grep -i powered` | tarmantria, taractias |
-| Windows dual-boot entry present, if expected. See [docs/INSTALL.md](INSTALL.md) "Windows dual-boot entry" | `bootctl list` | All, if dual-booting |
+| Windows dual-boot entry present, if expected. See [docs/INSTALL.md](INSTALL.md) "Windows dual-boot entry" | `sudo bootctl list` | All, if dual-booting |
 | Proton Drive mounted | `systemctl --user status proton-drive-mount` | All |
 
 `modules/nixos/hardware.nix`'s `hardware.enableRedistributableFirmware`
