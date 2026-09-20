@@ -103,6 +103,7 @@ compositor shows a bare desktop underneath. Check instead:
 | Override block appears exactly once in `general.lua`, want `1` | `grep -c -- '-- >>> krane overrides >>>' ~/.config/hypr/custom/general.lua` | All |
 | Hyprland accepted the whole config, no unknown-key errors: output of `hyprctl configerrors` is empty | `hyprctl configerrors` | All |
 | Keybinds survived the switch (no latched emergency mode) | `hyprctl binds \| head -5` | All |
+| Cursor theme from `modules/home/cursor.nix` is installed and set for GTK, want `Bibata-Modern-Classic` twice | `ls /etc/profiles/per-user/$USER/share/icons \| grep Bibata-Modern-Classic$; grep gtk-cursor-theme-name ~/.config/gtk-3.0/settings.ini` | All |
 | Monitor layout matches `hosts/<host>/display.nix` | `hyprctl monitors -j \| jq '.[] \| {name, width, height, refreshRate, scale, transform}'` | All |
 | Logitech G502 libinput device name matches `display.nix`'s `devices[].name` | `hyprctl devices \| grep -i logitech` | tariognatha |
 | Built-in ELAN I2C touchpad shows up with no extra config | `hyprctl devices \| grep -i touchpad` | taractias |
