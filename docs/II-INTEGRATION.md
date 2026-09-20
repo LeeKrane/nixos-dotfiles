@@ -214,6 +214,12 @@ file is skipped rather than failing activation:
   NixOS level (`/etc/fish` loads first), so ii's own line printing that
   file would emit a bat frame instead of raw OSC sequences. The patch
   makes that one line call `command cat` to bypass the alias.
+- `~/.config/hypr/hyprland/keybinds.lua`:
+  `s|killall ydotool qs quickshell|killall ydotool; pkill -f '[q]s-wrapped -c ii'|`.
+  The nix-wrapped quickshell binary's comm is truncated to `.quickshell-wra`,
+  so the restart-widgets keybind's `killall qs quickshell` never matches and
+  every press stacks a new `qs` instance. `pkill -f` matches the full
+  command line instead, so it still finds and kills the wrapped process.
 
 `kraneIiHyprReload` (`entryAfter [ "kraneIiOverrides" "kraneIiPatches" ]`)
 runs `hyprctl reload config-only` once the `~/.config/hypr` tree and our

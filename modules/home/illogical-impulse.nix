@@ -55,6 +55,16 @@ let
       sed = ''s|^\(\s*\)cat \(~/.local/state/quickshell/user/generated/terminal/sequences.txt\)|\1command cat \2|'';
       why = "modules/nixos/shells.nix aliases cat to bat; bypass it for raw OSC sequences";
     }
+    {
+      # The nix-wrapped quickshell binary's comm is truncated to .quickshell-wra, so
+      # `killall qs quickshell` in ii's restart-widgets keybind matches nothing and every
+      # press stacks a new qs instance instead of replacing the old one. pkill -f matches
+      # against the full command line instead, so it still finds the wrapped process.
+      # [q] prevents pkill -f from matching the sh -c wrapper Hyprland spawns for the keybind itself.
+      file = "${hyprDir}/hyprland/keybinds.lua";
+      sed = ''s|killall ydotool qs quickshell|killall ydotool; pkill -f '"'"'[q]s-wrapped -c ii'"'"'|'';
+      why = "nix-wrapped quickshell truncates comm to .quickshell-wra, so killall qs quickshell never matches";
+    }
   ];
 
   patchFile = entry: ''
