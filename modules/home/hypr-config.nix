@@ -186,8 +186,13 @@ let
 
   bindLua =
     b:
+    let
+      opts =
+        lib.optional b.repeating "repeating = true"
+        ++ lib.optional (b.description != null) "description = ${luaStr b.description}";
+    in
     "hl.bind(${luaStr b.keys}, ${b.action}"
-    + (lib.optionalString (b.description != null) ", { description = ${luaStr b.description} }")
+    + (lib.optionalString (opts != [ ]) ", { ${lib.concatStringsSep ", " opts} }")
     + ")\n";
 
   monitorsFile = header "monitors.lua" + "\n" + lib.concatMapStrings monitorLua cfg.monitors;
@@ -223,7 +228,12 @@ let
     + lib.optionalString (cfg.devices != [ ]) ("\n" + lib.concatMapStrings deviceLua cfg.devices)
     + lib.optionalString (cfg.extraGeneralLua != "") ("\n" + cfg.extraGeneralLua + "\n");
 
-  keybindsFile = header "custom/keybinds.lua" + "\n" + lib.concatMapStrings bindLua cfg.binds;
+  keybindsFile =
+    header "custom/keybinds.lua"
+    + "\n"
+    + lib.concatMapStrings (k: "hl.unbind(${luaStr k})\n") cfg.unbinds
+    + lib.optionalString (cfg.extraKeybindsLua != "") ("\n" + cfg.extraKeybindsLua + "\n")
+    + lib.concatMapStrings bindLua cfg.binds;
 
   execsFile =
     header "custom/execs.lua"
@@ -339,6 +349,26 @@ in
       '';
     };
 
+    unbinds = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      example = [ "SUPER + Period" ];
+      description = ''
+        Upstream ii binds to remove, in `hl.bind` key syntax. Rendered as
+        `hl.unbind(...)` before `binds`, since Hyprland fires every bind that
+        matches a key and custom/keybinds.lua loads after the upstream file.
+      '';
+    };
+
+    extraKeybindsLua = lib.mkOption {
+      type = lib.types.lines;
+      default = "";
+      description = ''
+        Raw Lua inserted into custom/keybinds.lua after `unbinds` and before
+        `binds`, for local helper functions referenced from `binds.*.action`.
+      '';
+    };
+
     binds = lib.mkOption {
       type = lib.types.listOf (
         lib.types.submodule {
@@ -357,6 +387,11 @@ in
               type = lib.types.nullOr lib.types.str;
               default = null;
               description = "Shown in the ii cheatsheet.";
+            };
+            repeating = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = "Repeat while held (Hyprland `bind` flag `e`).";
             };
           };
         }
