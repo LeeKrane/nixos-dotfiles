@@ -4,6 +4,7 @@
 # `hostName` is the mk-host.nix specialArg, not `config.networking.hostName`:
 # tariognatha-vm overrides the latter but shares tariognatha's secrets file.
 {
+  config,
   lib,
   pkgs,
   hostName,
@@ -49,6 +50,26 @@ in
           owner = "root";
           mode = "0400";
         };
+        "wireguard/address" = {
+          owner = "root";
+          mode = "0400";
+        };
+        "wireguard/listen-port" = {
+          owner = "root";
+          mode = "0400";
+        };
+        "wireguard/peer-public-key" = {
+          owner = "root";
+          mode = "0400";
+        };
+        "wireguard/peer-endpoint" = {
+          owner = "root";
+          mode = "0400";
+        };
+        "wireguard/peer-allowed-ips" = {
+          owner = "root";
+          mode = "0400";
+        };
       }
       # Owned by krane, not root: copied verbatim into krane's own rclone.conf.
       // lib.optionalAttrs (hasSection "rclone") {
@@ -57,6 +78,29 @@ in
           mode = "0400";
         };
       };
+
+    # Renders wg0.conf from the six wireguard/* secrets above so no cleartext
+    # tunnel value (address, peer identity, endpoint) lands in the repo.
+    # Consumed by modules/nixos/networking.nix's networking.wg-quick.interfaces.wg0.
+    templates = lib.optionalAttrs (hasSection "wireguard") {
+      "wg0.conf" = {
+        owner = "root";
+        mode = "0400";
+        content = ''
+          [Interface]
+          Address = ${config.sops.placeholder."wireguard/address"}
+          ListenPort = ${config.sops.placeholder."wireguard/listen-port"}
+          PrivateKey = ${config.sops.placeholder."wireguard/wg0-private-key"}
+
+          [Peer]
+          # taragarmr
+          PublicKey = ${config.sops.placeholder."wireguard/peer-public-key"}
+          Endpoint = ${config.sops.placeholder."wireguard/peer-endpoint"}
+          AllowedIPs = ${config.sops.placeholder."wireguard/peer-allowed-ips"}
+          PersistentKeepalive = 25
+        '';
+      };
+    };
   };
 
   # Also on $PATH on the installed system for scripts/bootstrap-sops.sh

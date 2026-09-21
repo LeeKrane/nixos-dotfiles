@@ -68,7 +68,7 @@ On an already-installed system this runs setup mode:
 4. Offers to add the flathub remote.
 5. Runs the VERIFY checklist, see [docs/VERIFY.md](VERIFY.md#2-on-target-checklist), reporting each check OK, WARN, or SKIP.
 6. Runs a second `nixos-rebuild switch`. The first switch already ran the ii (illogical-impulse) dotfiles copy and this repo's overrides once, so switching again proves the ordering holds on repeat.
-7. Prints a next-steps panel. Fill in the WireGuard and rclone values in `secrets/<host>.yaml`, uncomment the WireGuard block in `modules/nixos/networking.nix`, then run `just check`.
+7. Prints a next-steps panel. Add the WireGuard and rclone values to `secrets/<host>.yaml` with `sops set` (see [secrets/README.md](../secrets/README.md)), rebuild, and the wg0 tunnel autostarts. Then run `just check`.
 
 ## Flags
 
@@ -236,10 +236,22 @@ swapon /mnt/swapfile
     sudo nixos-rebuild switch --flake ~/.dotfiles#<host>
     ```
 
-10. Bring up WireGuard once `modules/nixos/networking.nix`'s address and peer values are filled in.
+10. Bring up WireGuard by adding the six `wireguard/*` keys to
+    `secrets/<host>.yaml` with `sops set` (see
+    [secrets/README.md](../secrets/README.md)), then rebuilding. The
+    `wg0.conf` template renders from those secrets and
+    `networking.wg-quick.interfaces.wg0` autostarts on the next switch, no
+    manual `systemctl start` needed.
 
     ```sh
-    sudo systemctl start wg-quick-wg0.service
+    sops set secrets/<host>.yaml '["wireguard"]["wg0-private-key"]' '"<real private key>"'
+    sops set secrets/<host>.yaml '["wireguard"]["address"]' '"<this host tunnel address>/24"'
+    sops set secrets/<host>.yaml '["wireguard"]["peer-public-key"]' '"<peer public key>"'
+    sops set secrets/<host>.yaml '["wireguard"]["peer-endpoint"]' '"<peer host>:51820"'
+    sops set secrets/<host>.yaml '["wireguard"]["peer-allowed-ips"]' '"<peer subnet>/24"'
+    sops set secrets/<host>.yaml '["wireguard"]["listen-port"]' '"51820"'
+    git add secrets/<host>.yaml && git commit -m "Add <host> WireGuard secrets"
+    sudo nixos-rebuild switch --flake ~/.dotfiles#<host>
     ```
 
 11. Set up Proton Drive, if you did not seed `rclone/config-seed` in the secrets file.

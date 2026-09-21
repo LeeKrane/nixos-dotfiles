@@ -27,11 +27,30 @@ holds per-host secrets, decryptable by that host's own key plus the admin's.
 
 | Key | Read by | Owner:mode |
 | --- | --- | --- |
-| `wireguard/wg0-private-key` | `modules/nixos/networking.nix` (`networking.wg-quick.interfaces.wg0.privateKeyFile`) | `root:0400` |
+| `wireguard/wg0-private-key` | `modules/nixos/sops.nix`'s `wg0.conf` template (`PrivateKey`) | `root:0400` |
+| `wireguard/address` | same template (`Address`) | `root:0400` |
+| `wireguard/peer-public-key` | same template (`PublicKey`) | `root:0400` |
+| `wireguard/peer-endpoint` | same template (`Endpoint`) | `root:0400` |
+| `wireguard/peer-allowed-ips` | same template (`AllowedIPs`) | `root:0400` |
+| `wireguard/listen-port` | same template (`ListenPort`) | `root:0400` |
 | `rclone/config-seed` | `modules/home/proton-drive.nix` (seeds `~/.config/rclone/rclone.conf` if absent) | `krane:0400` |
 
-The secret alone does not bring up WireGuard: also uncomment and fill in
-the `address` and `peers` block in `modules/nixos/networking.nix`.
+All six wireguard values live encrypted in `secrets/<host>.yaml`; none of
+them, including the address and peer identity, are cleartext anywhere in
+this repo. `modules/nixos/sops.nix` renders them into a `wg0.conf` template
+(fixed `PersistentKeepalive 25`), which
+`modules/nixos/networking.nix` points `networking.wg-quick.interfaces.wg0.configFile`
+at. The secret alone does not bring up WireGuard on a new host: add all six
+keys with `sops set`, for example:
+
+```sh
+sops set secrets/<hostname>.yaml '["wireguard"]["wg0-private-key"]' '"<real private key>"'
+sops set secrets/<hostname>.yaml '["wireguard"]["address"]' '"<this host tunnel address>/24"'
+sops set secrets/<hostname>.yaml '["wireguard"]["peer-public-key"]' '"<peer public key>"'
+sops set secrets/<hostname>.yaml '["wireguard"]["peer-endpoint"]' '"<peer host>:51820"'
+sops set secrets/<hostname>.yaml '["wireguard"]["peer-allowed-ips"]' '"<peer subnet>/24"'
+sops set secrets/<hostname>.yaml '["wireguard"]["listen-port"]' '"51820"'
+```
 
 Both sections are optional per host: `modules/nixos/sops.nix` only declares
 a `sops.secrets` entry for a section that's actually present in
@@ -73,6 +92,10 @@ that decrypts nothing, until step 1 below runs.
    ```yaml
    wireguard:
        wg0-private-key: <paste the real WireGuard private key here>
+       address: <this host's tunnel address, e.g. 10.100.0.2/24>
+       peer-public-key: <peer's WireGuard public key>
+       peer-endpoint: <peer host:port, e.g. vpn.example.net:51820>
+       peer-allowed-ips: <peer's subnet, e.g. 10.100.0.0/24>
    rclone:
        config-seed: |
            [ProtonDrive]
