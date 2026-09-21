@@ -61,7 +61,10 @@ hardware:
   check there. Its reboot/poweroff buttons skip the password prompt unless
   `requirePasswordToPower` is `true` in
   `~/.config/illogical-impulse/config.json` (ii-owned state, currently
-  `false`).
+  `false`). `launchOnStartup` in the same file is patched to `true` on
+  fresh hosts by `kraneIiPatches` (see
+  [docs/II-INTEGRATION.md](II-INTEGRATION.md) "Patched files"), so ii's
+  own startup path locks too, independent of the forced IPC call below.
 
 ## 2. On-target checklist
 

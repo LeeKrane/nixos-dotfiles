@@ -220,6 +220,14 @@ file is skipped rather than failing activation:
   so the restart-widgets keybind's `killall qs quickshell` never matches and
   every press stacks a new `qs` instance. `pkill -f` matches the full
   command line instead, so it still finds and kills the wrapped process.
+- `~/.config/quickshell/ii/modules/common/Config.qml`:
+  `s/property bool launchOnStartup: false/property bool launchOnStartup: true/`.
+  Fresh hosts seed `~/.config/illogical-impulse/config.json` from this QML
+  default the first time ii's copy step runs. Every host autologins via
+  greetd straight into Hyprland (`modules/nixos/desktop.nix`), so there's
+  no session picker to lock behind; flip the default itself so ii locks
+  immediately on startup. `config.json` stays ii-owned after that, the GUI
+  can still flip it back off.
 
 `kraneIiHyprReload` (`entryAfter [ "kraneIiOverrides" "kraneIiPatches" ]`)
 runs `hyprctl reload config-only` once the `~/.config/hypr` tree and our

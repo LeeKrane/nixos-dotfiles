@@ -65,6 +65,16 @@ let
       sed = ''s|killall ydotool qs quickshell|killall ydotool; pkill -f '"'"'[q]s-wrapped -c ii'"'"'|'';
       why = "nix-wrapped quickshell truncates comm to .quickshell-wra, so killall qs quickshell never matches";
     }
+    {
+      # Fresh hosts seed ~/.config/illogical-impulse/config.json from this QML default the
+      # first time ii's copy step runs; config.json stays ii-owned after that, so the GUI
+      # can still flip it back off. Every host autologins via greetd straight into Hyprland
+      # (modules/nixos/desktop.nix), so there's no session picker to lock behind — flip the
+      # default itself so ii locks immediately on startup.
+      file = "${config.home.homeDirectory}/.config/quickshell/ii/modules/common/Config.qml";
+      sed = "s/property bool launchOnStartup: false/property bool launchOnStartup: true/";
+      why = "fresh hosts seed config.json from ii's QML defaults; want ii to lock immediately under greetd autologin";
+    }
   ];
 
   patchFile = entry: ''
