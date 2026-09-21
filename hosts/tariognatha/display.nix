@@ -44,7 +44,7 @@
     # skips that. Plain command names, not store paths: Hyprland runs them through a shell.
     variables = {
       terminal = "kitty";
-      browser = "zen";
+      browser = "zen-beta";
       codeEditor = "code";
       fileManager = "dolphin";
     };

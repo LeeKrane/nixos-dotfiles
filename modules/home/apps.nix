@@ -17,6 +17,11 @@
       zed-editor
       code-cursor
 
+      # File manager
+      kdePackages.dolphin
+      kdePackages.kio-extras # thumbnails/protocols
+      kdePackages.qtsvg # icons
+
       # Media
       obs-studio
       vlc
@@ -47,4 +52,12 @@
       # nixpkgs. Uses pkgs.stdenv.hostPlatform.system, not the deprecated pkgs.system.
       inputs.zen-browser.packages.${pkgs.stdenv.hostPlatform.system}.default
     ];
+
+  # No other xdg.mimeApps config exists in this repo; VS Code was previously the
+  # de facto inode/directory handler by nixpkgs/desktop-file default, not by
+  # explicit config here.
+  xdg.mimeApps = {
+    enable = true;
+    defaultApplications."inode/directory" = "org.kde.dolphin.desktop";
+  };
 }

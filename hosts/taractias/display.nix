@@ -28,7 +28,7 @@
     # Same as the desktop. See hosts/tariognatha/display.nix for why.
     variables = {
       terminal = "kitty";
-      browser = "zen";
+      browser = "zen-beta";
       codeEditor = "code";
       fileManager = "dolphin";
     };
