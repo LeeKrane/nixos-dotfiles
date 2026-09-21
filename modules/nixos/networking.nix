@@ -33,4 +33,9 @@
     configFile = config.sops.templates."wg0.conf".path;
     autostart = true;
   };
+
+  # WireGuard peer name for the tunnel server; only meaningful when wg0 is up.
+  networking.hosts = lib.mkIf (config.sops.templates ? "wg0.conf") {
+    "192.168.82.1" = [ "taragarmr" ];
+  };
 }
