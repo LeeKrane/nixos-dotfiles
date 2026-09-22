@@ -37,7 +37,33 @@ inputs.nixpkgs.lib.nixosSystem {
         };
         users.krane.imports = [
           # HM level, not NixOS: soymou #19 dconf error.
-          inputs.illogical-flake.homeManagerModules.default
+          # Imported from a patched copy of the flake source rather than
+          # homeManagerModules.default: illogical-flake pins Qt to qt6ct in three
+          # places (quickshell wrapper --set, home.sessionVariables, custom/env.lua),
+          # which detaches every Qt app from ii's kdeglobals theming. See
+          # patches/illogical-flake-kde-platformtheme.patch. `inputs` mirrors the
+          # flakeInputs set that illogical-flake's flake.nix hands to home-module.nix.
+          # applyPatches comes from the bare nixpkgs for `system`, not the module
+          # `pkgs` arg: the imported module's `imports` list is built from the
+          # patched path, and deriving it from `pkgs` (which depends on `config`)
+          # is an infinite recursion.
+          (
+            let
+              patched = inputs.nixpkgs.legacyPackages.${system}.applyPatches {
+                name = "illogical-flake-kde-platformtheme";
+                src = inputs.illogical-flake;
+                patches = [ ../patches/illogical-flake-kde-platformtheme.patch ];
+              };
+              iiInputs = {
+                inherit (inputs.illogical-flake.inputs) quickshell nur dotfiles;
+              };
+            in
+            { config, lib, pkgs, ... }:
+            (import "${patched}/home-module.nix") {
+              inherit config lib pkgs;
+              inputs = iiInputs;
+            }
+          )
           inputs.nix-index-database.homeModules.nix-index
           ../modules/home
         ];

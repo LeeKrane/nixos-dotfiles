@@ -1,0 +1,36 @@
+diff -ruN a/home-modules/dotfiles.nix b/home-modules/dotfiles.nix
+--- a/home-modules/dotfiles.nix	2026-09-22 20:26:57.622533973 +0200
++++ b/home-modules/dotfiles.nix	2026-09-22 20:26:57.650304903 +0200
+@@ -283,8 +283,6 @@
+   ":/var/lib/flatpak/exports/share" ..
+   ":/usr/local/share:/usr/share")
+ 
+--- Use qt6ct (available in Nix profile) instead of upstream "kde"
+-hl.env("QT_QPA_PLATFORMTHEME", "qt6ct")
+ LUAEOF
+         chmod u+w "$hyprCustomEnv"
+         echo "Generated hyprland custom/env.lua with NixOS paths"
+diff -ruN a/home-modules/environment.nix b/home-modules/environment.nix
+--- a/home-modules/environment.nix	2026-09-22 20:26:57.622533973 +0200
++++ b/home-modules/environment.nix	2026-09-22 20:26:57.633590538 +0200
+@@ -10,7 +10,7 @@
+   config = lib.mkIf cfg.enable {
+     # Environment variables for Illogical Impulse
+     home.sessionVariables = {
+-      QT_QPA_PLATFORMTHEME = "qt6ct";  # Use qt6ct for Qt6 theming
++      QT_QPA_PLATFORMTHEME = "kde";  # Follow ii upstream: kdeglobals-driven Qt theming
+       QT_STYLE_OVERRIDE = "";
+       ILLOGICAL_IMPULSE_DOTFILES_SOURCE = "${config.home.homeDirectory}/.config";
+     };
+diff -ruN a/home-modules/qt.nix b/home-modules/qt.nix
+--- a/home-modules/qt.nix	2026-09-22 20:26:57.622533973 +0200
++++ b/home-modules/qt.nix	2026-09-22 20:26:57.629277892 +0200
+@@ -76,7 +76,7 @@
+                   pkgs.kdePackages.qtimageformats
+                   pkgs.qt6Packages.qt6ct
+                 ]}" \
+-                --set QT_QPA_PLATFORMTHEME "qt6ct" \
++                --set QT_QPA_PLATFORMTHEME "kde" \
+                 --prefix PATH : "${pythonEnv}/bin" \
+                 --set ILLOGICAL_IMPULSE_VIRTUAL_ENV "$out/venv" \
+                 --prefix XDG_DATA_DIRS : "\$HOME/.local/share:\$HOME/.nix-profile/share:/etc/profiles/per-user/\$USER/share:/nix/var/nix/profiles/default/share:/run/current-system/sw/share"

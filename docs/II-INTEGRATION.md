@@ -18,7 +18,7 @@ every `home-manager switch`:
 1. removes and recopies every top-level entry of `dots/.config` and
    `dots/.local/share` from the upstream checkout,
 2. truncates `~/.config/hypr/custom/env.lua` with `cat >` to inject NixOS
-   `PATH`, `XDG_DATA_DIRS` and `QT_QPA_PLATFORMTHEME` fixes,
+   `PATH` and `XDG_DATA_DIRS` fixes (the flake's `QT_QPA_PLATFORMTHEME` line is patched out),
 3. appends its `hl.plugin(...)` block to `custom/general.lua`.
 
 Anything home-manager symlinks under a wiped path dies on the next
@@ -258,8 +258,10 @@ every new terminal after each activation. The backup lives at
 See [docs/VERIFY.md](VERIFY.md)'s on-target checklist for the commands,
 run after two consecutive `nixos-rebuild switch` runs.
 
-`custom/env.lua` should end up as the soymou module's `PATH`/`XDG_DATA_DIRS`/
-`QT_QPA_PLATFORMTHEME` block, then the sentinel, then our `hl.env` lines.
+`custom/env.lua` should end up as the soymou module's `PATH`/`XDG_DATA_DIRS`
+block, then the sentinel, then our `hl.env` lines. No `QT_QPA_PLATFORMTHEME`
+line: `patches/illogical-flake-kde-platformtheme.patch` drops the flake's
+`qt6ct` override so ii upstream's `kde` value from `hyprland/env.lua` stands.
 `custom/general.lua` follows the same pattern with its plugin comment
 block in place of the `PATH` fixes.
 

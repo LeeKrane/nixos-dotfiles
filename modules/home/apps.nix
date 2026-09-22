@@ -21,6 +21,9 @@
       kdePackages.dolphin
       kdePackages.kio-extras # thumbnails/protocols
       kdePackages.qtsvg # icons
+      # ii themes Qt only through ~/.config/kdeglobals (MaterialYouDark, Darkly, breeze-dark),
+      # which only the "kde" platform theme reads. lib/mk-host.nix patches illogical-flake
+      # to keep QT_QPA_PLATFORMTHEME=kde; these packages make that theme resolvable.
       kdePackages.plasma-integration # "kde" Qt platform theme: reads ii's kdeglobals
       darkly # widgetStyle=Darkly named in ii's kdeglobals
       kdePackages.breeze-icons # Icons Theme=breeze-dark named in ii's kdeglobals
@@ -55,13 +58,6 @@
       # nixpkgs. Uses pkgs.stdenv.hostPlatform.system, not the deprecated pkgs.system.
       inputs.zen-browser.packages.${pkgs.stdenv.hostPlatform.system}.default
     ];
-
-  # illogical-flake's custom/env.lua forces QT_QPA_PLATFORMTHEME=qt6ct, but ii's matugen
-  # pipeline only themes Qt through ~/.config/kdeglobals (MaterialYouDark, Darkly, breeze-dark),
-  # which only the "kde" platform theme reads. Nothing writes ~/.config/qt6ct, so qt6ct falls
-  # back to a light Fusion palette (white Dolphin). Restore ii upstream's value; krane.hypr.env
-  # is appended after the flake's block, so this hl.env wins.
-  krane.hypr.env.QT_QPA_PLATFORMTHEME = "kde";
 
   # No other xdg.mimeApps config exists in this repo; VS Code was previously the
   # de facto inode/directory handler by nixpkgs/desktop-file default, not by
