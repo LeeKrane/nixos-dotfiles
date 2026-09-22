@@ -16,13 +16,20 @@ key exposes only that host's file, not every secret ever created.
 
 ## Files
 
-`shared.yaml` (optional, not created by default) holds secrets any host may
-need. Nothing consumes it yet, but `.sops.yaml`'s `creation_rules` already
-list every host plus the admin as recipients for when one shows up, such as
-an optional personal SSH key or git hosting tokens.
-
 `<hostname>.yaml` (`tariognatha.yaml`, `tarmantria.yaml`, `taractias.yaml`)
-holds per-host secrets, decryptable by that host's own key plus the admin's.
+holds per-host secrets. There is no shared secrets file: each host's
+`.yaml` is decryptable by two recipients only, both listed in that host's
+own `creation_rules` entry in `.sops.yaml` and no other host's — that
+host's personal admin age key, which lives in `~/.config/sops/age/keys.txt`
+on that host and nowhere else, and that host's own SSH-host-derived age
+key. `tariognatha-vm` is the one exception, sharing `tariognatha`'s secrets
+file rather than having its own.
+
+One consequence: `secrets/<host>.yaml` can only be edited on that host
+itself, either as the admin user with the personal key above, or as root
+there with `SOPS_AGE_SSH_PRIVATE_KEY_FILE=/etc/ssh/ssh_host_ed25519_key`.
+No host, and no single key, can decrypt or edit another host's file.
+
 `modules/nixos/sops.nix` reads:
 
 | Key | Read by | Owner:mode |
@@ -71,13 +78,18 @@ that decrypts nothing, until step 1 below runs.
 1. Run `scripts/bootstrap-sops.sh <hostname>` on the target host, after it
    has booted at least once. It needs `/etc/ssh/ssh_host_ed25519_key.pub`,
    which `sshd-keygen` creates at first boot. The script derives the host's
-   age recipient with `ssh-to-age`, generates your personal age key with
-   `age-keygen` if needed, and patches both into `.sops.yaml` in place of
-   the placeholders. It never writes a secret value.
+   age recipient with `ssh-to-age`, generates a personal admin age key for
+   this host with `age-keygen` if needed, and patches both into
+   `.sops.yaml` in place of that host's placeholders only. It never writes
+   a secret value.
 
-   Your personal key lands at `~/.config/sops/age/keys.txt`
-   (`$SOPS_AGE_KEY_FILE` if set). Back it up: lose it and every secret it
-   decrypts is gone.
+   The personal key lands at `~/.config/sops/age/keys.txt`
+   (`$SOPS_AGE_KEY_FILE` if set) on this host, and only this host — it's
+   listed in this host's `creation_rules` entry in `.sops.yaml` and no
+   other's. Back it up: lose it and this host's file can still be read as
+   root there via its SSH host key, but no admin-user edit is possible
+   until a replacement key is generated and re-keyed in (see "Rotating or
+   re-keying" below).
 2. `git add .sops.yaml && git commit`.
 3. Create the file with `sops`, which encrypts against the recipients
    `.sops.yaml` now lists:
@@ -111,6 +123,23 @@ that decrypts nothing, until step 1 below runs.
 5. `just switch <hostname>` (or `sudo nixos-rebuild switch --flake
    .#<hostname>` on the host itself). Secrets decrypt to `/run/secrets/...`
    at activation.
+
+## Rotating or re-keying
+
+After changing a host's recipients in `.sops.yaml` — rotating its personal
+admin key, for instance — the secrets file itself is still encrypted
+against the old recipient set. Run `sops updatekeys secrets/<host>.yaml`
+on that host to re-encrypt it for the current recipients; do this before
+relying on the new key to decrypt anything.
+
+At that point only the old recipient or the SSH host key can still decrypt
+the file, so run `updatekeys` on that host as root, via its SSH host key:
+
+```sh
+sudo env SOPS_AGE_SSH_PRIVATE_KEY_FILE=/etc/ssh/ssh_host_ed25519_key sops updatekeys secrets/<host>.yaml
+```
+
+Commit the re-encrypted file afterward.
 
 ## Never
 

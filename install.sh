@@ -990,18 +990,22 @@ preflight_setup() {
     fi
 }
 
-# True when $1 (a .sops.yaml path) still contains $2's unreplaced
-# bootstrap-sops.sh placeholder recipient. Mirrors the placeholder shape
-# scripts/bootstrap-sops.sh derives from HOST (see its HOST_PLACEHOLDER). A
-# missing .sops.yaml counts as "placeholder present" too, i.e. not yet
-# bootstrapped: bootstrap-sops.sh must still run, and hits its own "not
-# found" guard if it has nothing to work from.
+# True when $1 (a .sops.yaml path) still contains either of $2's unreplaced
+# bootstrap-sops.sh placeholder recipients: the SSH-host-derived key
+# (age1PLACEHOLDER_HOST_...) or the per-host personal/admin key
+# (age1PLACEHOLDER_ADMIN_...). Mirrors the placeholder shapes
+# scripts/bootstrap-sops.sh derives from HOST (see its HOST_PLACEHOLDER and
+# ADMIN_PLACEHOLDER). A missing .sops.yaml counts as "placeholder present"
+# too, i.e. not yet bootstrapped: bootstrap-sops.sh must still run, and hits
+# its own "not found" guard if it has nothing to work from.
 sops_placeholder_present() {
-    local sops_yaml="$1" host="$2" host_upper placeholder
+    local sops_yaml="$1" host="$2" host_upper host_placeholder admin_placeholder
     [ -f "$sops_yaml" ] || return 0
     host_upper=$(printf '%s' "$host" | tr '[:lower:]' '[:upper:]')
-    placeholder="age1PLACEHOLDER_HOST_${host_upper}_REPLACE_VIA_BOOTSTRAP_SOPS_SH"
-    grep -qF "$placeholder" "$sops_yaml" 2>/dev/null
+    host_placeholder="age1PLACEHOLDER_HOST_${host_upper}_REPLACE_VIA_BOOTSTRAP_SOPS_SH"
+    admin_placeholder="age1PLACEHOLDER_ADMIN_${host_upper}_REPLACE_VIA_BOOTSTRAP_SOPS_SH"
+    grep -qF "$host_placeholder" "$sops_yaml" 2>/dev/null \
+        || grep -qF "$admin_placeholder" "$sops_yaml" 2>/dev/null
 }
 
 # True when $2, in the worktree of the git repo at $1, has no uncommitted
@@ -1026,18 +1030,42 @@ run_bootstrap_sops() {
     if sops_placeholder_present "$REPO_ROOT/.sops.yaml" "$HOST"; then
         run_sh "\"$REPO_ROOT/scripts/bootstrap-sops.sh\" \"$HOST\""
     elif [ -f "$key_file" ]; then
+        # Both placeholders are already replaced, so .sops.yaml should be
+        # carrying this host's real admin_$HOST recipient. Cross-check the
+        # local personal key against it: a mismatch usually means the key
+        # file was copied from another host or regenerated after
+        # .sops.yaml was bootstrapped, and secrets encrypted for the
+        # registered recipient would silently fail to decrypt with it.
+        if command -v age-keygen >/dev/null 2>&1; then
+            local local_pub registered_pub
+            local_pub=$(age-keygen -y "$key_file" 2>/dev/null || true)
+            registered_pub=$(command grep -F "&admin_${HOST}" "$REPO_ROOT/.sops.yaml" 2>/dev/null | command grep -oE 'age1[0-9a-z]+' | head -n1 || true)
+            if [ -n "$local_pub" ] && [ -n "$registered_pub" ] && [ "$local_pub" != "$registered_pub" ]; then
+                local mismatch_msg="local personal age key $key_file (public key $local_pub) does not match this host's admin_$HOST recipient registered in .sops.yaml ($registered_pub); restore the matching key from your backup (see secrets/README.md) or re-run scripts/bootstrap-sops.sh $HOST to register this key instead"
+                if $DRY_RUN; then
+                    log_warn "$mismatch_msg"
+                else
+                    die "$mismatch_msg"
+                fi
+            fi
+        else
+            log_warn "age-keygen not found, skipping verification that $key_file matches the admin_$HOST recipient in .sops.yaml"
+        fi
         if $DRY_RUN; then
             log_info "would skip bootstrap: sops already bootstrapped for $HOST"
         else
             log_info "sops already bootstrapped for $HOST, skipping"
         fi
     else
-        # The host placeholder is gone but the admin key that decrypts
+        # Both placeholders are gone but the personal key that decrypts
         # existing secrets is missing. Re-running bootstrap-sops.sh here
-        # would generate a fresh admin key that never becomes a recipient
-        # (the admin placeholder is already replaced too), silently
-        # locking secrets out from under the new key. Fail loudly instead.
-        local msg="sops already bootstrapped for $HOST but admin key $key_file is missing; restore it from your backup (see secrets/README.md) or re-add the age1PLACEHOLDER_ADMIN_KRANE_REPLACE_VIA_BOOTSTRAP_SOPS_SH placeholder to .sops.yaml and rerun"
+        # would generate a fresh personal key that never becomes a
+        # recipient (the admin placeholder is already replaced too),
+        # silently locking secrets out from under the new key. Fail loudly
+        # instead.
+        local host_upper
+        host_upper=$(printf '%s' "$HOST" | tr '[:lower:]' '[:upper:]')
+        local msg="sops already bootstrapped for $HOST but personal key $key_file is missing; restore it from your backup (see secrets/README.md) or re-add the age1PLACEHOLDER_ADMIN_${host_upper}_REPLACE_VIA_BOOTSTRAP_SOPS_SH placeholder to .sops.yaml and rerun"
         if $DRY_RUN; then
             log_warn "$msg"
         else

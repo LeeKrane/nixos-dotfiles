@@ -1,39 +1,36 @@
 # sops-nix key/recipient map. See secrets/README.md for what each secret holds.
 #
-# Every recipient below is a placeholder. It cannot decrypt anything.
-# scripts/bootstrap-sops.sh replaces each one with the real recipient: the
-# admin's personal age key, and each host's age key derived from that
-# host's own SSH host key. Never hand-edit a recipient here.
+# Each host has two recipients: an admin key, which is that host owner's
+# personal age key, and a host key, derived from that host's own SSH host
+# key. No single key spans multiple hosts anymore -- every host can decrypt
+# only its own secrets/<host>.yaml.
+#
+# Recipients still following the age1PLACEHOLDER_* naming scheme have not
+# been bootstrapped yet. scripts/bootstrap-sops.sh replaces each one with
+# the real recipient. Never hand-edit a placeholder recipient here.
 keys:
-  - &admin_krane age1jwlqpsyazly7u24h5nwegaznc9mlgqnnek0xxn9nksmgxft3pg9sph75al
+  - &admin_tariognatha age1PLACEHOLDER_ADMIN_TARIOGNATHA_REPLACE_VIA_BOOTSTRAP_SOPS_SH
   - &host_tariognatha age1PLACEHOLDER_HOST_TARIOGNATHA_REPLACE_VIA_BOOTSTRAP_SOPS_SH
+  - &admin_tarmantria age10yyfd8phl7aprnlea7eqtvqk2aa26y9g8wyses6n06qtz8mh2dcszfg7ps
   - &host_tarmantria age1779675ua8quw2d2shtejxgxz36fekj8ez90a7e7rhngsukj6dcpsqnctlx
+  - &admin_taractias age1jwlqpsyazly7u24h5nwegaznc9mlgqnnek0xxn9nksmgxft3pg9sph75al
   - &host_taractias age18ln7hrxrhx59dk5cn4p8d9gndnftkcpyauvfkhttfhphu6kg3adq8q8wsf
 
 creation_rules:
-  # Shared secrets any host may need. Nothing consumes one yet.
-  - path_regex: secrets/shared\.yaml$
-    key_groups:
-      - age:
-          - *admin_krane
-          - *host_tariognatha
-          - *host_tarmantria
-          - *host_taractias
-
   - path_regex: secrets/tariognatha\.yaml$
     key_groups:
       - age:
-          - *admin_krane
+          - *admin_tariognatha
           - *host_tariognatha
 
   - path_regex: secrets/tarmantria\.yaml$
     key_groups:
       - age:
-          - *admin_krane
+          - *admin_tarmantria
           - *host_tarmantria
 
   - path_regex: secrets/taractias\.yaml$
     key_groups:
       - age:
-          - *admin_krane
+          - *admin_taractias
           - *host_taractias
