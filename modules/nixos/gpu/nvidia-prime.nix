@@ -52,6 +52,9 @@
 
     hardware.nvidia.package = config.boot.kernelPackages.nvidiaPackages.stable;
 
+    # glxinfo, used by the install.sh VERIFY check `nvidia-offload glxinfo`.
+    environment.systemPackages = [ pkgs.mesa-demos ];
+
     environment.sessionVariables = {
       LIBVA_DRIVER_NAME = "iHD";
     };
