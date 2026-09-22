@@ -5,6 +5,7 @@
   environment.systemPackages = with pkgs; [
     just
     gum
+    pv
   ];
 
   # /etc/fish, not ~/.config/fish: soymou's dotfiles-copy step wipes that
