@@ -270,6 +270,11 @@ line: `patches/illogical-flake-kde-platformtheme.patch` drops the flake's
 `custom/general.lua` follows the same pattern with its plugin comment
 block in place of the `PATH` fixes.
 
+`patches/illogical-flake-cheatsheet-fkeys.patch` fixes the cheatsheet's
+number-key collapsing logic, which used a bare digit-substring test and so
+also matched F-keys containing a "1" (F1, F10, F11) and dropped F9 (digit
+9, no "1"); it now only collapses keys that are purely digits.
+
 ## Rollback and escape hatches
 
 - UWSM session misbehaves: set `programs.hyprland.withUWSM = false` in

@@ -54,8 +54,22 @@ inputs.nixpkgs.lib.nixosSystem {
                 src = inputs.illogical-flake;
                 patches = [ ../patches/illogical-flake-kde-platformtheme.patch ];
               };
+              # dots-hyprland (`inputs.dotfiles` below), not illogical-flake
+              # itself: home-modules/dotfiles.nix copies ~/.config from
+              # `inputs.dotfiles` at HM activation, so the cheatsheet QML
+              # patched here lives in that separate source, not the one
+              # `patched` above rewrites. Cheatsheet's number-key collapsing
+              # regex matches F-keys containing a "1" digit (F1, F10, F11),
+              # mangling their rendered label, and drops F9 entirely (digit
+              # 9, no "1"). See patches/illogical-flake-cheatsheet-fkeys.patch.
+              patchedDotfiles = inputs.nixpkgs.legacyPackages.${system}.applyPatches {
+                name = "dots-hyprland-cheatsheet-fkeys";
+                src = inputs.illogical-flake.inputs.dotfiles;
+                patches = [ ../patches/illogical-flake-cheatsheet-fkeys.patch ];
+              };
               iiInputs = {
-                inherit (inputs.illogical-flake.inputs) quickshell nur dotfiles;
+                inherit (inputs.illogical-flake.inputs) quickshell nur;
+                dotfiles = patchedDotfiles;
               };
             in
             { config, lib, pkgs, ... }:
