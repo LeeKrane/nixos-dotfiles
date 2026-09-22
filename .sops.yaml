@@ -7,7 +7,7 @@
 keys:
   - &admin_krane age1jwlqpsyazly7u24h5nwegaznc9mlgqnnek0xxn9nksmgxft3pg9sph75al
   - &host_tariognatha age1PLACEHOLDER_HOST_TARIOGNATHA_REPLACE_VIA_BOOTSTRAP_SOPS_SH
-  - &host_tarmantria age1PLACEHOLDER_HOST_TARMANTRIA_REPLACE_VIA_BOOTSTRAP_SOPS_SH
+  - &host_tarmantria age1779675ua8quw2d2shtejxgxz36fekj8ez90a7e7rhngsukj6dcpsqnctlx
   - &host_taractias age18ln7hrxrhx59dk5cn4p8d9gndnftkcpyauvfkhttfhphu6kg3adq8q8wsf
 
 creation_rules:
