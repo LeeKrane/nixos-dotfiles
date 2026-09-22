@@ -713,8 +713,10 @@ run_disko() {
     run_sh "\"$disko_script\" 2>&1" || { LAST_CMD=""; die "disko run failed for $HOST, see $LOG"; }
 }
 
-# Under 12 GiB, since the nix build needs about 4 GB and the live ISO has no swap.
-install_swap_needed() { [ "$1" -lt 12582912 ]; }
+# Under 24 GiB: the nix eval heap alone holds ~5 GiB resident for the whole
+# build phase, and local C++ compiles (e.g. quickshell) at default
+# max-jobs/cores pile on top of that on a live ISO with no swap.
+install_swap_needed() { [ "$1" -lt 25165824 ]; }
 
 # The live ISO keeps /tmp and ~/.cache/nix in RAM with no swap backing it, so
 # nixos-install's nix build can OOM on a low-RAM machine. /mnt exists by now.
@@ -732,9 +734,9 @@ setup_install_swap() {
     fi
     local mem_gib=$(( (mem_kb + 524288) / 1048576 ))
     if install_swap_needed "$mem_kb"; then
-        log_info "RAM is $mem_gib GiB, creating an 8 GiB swapfile on /mnt for the install"
+        log_info "RAM is $mem_gib GiB, creating a 16 GiB swapfile on /mnt for the install"
         INSTALL_SWAP_ACTIVE=true
-        run_soft btrfs filesystem mkswapfile --size 8g /mnt/swapfile \
+        run_soft btrfs filesystem mkswapfile --size 16g /mnt/swapfile \
             || { log_warn "could not create the install swapfile, continuing without it"; teardown_install_swap; return; }
         run_soft swapon /mnt/swapfile \
             || { log_warn "could not enable the install swapfile, continuing without it"; teardown_install_swap; return; }
@@ -856,12 +858,22 @@ run_nixos_install() {
     fi
     local flake_opt
     flake_opt=$(flake_config_opt)
+    # The live ISO has no swap by default (setup_install_swap only adds one
+    # under 24 GiB RAM) and the nix eval heap alone stays ~5 GiB resident for
+    # the whole build phase. Local C++ compiles (e.g. quickshell) at default
+    # max-jobs=auto/cores=all pile on top of that and can OOM the box, so
+    # nixos-install alone is limited to one job at half the cores.
+    local install_cores
+    install_cores=$(( $(command -v nproc >/dev/null 2>&1 && nproc || echo 1) / 2 ))
+    [ "$install_cores" -ge 1 ] || install_cores=1
+    log_info "Limiting nixos-install to max-jobs 1, cores $install_cores to avoid OOM on the live ISO"
+    local install_nix_config="$NIX_CONFIG"$'\n'"max-jobs = 1"$'\n'"cores = $install_cores"
     run mkdir -p /mnt/var/cache/installer/tmp
     local attempt
     for attempt in 1 2 3; do
         local log_mark
         log_mark=$(wc -l < "$LOG" 2>/dev/null || echo 0)
-        run_sh "TMPDIR=/mnt/var/cache/installer/tmp XDG_CACHE_HOME=/mnt/var/cache/installer nixos-install --flake \"$REPO_ROOT#$HOST\" --no-root-passwd $flake_opt 2>&1" \
+        run_sh "NIX_CONFIG=$(printf '%q' "$install_nix_config") TMPDIR=/mnt/var/cache/installer/tmp XDG_CACHE_HOME=/mnt/var/cache/installer nixos-install --flake \"$REPO_ROOT#$HOST\" --no-root-passwd $flake_opt 2>&1" \
             && break
         LAST_CMD=""
         if [ "$attempt" -eq 3 ]; then
@@ -1375,8 +1387,8 @@ self_test() {
     fi
 
     echo "== self-test: install swap RAM threshold ==" >&2
-    if install_swap_needed 7025000 && ! install_swap_needed 33554432; then
-        echo "OK: install_swap_needed true at 6.7 GiB, false at 32 GiB" >&2
+    if install_swap_needed 15728640 && ! install_swap_needed 33554432; then
+        echo "OK: install_swap_needed true at 15 GiB, false at 32 GiB" >&2
     else
         echo "FAIL: install_swap_needed threshold wrong" >&2
         SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))

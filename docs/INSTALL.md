@@ -38,7 +38,7 @@ With no flags, `install.sh` detects a live ISO and walks through a live install:
 4. Confirmation: restates the disk and host, then asks you to type the kernel device name, such as `nvme0n1`, to confirm.
 5. Partition and format: patches `hosts/<host>/disko.nix`'s `/dev/CHANGE-ME` placeholder with your disk, then runs disko. This erases the chosen disk. Layout: GPT, an ESP, and a btrfs root split into `@`, `@home`, `@nix`, `@snapshots` subvolumes, zstd-compressed, no swap partition, zram swap instead.
 
-    Under 12 GiB RAM, `install.sh` creates an 8 GiB swapfile at `/mnt/swapfile` and removes it after `nixos-install`. The nix build needs about 4 GB and the live ISO has no swap.
+    Under 24 GiB RAM, `install.sh` creates a 16 GiB swapfile at `/mnt/swapfile` and removes it after `nixos-install`. The nix eval heap alone stays around 5 GB resident for the whole build phase and the live ISO has no swap. `nixos-install` itself is also capped to `max-jobs = 1` and half the machine's cores, to keep local compiles (e.g. quickshell) from piling onto that heap and triggering the OOM killer.
 
 6. Hardware config: runs `nixos-generate-config --no-filesystems --root /mnt` and writes `hosts/<host>/hardware-configuration.nix`.
 7. PRIME bus IDs, `tarmantria` only: reads `lspci -D` and patches `hosts/tarmantria/default.nix`'s `krane.prime.intelBusId`/`nvidiaBusId`. Left as `FILL AT INSTALL` placeholders otherwise.
@@ -186,12 +186,14 @@ Everything `install.sh` does, run by hand. Replace `<host>` with `tariognatha`, 
     lspci | grep -E 'VGA|3D'
     ```
 
-Under 12 GiB RAM, create a temporary swapfile first:
+Under 24 GiB RAM, create a temporary swapfile first:
 
 ```sh
-btrfs filesystem mkswapfile --size 8g /mnt/swapfile
+btrfs filesystem mkswapfile --size 16g /mnt/swapfile
 swapon /mnt/swapfile
 ```
+
+Run nixos-install with `NIX_CONFIG=$'max-jobs = 1\ncores = 4'` (or half the machine's cores) to avoid the OOM killer during local compiles.
 
 5. Install. `flake.nix` carries no `nixConfig` (it made nix prompt to allow it on every invocation and hung direnv), so the CUDA cache is granted explicitly instead: pass `--option extra-substituters https://cache.nixos-cuda.org --option extra-trusted-public-keys cache.nixos-cuda.org:74DUi4Ye579gUqzH4ziL9IyiJBlDpMRn9MBN8oNan9M=` only on `tariognatha`, the one host with CUDA packages; pass nothing extra on `tarmantria` and `taractias` since they never query that cache.
 
