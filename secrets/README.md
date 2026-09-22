@@ -96,6 +96,7 @@ that decrypts nothing, until step 1 below runs.
        peer-public-key: <peer's WireGuard public key>
        peer-endpoint: <peer host:port, e.g. vpn.example.net:51820>
        peer-allowed-ips: <peer's subnet, e.g. 10.100.0.0/24>
+       listen-port: <this host's WireGuard listen port, e.g. 51820>
    rclone:
        config-seed: |
            [ProtonDrive]
