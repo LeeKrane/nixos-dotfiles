@@ -17,6 +17,7 @@
     ./shells.nix
     ./virtualisation.nix
     ./gaming.nix
+    ./recording.nix
     ./flatpak.nix
     ./appimage.nix
     ./sops.nix

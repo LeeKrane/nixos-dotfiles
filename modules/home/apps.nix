@@ -33,7 +33,6 @@
       vlc
       mpv
       spotify
-      gpu-screen-recorder
       losslesscut
       upscaler
 

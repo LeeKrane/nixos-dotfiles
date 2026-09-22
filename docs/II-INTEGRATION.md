@@ -88,6 +88,11 @@ any `nix flake update` that moves `illogical-flake`.
 | `custom/env.lua` | appended | Truncated with `cat >` every switch. Our block must land after. |
 | `custom/general.lua` | appended | The soymou module appends its `hl.plugin` block. Our block must land after. |
 
+Recording binds (`custom/keybinds.lua`) come from `modules/home/recording.nix`,
+which also unbinds ii's upstream wf-recorder binds
+(`hyprland/keybinds.lua:85-93`) so the freed keys can be rebound to
+`gsr-ui-cli`.
+
 Owned files are written with `install -Dm644`, as regular files, never
 symlinks: a symlink into the store would be wiped by the copy step and
 would be read only besides.

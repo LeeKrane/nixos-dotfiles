@@ -18,6 +18,7 @@
     ./lock-on-start.nix
     ./cursor.nix
     ./qwertz-binds.nix
+    ./recording.nix
   ];
 
   home.stateVersion = "26.05";
