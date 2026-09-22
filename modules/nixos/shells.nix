@@ -78,6 +78,10 @@
   # ~/.config/fish/config.fish instead. Full store paths, not bare names.
   programs.fish.interactiveShellInit = ''
     set -gx EDITOR nvim
+    # home-manager's home.sessionVariables (modules/home/cli.nix) only reaches
+    # bash/zsh via /etc/profile.d; fish is NixOS-managed, so it needs its own
+    # SSH_AUTH_SOCK export to reach the gcr ssh-agent gnome-keyring runs.
+    set -gx SSH_AUTH_SOCK $XDG_RUNTIME_DIR/gcr/ssh
     ${pkgs.zoxide}/bin/zoxide init fish | source
     ${pkgs.fzf}/bin/fzf --fish | source
     ${pkgs.pay-respects}/bin/pay-respects fish --alias fuck | source

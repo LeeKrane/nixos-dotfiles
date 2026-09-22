@@ -9,6 +9,25 @@
   programs.eza.enable = true;
   programs.btop.enable = true;
 
+  # Point ssh at the gcr ssh-agent component gnome-keyring already runs
+  # (services.gnome.gnome-keyring.enable in modules/nixos/desktop.nix), and let
+  # ssh add used keys to it. home.sessionVariables only reaches bash/zsh via
+  # /etc/profile.d, so fish also gets SSH_AUTH_SOCK from
+  # modules/nixos/shells.nix, and GUI-launched clients get it from
+  # krane.hypr.env below (Hyprland is started by greetd without
+  # hm-session-vars, same reasoning as modules/home/cursor.nix).
+  home.sessionVariables.SSH_AUTH_SOCK = "$XDG_RUNTIME_DIR/gcr/ssh";
+  krane.hypr.env.SSH_AUTH_SOCK = "/run/user/1000/gcr/ssh"; # hl.env is a literal string, no $VAR expansion
+
+  programs.ssh = {
+    enable = true;
+    # This HM version deprecated matchBlocks/addKeysToAgent in favor of raw
+    # ssh_config directive names under settings, and warns on
+    # enableDefaultConfig unless it's explicitly turned off.
+    enableDefaultConfig = false;
+    settings."*".AddKeysToAgent = "yes";
+  };
+
   home.packages = with pkgs; [
     zoxide
     fzf
