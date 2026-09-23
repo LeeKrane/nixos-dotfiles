@@ -10,7 +10,7 @@ Replace the vendored LazyVim setup (`config/nvim/` + `modules/home/neovim.nix`) 
 Success criteria:
 
 - `nvim` on every host is the NixVim build; no lazy.nvim, no LazyVim, no Mason, no runtime plugin or tool downloads.
-- All LSPs, formatters, linters and treesitter grammars for the selected languages come from Nix (except rust-analyzer and the Go/Rust toolchains, which projects supply).
+- All LSPs, formatters, linters and treesitter grammars for the selected languages come from Nix (except rust-analyzer, which comes from rustup, and the language toolchains: `go`, `rustup`, `jdk21`, `nodejs_22` and `texliveMedium` live in `modules/home/dev.nix`; `go` is added there in phase 2).
 - Changing the wallpaper recolors every running Neovim instance within about one second.
 - Config changes can be tested with `nix run .#nvim` without a system rebuild.
 - `nix flake check` fails if the generated config errors at startup.
@@ -309,7 +309,7 @@ which-key groups: `+buffer`, `+code`, `+file/find`, `+git`, `+hunks`, `+quit/ses
 | nix | nixd | nixfmt | — |
 | lua | lua_ls + lazydev | stylua | — |
 | web | ts_ls, tailwindcss, html, cssls | prettierd | nvim-ts-autotag |
-| data | jsonls, yamlls (via `plugins.schemastore`), taplo | prettierd, taplo | — |
+| data | jsonls, yamlls (SchemaStore.nvim schemas), taplo | prettierd, taplo | — |
 | python | basedpyright, ruff | ruff | venv-selector |
 | rust | rustaceanvim (rust-analyzer from rustup) | rustfmt via rust-analyzer | crates.nvim |
 | go | gopls | gofumpt, goimports | golangci-lint |
@@ -322,7 +322,8 @@ Notes:
 
 - `latexindent` is not a top-level nixpkgs attribute. Use `(pkgs.texliveBasic.withPackages (ps: [ ps.latexindent ]))`, or configure conform's `latexindent` command from that derivation.
 - venv-selector: nixvim's module example and picker assertion target the old v1 API. Write the v2 nested shape directly (`settings.options.picker = "snacks"` or `"native"`), and expect the nixvim picker assertion to be unreliable for snacks. If the assertion errors, use `"native"`.
-- `plugins.schemastore` wires JSON/YAML schemas into jsonls/yamlls itself.
+- SchemaStore: `pkgs.vimPlugins.SchemaStore-nvim` via `extraPlugins`, with schemas set explicitly in `lsp.servers.jsonls`/`yamlls` config through `__raw` (nixvim's `plugins.schemastore` wiring targets the legacy `plugins.lsp` servers).
+- vimtex: `texlivePackage = null` (use the system `texliveMedium`, keep TeX out of the editor closure); treesitter highlighting disabled for `latex`, because vimtex's math-zone detection needs vimtex syntax.
 
 ### Formatting and linting
 
@@ -345,7 +346,9 @@ All grammars ship in phase 1. `plugins.treesitter-textobjects` provides function
 - `performance.byteCompileLua = { enable = true; configs = true; plugins = true; nvimRuntime = true; }`.
 - lz.n lazy loading (`plugins.lz-n.enable`, per-plugin `lazyLoad.settings`) only for heavy, clearly triggered plugins:
   - grug-far and trouble (cmd/keys)
-  - vimtex, nvim-jdtls, rustaceanvim and markdown-preview (ft)
+  - markdown-preview (ft/cmd), crates.nvim (`BufRead Cargo.toml`)
+
+  vimtex is not lazy-loaded (vimtex documents that it must not be). nvim-jdtls and rustaceanvim already start from filetype hooks, so lz-n adds nothing for them.
 
   nixvim marks `lazyLoad` experimental (API may change). If a plugin misbehaves under it, drop lazy loading for that plugin rather than work around it.
 - `combinePlugins` not enabled.
