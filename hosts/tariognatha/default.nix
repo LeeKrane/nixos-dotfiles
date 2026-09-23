@@ -3,6 +3,7 @@
   imports = [
     ./hardware-configuration.nix
     ./disko.nix
+    ./storage.nix
     ../../modules/nixos/gpu/nvidia-desktop.nix
   ];
 
