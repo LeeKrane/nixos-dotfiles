@@ -51,6 +51,10 @@ sops-edit FILE:
 update:
     scripts/docker-check.sh update
 
+# Bumps only claude-code, newest by default or `just update-claude 2.1.278`.
+update-claude VERSION="":
+    scripts/update-claude-code.sh {{ VERSION }}
+
 # nix flake lock, in docker, only adds missing entries, never bumps pins.
 lock:
     scripts/docker-check.sh lock
