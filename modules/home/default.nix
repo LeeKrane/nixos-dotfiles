@@ -17,8 +17,10 @@
     ./wallpapers.nix
     ./lock-on-start.nix
     ./cursor.nix
+    ./session-target.nix
     ./qwertz-binds.nix
     ./recording.nix
+    ./teamclaude.nix
   ];
 
   home.stateVersion = "26.05";

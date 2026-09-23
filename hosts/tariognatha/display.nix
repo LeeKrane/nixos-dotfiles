@@ -7,19 +7,20 @@
       # Primary, straight ahead.
       {
         output = "DP-2";
-        mode = "2560x1440@144";
+        mode = "3840x2160@240";
         position = "0x0";
-        scale = 1;
+        scale = 1.5;
       }
-      # Rotated 90 deg clockwise (transform 3, Hyprland's 270 deg). Logical size after rotation
-      # and the 1.25 scale is 1152x2048, so 2560x0 sits it right of DP-2. VERIFY ON TARGET: use
-      # position = "-1152x0" for the left instead.
       {
         output = "DP-1";
-        mode = "2560x1440@60";
+        mode = "2560x1440@144";
+		# If primary scaling is 1
+        #position = "3840x0";
+		# If primary scaling is 1.25
+		#position = "3072x0";
+		# If primary scaling is 1.25
         position = "2560x0";
-        scale = 1.25;
-        transform = 3;
+        scale = 1;
       }
     ];
 
@@ -28,6 +29,13 @@
       kb_variant = "nodeadkeys";
     };
 
+    # Hyprland has no primary monitor: the cursor, focus and workspace 1 start on the lowest
+    # monitor ID, which is DP-1 here. Pin them to DP-2 so the lock screen and startup land there.
+    settings.cursor.default_monitor = "DP-2";
+    extraGeneralLua = ''
+      hl.workspace_rule({ workspace = "1", monitor = "DP-2", default = true })
+    '';
+
     devices = [
       # VERIFY ON TARGET: name must match `hyprctl devices` exactly (Hyprland lowercases and
       # dash-joins libinput's name). -0.4 flat-profile sensitivity carried over from the previous setup.
@@ -35,7 +43,7 @@
         name = "logitech-gaming-mouse-g502";
         settings = {
           accel_profile = "flat";
-          sensitivity = -0.4;
+          sensitivity = -0.9;
         };
       }
     ];
