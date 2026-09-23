@@ -36,7 +36,7 @@
         name = "logitech-gaming-mouse-g502";
         settings = {
           accel_profile = "flat";
-          sensitivity = -0.5;
+          sensitivity = -0.9;
         };
       }
     ];
