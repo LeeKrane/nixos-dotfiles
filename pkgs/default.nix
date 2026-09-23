@@ -6,4 +6,5 @@
 
   plymouth-lone = pkgs.callPackage ./plymouth-lone { };
   proton-drive-mount = pkgs.callPackage ./proton-drive-mount { };
+  teamclaude = pkgs.callPackage ./teamclaude/package.nix { };
 }

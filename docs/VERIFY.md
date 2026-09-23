@@ -117,6 +117,7 @@ compositor shows a bare desktop underneath. Check instead:
 | Bluetooth came up after the first reboot | `bluetoothctl show \| grep -i powered` | tarmantria, taractias |
 | Windows dual-boot entry present, if expected. See [docs/INSTALL.md](INSTALL.md) "Windows dual-boot entry" | `sudo bootctl list` | All, if dual-booting |
 | Proton Drive mounted | `systemctl --user status proton-drive-mount` | All |
+| teamclaude proxy running with at least one seat, Claude Code's `ANTHROPIC_BASE_URL` target. No seats yet: run `teamclaude login` once per seat | `systemctl --user status teamclaude; teamclaude status` | All |
 | wg0 tunnel up, peer reachable | `sudo wg show wg0` shows the peer with a recent latest handshake | All with a `wireguard:` section in `secrets/<host>.yaml` |
 | wg0 has this host's tunnel address | `ip -br addr show wg0` shows the host's tunnel address | All with a `wireguard:` section in `secrets/<host>.yaml` |
 

@@ -145,6 +145,7 @@ rsync -avh --info=progress2 old:~/.mozilla               ~/.mozilla        # Fir
 rsync -avh --info=progress2 old:~/.config/BraveSoftware  ~/.config/BraveSoftware
 rsync -avh --info=progress2 'old:~/.local/share/Steam/steamapps' ~/.local/share/Steam/steamapps
 rsync -avh --info=progress2 old:~/.claude                ~/.claude
+rsync -avh --info=progress2 old:~/.config/teamclaude.json ~/.config/teamclaude.json  # seat tokens, else `teamclaude login` per seat
 ```
 
 Fix permissions afterwards:
