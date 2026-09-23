@@ -7,19 +7,20 @@
       # Primary, straight ahead.
       {
         output = "DP-2";
-        mode = "2560x1440@144";
+        mode = "3840x2160@240";
         position = "0x0";
-        scale = 1;
+        scale = 1.5;
       }
-      # Rotated 90 deg clockwise (transform 3, Hyprland's 270 deg). Logical size after rotation
-      # and the 1.25 scale is 1152x2048, so 2560x0 sits it right of DP-2. VERIFY ON TARGET: use
-      # position = "-1152x0" for the left instead.
       {
         output = "DP-1";
-        mode = "2560x1440@60";
+        mode = "2560x1440@144";
+		# If primary scaling is 1
+        #position = "3840x0";
+		# If primary scaling is 1.25
+		#position = "3072x0";
+		# If primary scaling is 1.25
         position = "2560x0";
-        scale = 1.25;
-        transform = 3;
+        scale = 1;
       }
     ];
 
@@ -35,7 +36,7 @@
         name = "logitech-gaming-mouse-g502";
         settings = {
           accel_profile = "flat";
-          sensitivity = -0.4;
+          sensitivity = -0.5;
         };
       }
     ];
