@@ -17,6 +17,7 @@
     ./wallpapers.nix
     ./lock-on-start.nix
     ./cursor.nix
+    ./session-target.nix
     ./qwertz-binds.nix
     ./teamclaude.nix
   ];
