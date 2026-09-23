@@ -61,9 +61,27 @@
 
   # No other xdg.mimeApps config exists in this repo; VS Code was previously the
   # de facto inode/directory handler by nixpkgs/desktop-file default, not by
-  # explicit config here.
-  xdg.mimeApps = {
-    enable = true;
-    defaultApplications."inode/directory" = "org.kde.dolphin.desktop";
-  };
+  # explicit config here. Likewise chromium was the de facto web handler until
+  # the web types below were pinned to zen-beta, matching the hyprland `browser`
+  # global set per host in hosts/*/display.nix.
+  xdg.mimeApps =
+    let
+      zen = "zen-beta.desktop";
+    in
+    {
+      enable = true;
+      defaultApplications = {
+        "inode/directory" = "org.kde.dolphin.desktop";
+        "x-scheme-handler/http" = zen;
+        "x-scheme-handler/https" = zen;
+        "x-scheme-handler/about" = zen;
+        "x-scheme-handler/unknown" = zen;
+        "text/html" = zen;
+        "application/xhtml+xml" = zen;
+      };
+    };
+
+  # xdg-settings/xdg-open consult $BROWSER first in some tools; keep it aligned
+  # with the mime defaults above.
+  home.sessionVariables.BROWSER = "zen-beta";
 }
