@@ -9,8 +9,8 @@
 # been bootstrapped yet. scripts/bootstrap-sops.sh replaces each one with
 # the real recipient. Never hand-edit a placeholder recipient here.
 keys:
-  - &admin_tariognatha age1PLACEHOLDER_ADMIN_TARIOGNATHA_REPLACE_VIA_BOOTSTRAP_SOPS_SH
-  - &host_tariognatha age1PLACEHOLDER_HOST_TARIOGNATHA_REPLACE_VIA_BOOTSTRAP_SOPS_SH
+  - &admin_tariognatha age1hxjswupw62ueuwgjtqqmr0nsjef8azjxjlsupqp08ne7nwktsgzqp2qheg
+  - &host_tariognatha age1rfjht8hjtknszm2rctp2jw7gr2mchsq7e6nuxvuwqqc92390zg4svewm2m
   - &admin_tarmantria age10yyfd8phl7aprnlea7eqtvqk2aa26y9g8wyses6n06qtz8mh2dcszfg7ps
   - &host_tarmantria age1779675ua8quw2d2shtejxgxz36fekj8ez90a7e7rhngsukj6dcpsqnctlx
   - &admin_taractias age1jwlqpsyazly7u24h5nwegaznc9mlgqnnek0xxn9nksmgxft3pg9sph75al
