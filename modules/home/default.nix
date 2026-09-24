@@ -21,6 +21,7 @@
     ./qwertz-binds.nix
     ./recording.nix
     ./teamclaude.nix
+    ./steam.nix
   ];
 
   home.stateVersion = "26.05";
