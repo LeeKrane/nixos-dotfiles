@@ -233,6 +233,12 @@ file is skipped rather than failing activation:
   no session picker to lock behind; flip the default itself so ii locks
   immediately on startup. `config.json` stays ii-owned after that, the GUI
   can still flip it back off.
+- `~/.config/hypr/hypridle.conf`, only when a host sets
+  `krane.hypr.idleTimeouts = false` (tariognatha): `/^listener {/,/^}/d`.
+  Strips ii's idle listeners (lock at 5 min, DPMS off at 10, suspend at 15)
+  and keeps the `general` block, so manual lock and lock-before-sleep still
+  work. hypridle only reads its config at start, so the change applies from
+  the next login or a hypridle restart.
 
 `kraneIiHyprReload` (`entryAfter [ "kraneIiOverrides" "kraneIiPatches" ]`)
 runs `hyprctl reload config-only` once the `~/.config/hypr` tree and our

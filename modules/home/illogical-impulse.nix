@@ -75,7 +75,15 @@ let
       sed = "s/property bool launchOnStartup: false/property bool launchOnStartup: true/";
       why = "fresh hosts seed config.json from ii's QML defaults; want ii to lock immediately under greetd autologin";
     }
-  ];
+  ]
+  ++ lib.optional (!config.krane.hypr.idleTimeouts) {
+    # ii's hypridle.conf locks at 5 min, turns DPMS off at 10 and suspends at 15. Dropping
+    # the listener blocks leaves the general block, so loginctl lock-session and
+    # lock-before-sleep still work.
+    file = "${hyprDir}/hypridle.conf";
+    sed = "/^listener {/,/^}/d";
+    why = "krane.hypr.idleTimeouts = false: never lock, blank or suspend on idle";
+  };
 
   patchFile = entry: ''
     if [ -f "${entry.file}" ]; then

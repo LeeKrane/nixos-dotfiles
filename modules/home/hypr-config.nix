@@ -472,6 +472,17 @@ in
       description = "Verbatim Lua appended to the end of custom/general.lua.";
     };
 
+    idleTimeouts = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Keep ii's hypridle idle listeners (lock, DPMS off, suspend). false strips
+        every `listener` block from ~/.config/hypr/hypridle.conf, so the session
+        never locks, blanks or suspends on its own; manual lock and lock-before-sleep
+        stay. Applied by modules/home/illogical-impulse.nix, not rendered to Lua.
+      '';
+    };
+
     _rendered = lib.mkOption {
       type = lib.types.attrsOf lib.types.path;
       internal = true;

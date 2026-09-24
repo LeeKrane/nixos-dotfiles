@@ -32,6 +32,9 @@
     # Hyprland has no primary monitor: the cursor, focus and workspace 1 start on the lowest
     # monitor ID, which is DP-1 here. Pin them to DP-2 so the lock screen and startup land there.
     settings.cursor.default_monitor = "DP-2";
+
+    # Desktop stays awake once booted: no idle lock, DPMS off or suspend.
+    idleTimeouts = false;
     extraGeneralLua = ''
       hl.workspace_rule({ workspace = "1", monitor = "DP-2", default = true })
     '';
