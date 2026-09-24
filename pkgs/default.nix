@@ -6,5 +6,6 @@
 
   plymouth-lone = pkgs.callPackage ./plymouth-lone { };
   proton-drive-mount = pkgs.callPackage ./proton-drive-mount { };
+  skillspector = pkgs.callPackage ./skillspector/package.nix { };
   teamclaude = pkgs.callPackage ./teamclaude/package.nix { };
 }
