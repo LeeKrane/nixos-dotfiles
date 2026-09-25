@@ -29,7 +29,7 @@
     variables = {
       terminal = "kitty";
       browser = "zen-beta";
-      codeEditor = "code";
+      codeEditor = "kitty -1 nvim";
       textEditor = "kitty -1 nvim";
       fileManager = "dolphin";
     };
