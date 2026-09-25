@@ -16,6 +16,9 @@
   viAlias = true;
   vimAlias = true;
 
+  # No plugin here uses Ruby; the provider only added a Ruby env to the PATH.
+  withRuby = false;
+
   performance.byteCompileLua = {
     enable = true;
     configs = true;
