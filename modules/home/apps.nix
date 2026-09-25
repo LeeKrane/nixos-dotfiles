@@ -58,7 +58,7 @@
       inputs.zen-browser.packages.${pkgs.stdenv.hostPlatform.system}.default
     ];
 
-  # No other xdg.mimeApps config exists in this repo; VS Code was previously the
+  # Text types are mapped to nvim in neovim.nix. VS Code was previously the
   # de facto inode/directory handler by nixpkgs/desktop-file default, not by
   # explicit config here. Likewise chromium was the de facto web handler until
   # the web types below were pinned to zen-beta, matching the hyprland `browser`
