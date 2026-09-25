@@ -24,6 +24,7 @@
     virtualenv
 
     rustup
+    go
     jdk21
 
     # No `clang` alongside `gcc`: both ship bin/c++/bin/cc and collide in buildEnv the same way.

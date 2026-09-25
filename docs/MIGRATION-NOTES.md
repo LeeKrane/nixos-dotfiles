@@ -50,17 +50,22 @@ The old `.gitconfig` had `aa = "add all"`, not a valid alias body. Fixed
 to `aa = "add -A"` in `modules/home/git.nix`. Every other alias is
 unchanged.
 
-## Neovim: `lazyvim.json` is read-only, mason disabled
+## Neovim: NixVim build, no LazyVim, no Mason
 
-`modules/home/neovim.nix` symlinks `config/nvim/lazyvim.json` from the
-Nix store, so it is read only at runtime and `:LazyExtras` cannot save a
-toggled extra. Edit `config/nvim/lazyvim.json` in this repo and
-re-switch instead.
+Neovim is a standalone NixVim build (`modules/nixvim/`, flake output
+`packages.x86_64-linux.nvim`), installed by `modules/home/neovim.nix`.
+Plugins, LSP servers, formatters and treesitter grammars are all inside
+that package; nothing is downloaded at runtime and `~/.config/nvim` is
+unused. Try changes without switching: `just nvim <file>`. Specs:
+`nix build .#checks.x86_64-linux.nvim-specs -L`.
 
-Mason (`:Mason`) is disabled in `config/nvim/lua/plugins/nix.lua`: every
-LSP server, formatter and linter comes from nixpkgs through
-`modules/home/neovim.nix`'s package list instead. Do not re-enable it,
-since it would conflict with the Nix-provided binaries.
+Colors follow the wallpaper: `modules/nixvim/lua/dynamic-theme.lua`
+reads `~/.local/state/quickshell/user/generated/material_colors.scss`
+and reloads when illogical-impulse rewrites it. Without that file the
+editor uses a built-in catppuccin-frappe palette.
+
+After the first switch, delete LazyVim leftovers once:
+`rm -rf ~/.config/nvim ~/.local/share/nvim/lazy ~/.local/state/nvim/lazy`.
 
 ## `*.hm-bak` files are expected, clean them up periodically
 
@@ -128,9 +133,16 @@ home-manager's `buildEnv`. Use `uv` for project interpreters instead.
 `modules/home/dev.nix` installs `rustup`, not a pinned toolchain.
 `rustup` ships its own `bin/rust-analyzer` proxy, which collides with
 the standalone nixpkgs `rust-analyzer` in home-manager's `buildEnv`, so
-`modules/home/neovim.nix` does not install that package. Run
+neither `modules/home/` nor the NixVim build installs that package. Run
 `rustup default stable && rustup component add rust-analyzer rust-src`
 once per user before Neovim's LSP works.
+
+## Go toolchain in dev.nix
+
+`go` is installed globally by `modules/home/dev.nix`, like `rustup` and
+`jdk21`, because the NixVim build's gopls needs it on `PATH`. The editor
+itself does not bundle `go`. Project-specific Go versions still work
+through a devShell that puts its own `go` first on `PATH`.
 
 ## `home.stateVersion` = "26.05"
 

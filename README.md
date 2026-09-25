@@ -45,7 +45,8 @@ hosts/<host>/                 hardware, disko layout, Hyprland monitor/input
 modules/nixos/                system config: boot, gpu, desktop, sops, ...
 modules/home/                 home-manager config: ii wrapper, neovim, ...
 overlays/  pkgs/              ii-fixes overlay, plymouth-lone theme
-config/nvim/  config/zsh/     vendored dotfiles
+modules/nixvim/               standalone NixVim editor config (packages.nvim)
+config/zsh/                   vendored dotfiles
 scripts/                      bootstrap-sops.sh, docker-check.sh, Proton Drive mount
 secrets/                      nothing committed but README.md and .gitkeep
 docs/                         INSTALL, VERIFY, MIGRATION-NOTES, II-INTEGRATION, FALLBACK-VENDORING

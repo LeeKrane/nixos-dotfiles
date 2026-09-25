@@ -28,6 +28,10 @@
     zen-browser.url = "github:0xc000022070/zen-browser-flake";
     nix-index-database.url = "github:nix-community/nix-index-database";
 
+    # No `nixpkgs.follows`, per nixvim's advice: it is tested against its
+    # own pin. The editor still builds with this flake's pkgs, see nvimEval.
+    nixvim.url = "github:nix-community/nixvim";
+
     # No `nixpkgs.follows`: nixos-hardware's modules aren't pinned to a
     # nixpkgs revision. Applied only to taractias.
     nixos-hardware.url = "github:NixOS/nixos-hardware/master";
@@ -44,6 +48,18 @@
         config.allowUnfree = true;
       };
       mkHost = import ./lib/mk-host.nix { inherit inputs; };
+
+      # Standalone NixVim build, see modules/nixvim/. Uses this flake's pkgs
+      # so overlays and allowUnfree apply; nixvim's own nixpkgs pin (see the
+      # `nixvim` input above) is used only to evaluate its library, not to
+      # build the editor.
+      nvimEval = inputs.nixvim.lib.evalNixvim {
+        modules = [
+          ./modules/nixvim
+          { nixpkgs.pkgs = pkgs; }
+        ];
+      };
+      nvim = nvimEval.config.build.package;
 
       # Single source of truth for this flake's host list, checked
       # against hosts/ by checks.lua-syntax below.
@@ -78,7 +94,9 @@
           };
         };
 
-      packages.${system} = import ./pkgs { inherit pkgs; };
+      packages.${system} = import ./pkgs { inherit pkgs; } // {
+        inherit nvim;
+      };
 
       overlays.default = nixpkgs.lib.composeManyExtensions overlaysList;
 
@@ -137,6 +155,64 @@
                   ''
                 )
             );
+
+        # NixVim's own startup test: fails on errors or warnings at startup.
+        nvim = nvimEval.config.build.test;
+
+        # Headless Lua specs in modules/nixvim/tests/, one fresh nvim each.
+        # Each run is bounded by `timeout 120` (a hung spec, e.g. from an
+        # unresolved async callback, fails the build instead of hanging it
+        # forever) and, after letting scheduled callbacks flush, checks
+        # :messages for an escaped scheduled-callback error, so an error
+        # raised from vim.schedule(...)/vim.defer_fn(...) -- which pcall
+        # around dofile can't see, since it escapes on the event loop after
+        # dofile returns -- still fails the spec.
+        #
+        # This replaced an earlier vim.v.errmsg-based check (round 2):
+        # v:errmsg is also set by LuaSnip 2.5.0's internal `silent!` calls
+        # (`silent! call repeat#set(...)` in luasnip/init.lua:667,
+        # `:silent! foldopen!` in luasnip/util/feedkeys.lua:119), which
+        # `silent!` suppresses on screen but not in v:errmsg, false-failing
+        # any spec that expands/jumps a snippet. :messages does not record
+        # `silent!`-suppressed errors at all (confirmed: a throwaway
+        # `vim.cmd("silent! call nosuch#fn()")` spec exits 0 against this
+        # check), so it needs no such workaround and catches strictly more:
+        # a scheduled error crashes with "Error in command line: vim.schedule
+        # callback: ..." (or E5108 for some deferred-callback paths), both
+        # matched below. Errors raised inside a spec's own internal
+        # vim.wait() window are also caught now, since :messages accumulates
+        # for the whole nvim session rather than being reset per-window.
+        nvim-specs =
+          pkgs.runCommand "nvim-specs"
+            {
+              nativeBuildInputs = [
+                nvim
+                pkgs.coreutils
+              ];
+            }
+            ''
+              export HOME="$TMPDIR/home" XDG_CONFIG_HOME="$TMPDIR/config"
+              export XDG_CACHE_HOME="$TMPDIR/cache" XDG_DATA_HOME="$TMPDIR/data"
+              export SPEC_FIXTURES=${./modules/nixvim/tests/fixtures}
+              mkdir -p "$HOME"
+              count=0
+              for spec in ${./modules/nixvim/tests}/*_spec.lua; do
+                echo "== $(basename "$spec")"
+                export XDG_STATE_HOME="$TMPDIR/state-$count"
+                mkdir -p "$XDG_STATE_HOME"
+                if ! timeout 120 nvim --headless -c "lua local ok, err = pcall(dofile, '$spec'); if not ok then io.stderr:write(tostring(err) .. '\n'); vim.cmd('cquit 1') end; vim.wait(200); local m = vim.api.nvim_exec2('messages', { output = true }).output; if m:find('callback:', 1, true) or m:find('E5108', 1, true) then io.stderr:write(m .. '\n'); vim.cmd('cquit 1') end; vim.cmd('qall!')"; then
+                  echo "nvim-specs: $(basename "$spec") failed or timed out after 120s" >&2
+                  exit 1
+                fi
+                count=$((count + 1))
+              done
+              if [ "$count" -eq 0 ]; then
+                echo "no specs found" >&2
+                exit 1
+              fi
+              echo "ran $count specs"
+              touch "$out"
+            '';
       };
     };
 }

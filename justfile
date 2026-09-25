@@ -47,6 +47,12 @@ install-lint:
 sops-edit FILE:
     sops {{ FILE }}
 
+# Runs the NixVim build from this checkout without switching, from the current directory, e.g. `just nvim flake.nix`. New modules need `git add` first.
+[no-cd]
+[positional-arguments]
+nvim *ARGS:
+    nix run "{{ justfile_directory() }}#nvim" -- "$@"
+
 # nix flake update, in docker, writes flake.lock back into the repo, review the diff before committing.
 update:
     scripts/docker-check.sh update

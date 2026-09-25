@@ -27,6 +27,7 @@ Phase 1 had fallbacks. Before Task 1, read the phase 1 git log and `modules/nixv
 1. **LSP wiring**: if phase 1 fell back to legacy `plugins.lsp.servers.<name>.enable` instead of `lsp.servers.<name>.enable`, use the same legacy form in every task below (replace `lsp.servers.X = { enable = true; config.settings = ...; }` by `plugins.lsp.servers.X = { enable = true; settings = ...; }`), and in specs replace `vim.lsp.is_enabled("X")` checks by `vim.lsp.config.X ~= nil` only.
 2. **Treesitter start autocmd**: if phase 1 added the `nixvim_ts_start` FileType autocmd, Task 7 must also exclude `tex`/`latex` there (see Task 7 Step 3).
 3. **Dropped grammars**: if phase 1 removed a grammar, the language task using it relies on vim syntax instead; do not re-add it.
+4. **Phase 1 outcome (recorded)**: no fallbacks were taken — top-level `lsp.servers` works, no treesitter start autocmd, no grammar dropped. nixpkgs has no `jsonc` grammar: in Task 1 add `extraConfigLua = ''vim.treesitter.language.register("json", "jsonc")'';` to data.nix so jsonc buffers use the json parser, and assert `vim.treesitter.language.get_lang("jsonc") == "json"` in lang_data_spec.lua.
 
 ## Spec helpers (repeated verbatim in every language spec)
 

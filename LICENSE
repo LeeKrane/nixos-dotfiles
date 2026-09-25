@@ -27,11 +27,13 @@ adi1090x's Plymouth themes and is licensed separately under the GNU General
 Public License v3.0 — see `pkgs/plymouth-lone/theme/LICENSE` for the full
 text. It is not covered by the MIT license above.
 
-`config/nvim/` is derived from the LazyVim starter template
+`modules/nixvim/autocmds.nix` and `modules/nixvim/keymaps.nix` are close ports
+of LazyVim's `lua/lazyvim/config/autocmds.lua` and `lua/lazyvim/config/keymaps.lua`,
+and `modules/nixvim/stylua.toml` is from the LazyVim starter template
 (https://github.com/LazyVim/starter), licensed under the Apache License,
 Version 2.0 (https://raw.githubusercontent.com/LazyVim/starter/main/LICENSE).
-It is not covered by the MIT license above; see the upstream repository for
-the full Apache-2.0 text and its attribution notices.
+That material is not covered by the MIT license above; see the upstream
+repository for the full Apache-2.0 text and its attribution notices.
 
 `config/zsh/p10k.zsh` is based on `config/p10k-rainbow.zsh` from
 romkatv/powerlevel10k (https://github.com/romkatv/powerlevel10k), licensed
