@@ -27,6 +27,16 @@
       };
       dashboard = {
         enabled = true;
+        # The default layout adds a "startup" section, which reads lazy.nvim's
+        # stats and errors without lazy.nvim.
+        sections = [
+          { section = "header"; }
+          {
+            section = "keys";
+            gap = 1;
+            padding = 1;
+          }
+        ];
         preset.keys = [
           {
             key = "f";
