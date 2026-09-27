@@ -73,10 +73,11 @@ gave this split.
 | `3dad196` | Colors: read the palette key name used by `materialyoucolor >= 3` |
 
 `3dad196` replaces the existing `primary_paletteKeyColor` sed entry in
-`modules/home/illogical-impulse.nix` (`iiPatches`). The sed entry is removed in
-the same commit that adds the patch. A leftover sed entry would be harmless
-anyway: `applyPatches` runs at build time, the sed runs at activation after the
-copy, and it would find nothing to replace.
+`modules/home/illogical-impulse.nix` (`iiPatches`). The sed entry must be
+removed in the same commit that adds the patch. `3dad196` looks up both key
+names, and the sed would rewrite its fallback `'primary_paletteKeyColor'`
+literal into the new name, silently turning the fallback into a duplicate
+lookup.
 
 The four Notifications patches all change `services/Notifications.qml` and must
 stay in commit order.
@@ -85,24 +86,43 @@ stay in commit order.
 
 | Fork commit | Fix | Why it matters here |
 |---|---|---|
-| `9c7b0e1` | Set `sourceSize` on wallpaper images so 4K to 9K wallpapers are not decoded at full resolution (a 9336x5250 image becomes a ~260 MB texture where the screen needs ~8 MB) | 4K desktop monitor |
-| `d116eef` | Count a Bluetooth device as connected when `MediaControl1.Connected` is true or `Battery1` is exported, working around [bluez#2485](https://github.com/bluez/bluez/issues/2485) | JBL headset reconnects |
-| `1b51f7a` | Debounce raw Hyprland IPC events and only re-query the data an event affects, instead of refreshing everything on every event | Bursts of events when moving windows |
-| `37a9fab` | Read CPU temperature directly from sysfs instead of spawning shell pipelines | Resource widget stalls |
-| `204f22f` | React to monitor add, remove and layout events | Dual-monitor hotplug |
+| `d116eef` | Count a Bluetooth device as connected when its `Battery1` interface is exported (Quickshell's `batteryAvailable`), as the fork does, working around [bluez#2485](https://github.com/bluez/bluez/issues/2485) | JBL headset reconnects |
+| `1b51f7a` | Debounce raw Hyprland IPC events (60 ms) and only re-query the data an event affects, instead of spawning all five `hyprctl` queries on every event | Bursts of events when moving windows |
 
 A hand-port changes only files that exist at the pin. Hunks that touch
-fork-only files (`Carousel.qml`, `CenteredWallpaper.qml`, `UserCardWidget.qml`,
-the fork's settings pages) are dropped. If a fix's intent cannot be expressed
+fork-only files (such as the fork's settings pages) are dropped. If a fix's intent cannot be expressed
 without fork-only code, the fix is dropped and the reason is recorded in the
 docs table.
 
-`1b51f7a` and `204f22f` both change `HyprlandData.qml` and are tested together.
+The `1b51f7a` port drops the fork's `WM.compositor` guards (the pin has no
+compositor abstraction). Its event routing sends `monitor*` events to a
+monitors and workspaces refresh. It also routes `configreloaded` to that
+refresh, because a config reload can change the monitor layout; without that
+branch the debounce would regress hotplug and reload handling compared with the
+pin, which refreshed everything on every event.
 
-`37a9fab` must not hardcode a hwmon index or a CPU vendor's sensor. The hosts
-use different sensors (`k10temp` on the AMD laptop, `coretemp` on the Intel
-machines), and hwmon numbering can change between boots. The port finds the
-sensor by its hwmon `name`. If the fork hardcodes a path, the port adapts it.
+### Dropped during porting
+
+Drafting the ports against the pin showed three of the selected fixes have no
+target there:
+
+- `37a9fab` optimizes the fork's CPU-temperature and disk-usage readers. The
+  pinned `ResourceUsage.qml` reads neither, and no widget at the pin shows them.
+  Porting it would add a new feature, not fix one.
+- `204f22f` changes only `MonitorConfigOption.qml`, a fork-only settings
+  component. The pin already refreshes monitors on every event; the part that
+  matters after `1b51f7a` (the `configreloaded` branch) is folded into that
+  port.
+- `9c7b0e1` sets `sourceSize` on the fork's wallpaper images so 4K to 9K
+  wallpapers are not decoded at full resolution. The pinned `Background.qml`
+  wallpaper is a `StyledImage`, whose `sourceSize` is already bound to its
+  rendered `width`/`height` (`scaledWallpaperWidth`/`Height`) times the
+  window's device pixel ratio, so the pin already decodes at screen size. The
+  fork's other hunks touch fork-only files (`Carousel.qml`,
+  `CenteredWallpaper.qml`, `UserCardWidget.qml`) or need a fork-only config key
+  (`wallpaperSelector.showBlurBackground`).
+
+All three are recorded in the docs as not portable.
 
 ### Out of scope
 
@@ -114,11 +134,18 @@ backend. Later sub-projects may revisit some of them.
 
 ### Patch series
 
-The patches in `patches/ii-fixes/` are a series exported from git. Each fix is
-one commit on a local branch in a clone of dots-hyprland at the pinned
-revision, and `git format-patch` writes the series out. Patch files are the
-only thing committed to this repo; the clone is a disposable workspace and can
-be recreated from them at any time.
+The patches in `patches/ii/01-fixes/` are a series exported from git. Each fix
+is one commit on the local branch `krane` in a clone of dots-hyprland at the
+pinned revision, and `git format-patch` writes the series out.
+
+All five sub-projects share this layout: one directory per sub-project under
+`patches/ii/` (`01-fixes`, `02-translator`, `03-dock`, `04-agents`,
+`05-settings`), all exported from the same `krane` branch. A lightweight tag
+`krane/<dir>` in the clone marks the last commit of each sub-project, so each
+directory is exported from its own range. This sub-project introduces the
+layout and the wiring; later sub-projects only add a directory. Patch files
+are the only thing committed to this repo; the clone is a disposable workspace
+and can be recreated from them at any time.
 
 `git format-patch` names files `NNNN-<subject>.patch` in commit order and
 records each change's blob hashes in its `index` lines. Those hashes let
@@ -139,6 +166,16 @@ Drop when: <condition>
 "Drop when" is concrete: either "the pinned dots-hyprland contains commit
 <sha>", or "the pinned `<file>` no longer contains `<code the fix replaces>`".
 
+Patches and the `iiPatches` sed entries in `modules/home/illogical-impulse.nix`
+both change ii's files: patches at build time, seds at activation time on the
+copied files. A patch in any sub-project must not change or add text that a
+sed entry matches. Otherwise the sed either stops matching without an error or
+rewrites the patch's own code, as it would with `3dad196` (see Scope). Today the
+entry at risk is the `launchOnStartup` line in `modules/common/Config.qml`,
+since sub-projects 2 to 5 all patch that file. If a patch has to change such a
+line, it takes over the sed's job, and the sed entry is removed in the same
+commit.
+
 ### Workflow
 
 Create or refresh the series:
@@ -146,12 +183,20 @@ Create or refresh the series:
 ```sh
 git clone https://github.com/end-4/dots-hyprland ~/src/dots-hyprland
 cd ~/src/dots-hyprland
-git switch -c ii-fixes <pinned rev from flake.lock>
-git am -3 ~/.dotfiles/patches/ii-fixes/*.patch     # skip on first creation
-# add, edit or drop fix commits with ordinary git commands
-rm ~/.dotfiles/patches/ii-fixes/*.patch
-git format-patch -o ~/.dotfiles/patches/ii-fixes <pinned rev>..ii-fixes
+git config rerere.enabled true
+git switch -c krane <pinned rev from flake.lock>
+# re-apply every series in order, tagging the end of each (skip on first creation)
+for d in ~/.dotfiles/patches/ii/*/; do
+  git am -3 "$d"*.patch || break
+  git tag -f "krane/$(basename "$d")"
+done
+# add, edit or drop commits with ordinary git commands
+# export each directory from its own range: <pinned rev>..krane/01-fixes,
+# krane/01-fixes..krane/02-translator, and so on
 ```
+
+`git rerere` records each conflict resolution in the clone, so the next pin
+bump replays it. The exact export loop goes into the docs (see the plan).
 
 On a pin bump: `nix flake update dots-hyprland`, then run the same steps
 against the new revision. `git am -3` stops at a conflict so it can be resolved
@@ -167,40 +212,54 @@ The procedure goes into `docs/II-INTEGRATION.md`.
 
 `lib/mk-host.nix` already builds `patchedDotfiles` with `applyPatches` over
 `inputs.illogical-flake.inputs.dotfiles`, applying
-`patches/illogical-flake-cheatsheet-fkeys.patch`. Extend that list:
+`patches/illogical-flake-cheatsheet-fkeys.patch`. Extend that list with one
+generic loader over `patches/ii/`:
 
 ```nix
-iiFixes = let dir = ../patches/ii-fixes; in
-  map (name: dir + "/${name}")
-    (lib.sort lib.lessThan
-      (builtins.attrNames
-        (lib.filterAttrs (n: t: t == "regular" && lib.hasSuffix ".patch" n)
-          (builtins.readDir dir))));
+iiSeries = let
+  root = ../patches/ii;
+  sortedNames = pred: dir:
+    lib.sort lib.lessThan (builtins.attrNames (lib.filterAttrs pred (builtins.readDir dir)));
+  patchesIn = dir: map (n: dir + "/${n}")
+    (sortedNames (n: t: t == "regular" && lib.hasSuffix ".patch" n) dir);
+in lib.concatMap (d: patchesIn (root + "/${d}"))
+     (sortedNames (n: t: t == "directory") root);
 
 patchedDotfiles = ...applyPatches {
   name = "dots-hyprland-patched";
   src = inputs.illogical-flake.inputs.dotfiles;
-  patches = [ ../patches/illogical-flake-cheatsheet-fkeys.patch ] ++ iiFixes;
+  patches = [ ../patches/illogical-flake-cheatsheet-fkeys.patch ] ++ iiSeries;
 };
 ```
+
+Directories apply in lexical order, and the patches within each directory in
+lexical order. The binding is not called `iiPatches`, which already names the
+sed list in `modules/home/illogical-impulse.nix`.
 
 `lib` is the bare nixpkgs lib (`inputs.nixpkgs.lib`). The module's own `lib`
 argument cannot be used: the imported module's `imports` list is built from this
 patched path, and anything derived from `config` would be an infinite
 recursion. That is the same reason the existing comment gives for taking
 `applyPatches` from the bare nixpkgs. Filename order equals commit order
-because `git format-patch` numbers the files.
+because `git format-patch` numbers the files, and directory order equals
+sub-project order because of the `NN-` prefix.
 
 The cheatsheet patch stays a separate file ahead of the series. The comment
 above `patchedDotfiles` is updated to say it carries both the cheatsheet fix and
-the backported fork fixes.
+the `patches/ii/` series.
 
 ### When to stop using patches
 
-Re-evaluate before the patch count in `patches/ii-fixes/` passes 20, or before
-the settings sub-project starts, whichever comes first. A pin bump that needs
-more than one hand-resolved conflict is also a trigger. At that point, a private
-fork of dots-hyprland pointed to by the flake input is likely the better tool.
+The settings spec (`2026-09-27-ii-settings-design.md`, "Delivery mechanism")
+decides to stay with patch series and sets the re-evaluation triggers for all
+sub-projects. There is no patch-count threshold. Re-evaluate a private fork of
+dots-hyprland as the flake input if:
+
+- a pin bump needs more than 5 hand-resolved conflict hunks, or more than one
+  sitting; or
+- the user sets up a private remote that every host and the docker check can
+  already reach; or
+- upstream ii ships its own rewrite of settings that overlaps that port.
 
 ### Docs
 
@@ -208,9 +267,9 @@ fork of dots-hyprland pointed to by the flake input is likely the better tool.
 
 - a table of patch file, fork commit, clean or hand-ported, and drop condition;
 - the workflow above;
-- the re-evaluation threshold.
+- the re-evaluation triggers.
 
-The materialyoucolor row in its "Patched files" table moves there.
+The materialyoucolor bullet in its "Patched files" list moves there.
 
 ## Error handling
 
@@ -240,15 +299,13 @@ The materialyoucolor row in its "Patched files" table moves there.
 
 | Fix | Check | Hosts |
 |---|---|---|
-| `05b50d9` | Open the desktop menu twice with an empty thumbnail cache. The second open spawns no `magick` process (`pgrep -c magick` stays 0). | tariognatha |
+| `05b50d9` | Open the wallpaper selector (the only user of `ThumbnailImage` at the pin) twice with an empty thumbnail cache. The second open spawns no `magick` process (`pgrep -c magick` stays 0). | tariognatha |
 | `6f1dc5f` | Swipe away a notification group of 10 or more. The rest slide up with no visible freeze. | tariognatha |
 | `2cf76f8` | Truncate the saved notifications file, restart qs. It starts, and the log shows the handled parse error instead of a crash. | tariognatha |
 | `342a45b`, `eb76c3d` | Dismiss notifications with and without actions. No `TypeError` in the log. | tariognatha |
-| `9c7b0e1` | Switch to a 4K wallpaper. The bar clock keeps ticking with no multi-second stall, and qs GPU memory in `nvidia-smi` does not jump by hundreds of MB. | tariognatha |
 | `d116eef` | Reconnect the JBL headset and play audio. Whenever `busctl get-property org.bluez <device path> org.bluez.Device1 Connected` reports `false` during playback, ii still shows the device as connected. If the BlueZ bug does not reproduce, confirm connect and disconnect still show correctly. | tariognatha |
 | `1b51f7a` | Add a temporary `console.log` counter to the refresh function. Drag a window for 10 s before and after the patch: the count drops. Workspaces and the active-window title still update. | tariognatha |
-| `37a9fab` | The resource widget shows a plausible CPU temperature, and no `sh`/`cat` processes are spawned for it. | all three hosts |
-| `204f22f` | Unplug and replug DP-1. The bar leaves and returns without restarting qs. On the laptops, repeat with an external monitor if one is available; otherwise note the check as not run. | tariognatha, laptops if possible |
+| `1b51f7a` (hotplug) | Unplug and replug DP-1, and run `hyprctl reload`. The bar leaves and returns, and workspaces stay on the right monitors, without restarting qs. On the laptops, repeat with an external monitor if one is available; otherwise note the check as not run. | tariognatha, laptops if possible |
 
 taractias has not yet been verified on its real hardware (see
 `hosts/taractias/default.nix`). Checks there wait until it has been.
@@ -256,5 +313,7 @@ taractias has not yet been verified on its real hardware (see
 ## Commits
 
 One commit per fix (the patch file, plus the sed removal for `3dad196`), and one
-commit for the wiring and docs, so each change can be reviewed and reverted on
-its own.
+commit for the docs, so each change can be reviewed and reverted on its own. The
+wiring lands in the first fix's commit: the loader reads `patches/ii/` with
+`builtins.readDir`, and a flake only sees tracked files, so the directory must
+hold a patch before the loader can evaluate.
