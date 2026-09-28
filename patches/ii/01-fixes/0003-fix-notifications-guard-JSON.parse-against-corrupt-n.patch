@@ -1,0 +1,78 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Mon, 28 Sep 2026 16:49:59 +0200
+Subject: [PATCH] fix(notifications): guard JSON.parse against corrupt
+ notification file
+
+Backport of pctrade/end4-pC 2cf76f8
+https://github.com/pctrade/end4-pC/commit/2cf76f8
+Problem: a truncated or invalid ~/.cache/notifications/notifications.json made loading throw.
+Port: clean
+Drop when: the pinned services/Notifications.qml wraps the notifications-file JSON.parse in try/catch.
+---
+ .../quickshell/ii/services/Notifications.qml  | 50 +++++++++++--------
+ 1 file changed, 29 insertions(+), 21 deletions(-)
+
+diff --git a/dots/.config/quickshell/ii/services/Notifications.qml b/dots/.config/quickshell/ii/services/Notifications.qml
+index 9e520ef8..420fd11d 100644
+--- a/dots/.config/quickshell/ii/services/Notifications.qml
++++ b/dots/.config/quickshell/ii/services/Notifications.qml
+@@ -274,29 +274,37 @@ Singleton {
+         id: notifFileView
+         path: Qt.resolvedUrl(filePath)
+         onLoaded: {
+-            const fileContents = notifFileView.text()
+-            root.list = JSON.parse(fileContents).map((notif) => {
+-                return notifComponent.createObject(root, {
+-                    "notificationId": notif.notificationId,
+-                    "actions": [], // Notification actions are meaningless if they're not tracked by the server or the sender is dead
+-                    "appIcon": notif.appIcon,
+-                    "appName": notif.appName,
+-                    "body": notif.body,
+-                    "image": notif.image,
+-                    "summary": notif.summary,
+-                    "time": notif.time,
+-                    "urgency": notif.urgency,
++            try {
++                const fileContents = notifFileView.text()
++                root.list = JSON.parse(fileContents).map((notif) => {
++                    return notifComponent.createObject(root, {
++                        "notificationId": notif.notificationId,
++                        "actions": [], // Notification actions are meaningless if they're not tracked by the server or the sender is dead
++                        "appIcon": notif.appIcon,
++                        "appName": notif.appName,
++                        "body": notif.body,
++                        "image": notif.image,
++                        "summary": notif.summary,
++                        "time": notif.time,
++                        "urgency": notif.urgency,
++                    });
+                 });
+-            });
+-            // Find largest notificationId
+-            let maxId = 0
+-            root.list.forEach((notif) => {
+-                maxId = Math.max(maxId, notif.notificationId)
+-            })
++                // Find largest notificationId
++                let maxId = 0
++                root.list.forEach((notif) => {
++                    maxId = Math.max(maxId, notif.notificationId)
++                })
+ 
+-            console.log("[Notifications] File loaded")
+-            root.idOffset = maxId
+-            root.initDone()
++                console.log("[Notifications] File loaded")
++                root.idOffset = maxId
++                root.initDone()
++            } catch (e) {
++                console.error("[Notifications] Failed to parse notifications file, resetting:", e)
++                root.list = []
++                notifFileView.setText(stringifyList(root.list))
++                root.idOffset = 0
++                root.initDone()
++            }
+         }
+         onLoadFailed: (error) => {
+             if(error == FileViewError.FileNotFound) {
