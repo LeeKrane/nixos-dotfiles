@@ -39,16 +39,6 @@ let
   # each one from scratch every switch. See docs/II-INTEGRATION.md "Patched files".
   iiPatches = [
     {
-      # ii pins dots-hyprland at a revision whose generate_colors_material.py still reads
-      # material_colors['primary_paletteKeyColor'], but nixpkgs' python3Packages.materialyoucolor
-      # (3.0.4) renamed that key to primaryPaletteKeyColor, so every switchwall.sh run throws
-      # KeyError and leaves material_colors.scss (and kitty's generated theme) empty. Remove this
-      # once ii's pinned rev or the packaged materialyoucolor version makes the names agree again.
-      file = "${config.home.homeDirectory}/.config/quickshell/ii/scripts/colors/generate_colors_material.py";
-      sed = "s/primary_paletteKeyColor/primaryPaletteKeyColor/g";
-      why = "materialyoucolor 3.0.4 renamed primary_paletteKeyColor to primaryPaletteKeyColor";
-    }
-    {
       # modules/nixos/shells.nix aliases cat to bat at NixOS level (/etc/fish loads first);
       # ii's config.fish must bypass that alias to print raw OSC sequences, not a bat frame.
       file = "${config.home.homeDirectory}/.config/fish/config.fish";

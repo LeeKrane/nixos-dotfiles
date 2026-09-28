@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Mon, 28 Sep 2026 16:53:26 +0200
+Subject: [PATCH] fix(colors): support materialyoucolor >= 3 palette key name
+
+Backport of pctrade/end4-pC 3dad196
+https://github.com/pctrade/end4-pC/commit/3dad196
+Problem: materialyoucolor 3.x renamed primary_paletteKeyColor to primaryPaletteKeyColor, so switchwall.sh threw KeyError and left material_colors.scss empty.
+Port: clean. Replaces the iiPatches sed entry in modules/home/illogical-impulse.nix.
+Drop when: the pinned scripts/colors/generate_colors_material.py reads primaryPaletteKeyColor.
+---
+ .../ii/scripts/colors/generate_colors_material.py     | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/dots/.config/quickshell/ii/scripts/colors/generate_colors_material.py b/dots/.config/quickshell/ii/scripts/colors/generate_colors_material.py
+index db6b1664..08b73ab6 100755
+--- a/dots/.config/quickshell/ii/scripts/colors/generate_colors_material.py
++++ b/dots/.config/quickshell/ii/scripts/colors/generate_colors_material.py
+@@ -137,7 +137,16 @@ if args.termscheme is not None:
+         json_termscheme = f.read()
+     term_source_colors = json.loads(json_termscheme)['dark' if darkmode else 'light']
+ 
+-    primary_color_argb = hex_to_argb(material_colors['primary_paletteKeyColor'])
++    # materialyoucolor >= 3 renamed 'primary_paletteKeyColor' to 'primaryPaletteKeyColor'.
++    # Accept both so the script works on either version.
++    primary_key_color = material_colors.get('primaryPaletteKeyColor') \
++        or material_colors.get('primary_paletteKeyColor')
++    if primary_key_color is None:
++        raise KeyError(
++            "Primary palette key color not found in MaterialDynamicColors; "
++            "unsupported materialyoucolor version"
++        )
++    primary_color_argb = hex_to_argb(primary_key_color)
+     for color, val in term_source_colors.items():
+         if(args.scheme == 'monochrome') :
+             term_colors[color] = val
