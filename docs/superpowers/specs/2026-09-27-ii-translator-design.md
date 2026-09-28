@@ -177,7 +177,7 @@ pin separately, and the restyle touches only three files.
 The three patches go into their own directory, `patches/ii/02-translator/`, as
 further commits on the shared `krane` branch in the clone, after the
 sub-project 1 commits (tag `krane/01-fixes`). They are exported with
-`git format-patch -o patches/ii/02-translator krane/01-fixes..krane/02-translator`.
+`git format-patch --no-numbered -o patches/ii/02-translator krane/01-fixes..krane/02-translator`.
 The generic `lib/mk-host.nix` wiring from sub-project 1 picks the new
 directory up with no change, since it applies every `patches/ii/*/` directory
 in lexical order.

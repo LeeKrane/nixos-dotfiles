@@ -19,7 +19,7 @@
   ```bash
   git -C ~/src/dots-hyprland tag -f krane/04-agents krane
   mkdir -p ~/.dotfiles/patches/ii/04-agents
-  rm -f ~/.dotfiles/patches/ii/04-agents/*.patch && git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature -o ~/.dotfiles/patches/ii/04-agents krane/03-dock..krane/04-agents
+  rm -f ~/.dotfiles/patches/ii/04-agents/*.patch && git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature --no-numbered -o ~/.dotfiles/patches/ii/04-agents krane/03-dock..krane/04-agents
   ```
 - Clone commit messages (sub-project 1's format, new work):
   ```
@@ -887,7 +887,7 @@ Expected: `ABSENT`.
 ```bash
 git -C ~/src/dots-hyprland tag -f krane/04-agents krane
 mkdir -p ~/.dotfiles/patches/ii/04-agents
-rm -f ~/.dotfiles/patches/ii/04-agents/*.patch && git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature -o ~/.dotfiles/patches/ii/04-agents krane/03-dock..krane/04-agents
+rm -f ~/.dotfiles/patches/ii/04-agents/*.patch && git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature --no-numbered -o ~/.dotfiles/patches/ii/04-agents krane/03-dock..krane/04-agents
 ```
 
 Expected: prints `.../patches/ii/04-agents/0001-ii-add-ClaudeAgents-service-and-agents.sh.patch`. Check that `grep -c '^new file mode 100755' ~/.dotfiles/patches/ii/04-agents/0001-*.patch` prints `1`.
@@ -1245,11 +1245,11 @@ EOF
 
 ```bash
 git -C ~/src/dots-hyprland tag -f krane/04-agents krane
-rm -f ~/.dotfiles/patches/ii/04-agents/*.patch && git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature -o ~/.dotfiles/patches/ii/04-agents krane/03-dock..krane/04-agents
+rm -f ~/.dotfiles/patches/ii/04-agents/*.patch && git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature --no-numbered -o ~/.dotfiles/patches/ii/04-agents krane/03-dock..krane/04-agents
 cd ~/.dotfiles && git status --short patches/ii/04-agents
 ```
 
-Expected: two files. `0002-ii-add-Agents-tab-to-the-left-sidebar.patch` is new (`??`), and `0001-*` is modified (` M`) only because `format-patch` numbers a two-patch series: `git diff patches/ii/04-agents | grep '^[-+][^-+]'` prints just `-Subject: [PATCH] …` and `+Subject: [PATCH 1/2] …`.
+Expected: one new file. `0002-ii-add-Agents-tab-to-the-left-sidebar.patch` is new (`??`); `0001-*` is unchanged, since `--no-numbered` keeps its `Subject: [PATCH] …` line the same regardless of series length.
 
 - [ ] **Step 8: Confirm it is in the build (passing check)**
 
@@ -1590,7 +1590,7 @@ cd ~/src/dots-hyprland
 git add -A && git commit -m "fixup! ii: add ClaudeAgents service and agents.sh"
 GIT_SEQUENCE_EDITOR=: git rebase -q --autosquash krane/03-dock
 git tag -f krane/04-agents krane
-rm -f ~/.dotfiles/patches/ii/04-agents/*.patch && git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature -o ~/.dotfiles/patches/ii/04-agents krane/03-dock..krane/04-agents
+rm -f ~/.dotfiles/patches/ii/04-agents/*.patch && git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature --no-numbered -o ~/.dotfiles/patches/ii/04-agents krane/03-dock..krane/04-agents
 cd ~/.dotfiles && git add patches/ii/04-agents scripts/ii-agents
 sudo nixos-rebuild switch --flake .#tariognatha
 ```

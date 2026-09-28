@@ -151,7 +151,7 @@ be moved later:
   Lightweight tags in the clone (`krane/01-fixes`, `krane/02-translator`,
   `krane/03-dock`, `krane/04-agents`, `krane/05-settings`) mark where each
   sub-project ends. Each range is exported to its own directory with
-  `git format-patch -o patches/ii/<NN>-<name> <prev-tag>..<tag>` (the pin for
+  `git format-patch --no-numbered -o patches/ii/<NN>-<name> <prev-tag>..<tag>` (the pin for
   `01-fixes`): `01-fixes`, `02-translator`, `03-dock`, `04-agents`,
   `05-settings`. The tags only need to exist in the clone and are rebuilt when
   the series is re-applied.

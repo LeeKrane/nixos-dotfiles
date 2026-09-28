@@ -438,7 +438,7 @@ same with `claude-opus-5-5`.
 
 Two commits on the shared `krane` branch in the dots-hyprland clone, after the
 dock commits (tag `krane/03-dock`), exported into their own directory with
-`git format-patch -o patches/ii/04-agents krane/03-dock..krane/04-agents`:
+`git format-patch --no-numbered -o patches/ii/04-agents krane/03-dock..krane/04-agents`:
 
 1. `ii: add ClaudeAgents service and agents.sh` (new files plus the config
    key).

@@ -15,7 +15,7 @@
 - Run every shell block with `bash` (the interactive shell is fish). Use `command cat`, never bare `cat`, in commands you type. Scratch directories: `mktemp -d -p $XDG_RUNTIME_DIR`.
 - Pinned dots-hyprland revision: `jq -r '.nodes."dots-hyprland".locked.rev' ~/.dotfiles/flake.lock` (currently `97c5bc651f68092351b24aaa935af708b1e04514`).
 - Workspace clone: `~/src/dots-hyprland`, branch `krane`, `git rerere` enabled, set up by sub-project 1. This plan adds commits after tag `krane/01-fixes`; it never rewrites earlier commits.
-- Export command for this sub-project, always exactly: `rm -f ~/.dotfiles/patches/ii/02-translator/*.patch && git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature -o ~/.dotfiles/patches/ii/02-translator krane/01-fixes..krane`. Task 4 tags the end of the series `krane/02-translator`, after which the range equals the spec's `krane/01-fixes..krane/02-translator`.
+- Export command for this sub-project, always exactly: `rm -f ~/.dotfiles/patches/ii/02-translator/*.patch && git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature --no-numbered -o ~/.dotfiles/patches/ii/02-translator krane/01-fixes..krane`. Task 4 tags the end of the series `krane/02-translator`, after which the range equals the spec's `krane/01-fixes..krane/02-translator`.
 - Fork diffs are relative to the ii root; apply them with `git apply --directory=dots/.config/quickshell/ii`. Diffs written in this plan use full repo paths and apply with plain `git apply`.
 - Clone commit messages use sub-project 1's trailer format (`Backport of`, URL, `Problem:`, `Port:`, `Drop when:`); `Port: new` patches omit the `Backport of` and URL lines.
 - Dotfiles repo commit messages: subject line only, no body, no attribution lines. Never push. One repo commit per patch file, plus one for the docs.
@@ -162,7 +162,7 @@ EOF
 
 ```bash
 mkdir -p ~/.dotfiles/patches/ii/02-translator
-rm -f ~/.dotfiles/patches/ii/02-translator/*.patch && git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature -o ~/.dotfiles/patches/ii/02-translator krane/01-fixes..krane
+rm -f ~/.dotfiles/patches/ii/02-translator/*.patch && git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature --no-numbered -o ~/.dotfiles/patches/ii/02-translator krane/01-fixes..krane
 ```
 
 Expected: prints `.../patches/ii/02-translator/0001-Translator-null-safe-character-counter.patch`.
@@ -687,7 +687,7 @@ Expected: `comm` prints nothing. If any check fails, fix `TextCanvas.qml` or `Tr
 - [ ] **Step 9: Export the series**
 
 ```bash
-rm -f ~/.dotfiles/patches/ii/02-translator/*.patch && git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature -o ~/.dotfiles/patches/ii/02-translator krane/01-fixes..krane
+rm -f ~/.dotfiles/patches/ii/02-translator/*.patch && git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature --no-numbered -o ~/.dotfiles/patches/ii/02-translator krane/01-fixes..krane
 cd ~/.dotfiles && git status --short patches/ii/02-translator
 ```
 
@@ -795,7 +795,7 @@ EOF
 - [ ] **Step 5: Export the series**
 
 ```bash
-rm -f ~/.dotfiles/patches/ii/02-translator/*.patch && git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature -o ~/.dotfiles/patches/ii/02-translator krane/01-fixes..krane
+rm -f ~/.dotfiles/patches/ii/02-translator/*.patch && git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature --no-numbered -o ~/.dotfiles/patches/ii/02-translator krane/01-fixes..krane
 cd ~/.dotfiles && git status --short patches/ii/02-translator
 ```
 
@@ -864,7 +864,7 @@ Expected: `git am` applies every patch in `01-fixes` and all three in `02-transl
 ```bash
 prev=krane/01-fixes; n=02-translator
 rm -f ~/.dotfiles/patches/ii/$n/*.patch
-git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature -o ~/.dotfiles/patches/ii/$n "$prev..krane/$n"
+git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature --no-numbered -o ~/.dotfiles/patches/ii/$n "$prev..krane/$n"
 cd ~/.dotfiles && git status --short patches/ii
 ```
 

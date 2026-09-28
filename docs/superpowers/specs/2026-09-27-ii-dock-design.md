@@ -157,7 +157,7 @@ The dock gets its own series directory, `patches/ii/03-dock/`, following the
 layout sub-project 1 defines: its commits sit on the shared `krane` branch in
 the dots-hyprland clone, after the translator commits (tag
 `krane/02-translator`), and are exported with
-`git format-patch -o patches/ii/03-dock krane/02-translator..krane/03-dock`.
+`git format-patch --no-numbered -o patches/ii/03-dock krane/02-translator..krane/03-dock`.
 They are applied with `applyPatches` and refreshed with `git am -3` (and
 `git rerere`) on pin bumps, like every other directory. The dock can be
 removed as a whole by deleting its directory.

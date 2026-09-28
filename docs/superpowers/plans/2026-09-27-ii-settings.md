@@ -26,7 +26,7 @@
   ```bash
   mkdir -p ~/.dotfiles/patches/ii/05-settings
   git -C ~/src/dots-hyprland tag -f krane/05-settings krane
-  rm -f ~/.dotfiles/patches/ii/05-settings/*.patch && git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature -o ~/.dotfiles/patches/ii/05-settings krane/04-agents..krane/05-settings
+  rm -f ~/.dotfiles/patches/ii/05-settings/*.patch && git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature --no-numbered -o ~/.dotfiles/patches/ii/05-settings krane/04-agents..krane/05-settings
   git -C ~/.dotfiles add patches/ii/05-settings
   ```
   Flakes only see git-tracked files, so the `git add` is part of every export.
