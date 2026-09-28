@@ -1,0 +1,32 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Mon, 28 Sep 2026 16:50:17 +0200
+Subject: [PATCH] fix(notifications): guard against undefined action in
+ attemptInvokeAction
+
+Backport of pctrade/end4-pC eb76c3d
+https://github.com/pctrade/end4-pC/commit/eb76c3d
+Problem: attemptInvokeAction threw when the requested action no longer existed on the notification.
+Port: clean
+Drop when: the pinned services/Notifications.qml attemptInvokeAction checks the action for undefined.
+---
+ dots/.config/quickshell/ii/services/Notifications.qml | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/dots/.config/quickshell/ii/services/Notifications.qml b/dots/.config/quickshell/ii/services/Notifications.qml
+index 1e020bc4..c290e091 100644
+--- a/dots/.config/quickshell/ii/services/Notifications.qml
++++ b/dots/.config/quickshell/ii/services/Notifications.qml
+@@ -250,7 +250,11 @@ Singleton {
+             const notifServerNotif = notifServer.trackedNotifications.values[notifServerIndex];
+             const action = notifServerNotif.actions.find((action) => action.identifier === notifIdentifier);
+             // console.log("Action found: " + JSON.stringify(action));
+-            action.invoke()
++            if (action) {
++                action.invoke();
++            } else {
++                console.warn("[Notifications] Action not found:", notifIdentifier);
++            }
+         } 
+         else {
+             console.log("Notification not found in server: " + id)
