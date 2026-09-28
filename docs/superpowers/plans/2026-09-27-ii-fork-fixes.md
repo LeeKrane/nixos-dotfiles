@@ -88,6 +88,7 @@ Expected: `Switched to a new branch 'krane'`.
 ```bash
 cd ~/src/dots-hyprland
 curl -sL https://github.com/pctrade/end4-pC/commit/05b50d9.diff | git apply --directory=dots/.config/quickshell/ii
+sed -i "s/'\${tmp}'/\"\$tmp\"/g" dots/.config/quickshell/ii/modules/common/widgets/ThumbnailImage.qml
 git add -A
 git commit -F - <<'EOF'
 fix(ThumbnailImage): atomic thumbnail generation via temp file + mv
@@ -95,7 +96,7 @@ fix(ThumbnailImage): atomic thumbnail generation via temp file + mv
 Backport of pctrade/end4-pC 05b50d9
 https://github.com/pctrade/end4-pC/commit/05b50d9
 Problem: concurrent magick processes wrote the same cache file, clobbering each other and regenerating thumbnails on every open (up to ~290% CPU).
-Port: clean
+Port: clean, except the shell variable $tmp, which the fork wrote as ${tmp} inside the QML template literal so QML evaluated it as JavaScript (ReferenceError, no thumbnails).
 Drop when: the pinned modules/common/widgets/ThumbnailImage.qml writes thumbnails to a temp file before moving them into place.
 EOF
 ```
@@ -887,7 +888,7 @@ commit, the problem, how it was ported and when to drop it.
 
 | Patch | Fork commit | Port | Drop when |
 |---|---|---|---|
-| `0001` thumbnail temp file + `mv` | `05b50d9` | clean | pinned `ThumbnailImage.qml` writes via a temp file |
+| `0001` thumbnail temp file + `mv` | `05b50d9` | clean, $tmp escaping fixed | pinned `ThumbnailImage.qml` writes via a temp file |
 | `0002` notification discard freeze | `6f1dc5f` | clean | pinned `Notifications.qml` no longer uses `list.splice()` to discard |
 | `0003` corrupt notifications file | `2cf76f8` | clean | pinned `Notifications.qml` wraps the file `JSON.parse` in try/catch |
 | `0004` null notification timer | `342a45b` | clean | pinned `cancelTimeout` checks for null |
