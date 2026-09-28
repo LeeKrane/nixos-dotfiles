@@ -195,7 +195,11 @@ let
     + (lib.optionalString (opts != [ ]) ", { ${lib.concatStringsSep ", " opts} }")
     + ")\n";
 
-  monitorsFile = header "monitors.lua" + "\n" + lib.concatMapStrings monitorLua cfg.monitors;
+  monitorsFile =
+    header "monitors.lua"
+    + "\n"
+    + lib.concatMapStrings monitorLua cfg.monitors
+    + lib.optionalString (cfg.extraMonitorsLua != "") ("\n" + cfg.extraMonitorsLua + "\n");
 
   envFile =
     header "custom/env.lua"
@@ -312,6 +316,15 @@ in
       type = lib.types.listOf monitorType;
       default = [ ];
       description = "Monitor rules rendered into ~/.config/hypr/monitors.lua.";
+    };
+
+    extraMonitorsLua = lib.mkOption {
+      type = lib.types.lines;
+      default = "";
+      description = ''
+        Verbatim Lua appended to the end of monitors.lua. monitors.lua is sourced last,
+        so this is the place for hotplug hooks that must override the static rules.
+      '';
     };
 
     env = lib.mkOption {
