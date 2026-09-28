@@ -279,6 +279,13 @@ commit, the problem, how it was ported and when to drop it.
 | `0006` materialyoucolor key name | `3dad196` | clean | pinned `generate_colors_material.py` reads `primaryPaletteKeyColor` |
 | `0007` BlueZ connected state | `d116eef` | hand-ported | bluez#2485 fixed, or pinned `BluetoothStatus.qml` counts `batteryAvailable` |
 | `0008` Hyprland IPC debounce | `1b51f7a` (+ `204f22f` intent) | hand-ported, routing widened | pinned `HyprlandData.qml` debounces `onRawEvent` |
+| `0009` trust on Always connect | `local` | local | pinned `BluetoothDeviceItem.qml` trusts devices it pairs |
+
+`0009` is not a fork backport: ii's sidebar registers no BlueZ agent, so
+pairing needs one running in the session (the `bluetooth-agent` user service
+in `modules/nixos/bluetooth.nix`), and even then a paired-but-untrusted
+device makes BlueZ ask that agent to authorize every profile connection.
+`0009` sets `trusted` right after `pair()` so audio reconnects stop dropping.
 
 Not portable: `37a9fab` (optimizes CPU-temperature and disk readers that the
 pinned `ResourceUsage.qml` does not have), `204f22f` as its own patch (it

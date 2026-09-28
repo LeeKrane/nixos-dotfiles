@@ -1,0 +1,29 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Mon, 28 Sep 2026 20:07:10 +0200
+Subject: [PATCH] fix(bluetooth): trust devices paired with "Always connect"
+
+Local fix (not a pctrade/end4-pC backport)
+Problem: pair() alone leaves the device untrusted, so BlueZ asks the agent to authorize every profile connection and a NoInputNoOutput agent setup drops audio reconnects.
+Port: local
+Drop when: the pinned BluetoothDeviceItem.qml trusts devices it pairs.
+---
+ .../ii/sidebarRight/bluetoothDevices/BluetoothDeviceItem.qml  | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarRight/bluetoothDevices/BluetoothDeviceItem.qml b/dots/.config/quickshell/ii/modules/ii/sidebarRight/bluetoothDevices/BluetoothDeviceItem.qml
+index 7292212d..5372f671 100644
+--- a/dots/.config/quickshell/ii/modules/ii/sidebarRight/bluetoothDevices/BluetoothDeviceItem.qml
++++ b/dots/.config/quickshell/ii/modules/ii/sidebarRight/bluetoothDevices/BluetoothDeviceItem.qml
+@@ -95,7 +95,11 @@ DialogListItem {
+                     if (root.device?.paired) {
+                         root.device?.forget();
+                     } else {
++                        // ii registers no BlueZ agent, so a device paired here is Paired but
++                        // not Trusted, and every later profile connection needs the agent to
++                        // authorize it. Trust it too so reconnects don't need that agent.
+                         root.device?.pair();
++                        root.device.trusted = true;
+                     }
+                 }
+             }
