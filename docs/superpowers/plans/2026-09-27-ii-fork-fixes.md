@@ -57,7 +57,7 @@ diff -q "$iisrc/dots/.config/quickshell/ii/<file>" ~/src/dots-hyprland/dots/.con
 1. **Leftover materialyoucolor sed.** If the old `iiPatches` entry survives, it rewrites `3dad196`'s fallback literal and silently turns the dual lookup into a duplicate. Expected: the entry is gone and the built script contains both key names (Task 3, Step 6).
 2. **Debounce delaying first paint.** Workspaces and the window title must be correct immediately after qs starts, not 60 ms after the first event (Task 5, Step 8).
 3. **Bluetooth false positives.** A device that exports `Battery1` must still show as disconnected once it actually disconnects (Task 4, Step 7).
-4. **Missing notifications file.** A fresh host has no `~/.cache/notifications/notifications.json`; qs must start without errors (Task 2, Step 9).
+4. **Missing notifications file.** A fresh host has no `~/.cache/quickshell/notifications/notifications.json`; qs must start without errors (Task 2, Step 9).
 
 ---
 
@@ -347,7 +347,7 @@ git add patches/ii/01-fixes/0005-*.patch && git commit -m "Backport end4-pC guar
 
 - [ ] **Step 9: Record the missing-file check for Task 7**
 
-No code here. Task 7, Step 4 removes `~/.cache/notifications/notifications.json` and confirms qs starts cleanly (Review Focus 4).
+No code here. Task 7, Step 4 removes `~/.cache/quickshell/notifications/notifications.json` and confirms qs starts cleanly (Review Focus 4).
 
 ---
 
@@ -1043,7 +1043,7 @@ cd ~/.dotfiles && sudo nixos-rebuild switch --flake .#$(hostname)
 - [ ] **Step 2: Restart qs and compare logs**
 
 ```bash
-pkill -f '[q]s-wrapped -c ii'; hyprctl dispatch exec 'qs -c ii'
+pkill -f '[q]s-wrapped -c ii'; hyprctl dispatch 'hl.dsp.exec_cmd("qs -c ii")'
 sleep 5; qs log -c ii > $XDG_RUNTIME_DIR/qs-after.log 2>&1 || true
 grep -iE 'error|warn|TypeError|ReferenceError' $XDG_RUNTIME_DIR/qs-after.log | sort -u > $XDG_RUNTIME_DIR/qs-after.err
 grep -iE 'error|warn|TypeError|ReferenceError' $XDG_RUNTIME_DIR/qs-before.log | sort -u > $XDG_RUNTIME_DIR/qs-before.err
@@ -1071,14 +1071,14 @@ for i in $(seq 12); do notify-send -a test "n$i" "body $i"; done
 Swipe the `test` group away: the rest slide up with no visible freeze. Then:
 
 ```bash
-command cp ~/.cache/notifications/notifications.json ~/notifications.json.bak
-printf '{"broken' > ~/.cache/notifications/notifications.json
-pkill -f '[q]s-wrapped -c ii'; hyprctl dispatch exec 'qs -c ii'; sleep 5
+command cp ~/.cache/quickshell/notifications/notifications.json ~/notifications.json.bak
+printf '{"broken' > ~/.cache/quickshell/notifications/notifications.json
+pkill -f '[q]s-wrapped -c ii'; hyprctl dispatch 'hl.dsp.exec_cmd("qs -c ii")'; sleep 5
 qs log -c ii | grep -iE 'TypeError|SyntaxError' | tail -3
-rm ~/.cache/notifications/notifications.json
-pkill -f '[q]s-wrapped -c ii'; hyprctl dispatch exec 'qs -c ii'; sleep 5
+rm ~/.cache/quickshell/notifications/notifications.json
+pkill -f '[q]s-wrapped -c ii'; hyprctl dispatch 'hl.dsp.exec_cmd("qs -c ii")'; sleep 5
 qs log -c ii | grep -iE 'TypeError|SyntaxError' | tail -3
-command mv ~/notifications.json.bak ~/.cache/notifications/notifications.json
+command mv ~/notifications.json.bak ~/.cache/quickshell/notifications/notifications.json
 notify-send -a test -A ok=OK "action test" "click OK"; notify-send -a test "plain" "dismiss me"
 ```
 

@@ -1436,7 +1436,7 @@ These are the spec's manual checks, plus the Review Focus checks. Record each on
 ```bash
 qs log -c ii > $XDG_RUNTIME_DIR/qs-before.log 2>&1 || true
 cd ~/.dotfiles && sudo nixos-rebuild switch --flake .#$(hostname)
-pkill -f '[q]s-wrapped -c ii'; hyprctl dispatch exec 'qs -c ii'
+pkill -f '[q]s-wrapped -c ii'; hyprctl dispatch 'hl.dsp.exec_cmd("qs -c ii")'
 sleep 5; qs log -c ii > $XDG_RUNTIME_DIR/qs-after.log 2>&1 || true
 grep -iE 'error|warn|TypeError|ReferenceError' $XDG_RUNTIME_DIR/qs-after.log | sort -u > $XDG_RUNTIME_DIR/qs-after.err
 grep -iE 'error|warn|TypeError|ReferenceError' $XDG_RUNTIME_DIR/qs-before.log | sort -u > $XDG_RUNTIME_DIR/qs-before.err

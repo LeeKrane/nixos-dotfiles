@@ -651,7 +651,7 @@ install -m 644 "$src/Translator.qml" "$dst/Translator.qml"
 install -m 644 "$src/translator/TextCanvas.qml" "$src/translator/LanguageSelectorButton.qml" "$dst/translator/"
 f=~/.config/illogical-impulse/config.json
 jq '.sidebar.translator.enable = true' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
-pkill -f '[q]s-wrapped -c ii'; hyprctl dispatch exec 'qs -c ii'
+pkill -f '[q]s-wrapped -c ii'; hyprctl dispatch 'hl.dsp.exec_cmd("qs -c ii")'
 sleep 5; qs log -c ii > $XDG_RUNTIME_DIR/qs-after.log 2>&1 || true
 grep -iE 'buttonColor|Translator|TextCanvas|LanguageSelectorButton' $XDG_RUNTIME_DIR/qs-after.log
 ```
@@ -943,7 +943,7 @@ Manual checks from the spec. Run every check on the host in use, then the other 
 ```bash
 qs log -c ii > $XDG_RUNTIME_DIR/qs-before.log 2>&1 || true
 cd ~/.dotfiles && sudo nixos-rebuild switch --flake .#$(hostname)
-pkill -f '[q]s-wrapped -c ii'; hyprctl dispatch exec 'qs -c ii'
+pkill -f '[q]s-wrapped -c ii'; hyprctl dispatch 'hl.dsp.exec_cmd("qs -c ii")'
 sleep 5; qs log -c ii > $XDG_RUNTIME_DIR/qs-after.log 2>&1 || true
 grep -iE 'error|warn|TypeError|ReferenceError' $XDG_RUNTIME_DIR/qs-after.log | sort -u > $XDG_RUNTIME_DIR/qs-after.err
 grep -iE 'error|warn|TypeError|ReferenceError' $XDG_RUNTIME_DIR/qs-before.log | sort -u > $XDG_RUNTIME_DIR/qs-before.err
@@ -979,7 +979,7 @@ Expected: both numbers equal (no new `TypeError`).
 Pick source `Français`, target `Deutsch` from the pills, type `Bonjour le monde`. Expected: German output. Press swap: the pills swap, the output re-translates. Restart qs and run:
 
 ```bash
-pkill -f '[q]s-wrapped -c ii'; hyprctl dispatch exec 'qs -c ii'; sleep 5
+pkill -f '[q]s-wrapped -c ii'; hyprctl dispatch 'hl.dsp.exec_cmd("qs -c ii")'; sleep 5
 jq .language.translator ~/.config/illogical-impulse/config.json
 ```
 
@@ -1008,7 +1008,7 @@ f=~/.config/illogical-impulse/config.json
 command cp "$f" ~/config.json.bak
 pkill -f '[q]s-wrapped -c ii'; sleep 1   # stop qs first so the running instance cannot reload and rewrite the old value
 jq 'del(.sidebar.translator.enable)' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
-hyprctl dispatch exec 'qs -c ii'; sleep 5
+hyprctl dispatch 'hl.dsp.exec_cmd("qs -c ii")'; sleep 5
 jq '.sidebar.translator.enable' "$f"
 ```
 

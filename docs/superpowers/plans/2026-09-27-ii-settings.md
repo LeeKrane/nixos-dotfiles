@@ -1294,7 +1294,7 @@ Expected: `nix flake check` passes, no `FAIL` lines.
 qs log -c ii > $XDG_RUNTIME_DIR/qs-before.log 2>&1 || true
 host=$(hostname)
 sudo nixos-rebuild switch --flake .#$host && sudo nixos-rebuild switch --flake .#$host
-pkill -f '[q]s-wrapped -c ii'; hyprctl dispatch exec 'qs -c ii'; sleep 5
+pkill -f '[q]s-wrapped -c ii'; hyprctl dispatch 'hl.dsp.exec_cmd("qs -c ii")'; sleep 5
 qs log -c ii > $XDG_RUNTIME_DIR/qs-after.log 2>&1 || true
 comm -13 <(grep -iE 'error|warn|TypeError|ReferenceError' $XDG_RUNTIME_DIR/qs-before.log | sed -E 's/:[0-9]+//g' | sort -u) \
          <(grep -iE 'error|warn|TypeError|ReferenceError' $XDG_RUNTIME_DIR/qs-after.log | sed -E 's/:[0-9]+//g' | sort -u)
