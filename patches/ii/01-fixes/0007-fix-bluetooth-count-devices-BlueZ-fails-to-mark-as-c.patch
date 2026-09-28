@@ -1,0 +1,89 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Mon, 28 Sep 2026 16:58:06 +0200
+Subject: [PATCH] fix(bluetooth): count devices BlueZ fails to mark as
+ connected
+
+Backport of pctrade/end4-pC d116eef
+https://github.com/pctrade/end4-pC/commit/d116eef
+Problem: after a headset reconnects on its own, BlueZ 5.87 can leave Device1.Connected false while audio streams (bluez/bluez#2485), so ii showed it as disconnected.
+Port: hand-ported. Same rule (connected or Battery1 exported) as one BluetoothStatus.isConnected() helper used by every connected read in BluetoothStatus.qml and BluetoothDeviceItem.qml; kept the pin's split between defaultAdapter.devices and Bluetooth.devices.
+Drop when: bluez/bluez#2485 is fixed in the packaged BlueZ, or the pinned services/BluetoothStatus.qml treats batteryAvailable as connected.
+---
+ .../bluetoothDevices/BluetoothDeviceItem.qml  |  8 +++----
+ .../ii/services/BluetoothStatus.qml           | 21 +++++++++++++------
+ 2 files changed, 19 insertions(+), 10 deletions(-)
+
+diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarRight/bluetoothDevices/BluetoothDeviceItem.qml b/dots/.config/quickshell/ii/modules/ii/sidebarRight/bluetoothDevices/BluetoothDeviceItem.qml
+index 570ab95a..7292212d 100644
+--- a/dots/.config/quickshell/ii/modules/ii/sidebarRight/bluetoothDevices/BluetoothDeviceItem.qml
++++ b/dots/.config/quickshell/ii/modules/ii/sidebarRight/bluetoothDevices/BluetoothDeviceItem.qml
+@@ -51,14 +51,14 @@ DialogListItem {
+                     textFormat: Text.PlainText
+                 }
+                 StyledText {
+-                    visible: (root.device?.connected || root.device?.paired) ?? false
++                    visible: (BluetoothStatus.isConnected(root.device) || root.device?.paired) ?? false
+                     Layout.fillWidth: true
+                     font.pixelSize: Appearance.font.pixelSize.smaller
+                     color: Appearance.colors.colSubtext
+                     elide: Text.ElideRight
+                     text: {
+                         if (!root.device?.paired) return "";
+-                        let statusText = root.device?.connected ? Translation.tr("Connected") : Translation.tr("Paired");
++                        let statusText = BluetoothStatus.isConnected(root.device) ? Translation.tr("Connected") : Translation.tr("Paired");
+                         if (!root.device?.batteryAvailable) return statusText;
+                         statusText += ` • ${Math.round(root.device?.battery * 100)}%`;
+                         return statusText;
+@@ -100,10 +100,10 @@ DialogListItem {
+                 }
+             }
+             ActionButton {
+-                buttonText: root.device?.connected ? Translation.tr("Disconnect") : Translation.tr("Connect")
++                buttonText: BluetoothStatus.isConnected(root.device) ? Translation.tr("Disconnect") : Translation.tr("Connect")
+ 
+                 onClicked: {
+-                    if (root.device?.connected) {
++                    if (BluetoothStatus.isConnected(root.device)) {
+                         root.device.disconnect();
+                     } else {
+                         root.device.connect();
+diff --git a/dots/.config/quickshell/ii/services/BluetoothStatus.qml b/dots/.config/quickshell/ii/services/BluetoothStatus.qml
+index 479b9a95..928c1a66 100644
+--- a/dots/.config/quickshell/ii/services/BluetoothStatus.qml
++++ b/dots/.config/quickshell/ii/services/BluetoothStatus.qml
+@@ -11,9 +11,18 @@ Singleton {
+ 
+     readonly property bool available: Bluetooth.adapters.values.length > 0
+     readonly property bool enabled: Bluetooth.defaultAdapter?.enabled ?? false
+-    readonly property BluetoothDevice firstActiveDevice: Bluetooth.defaultAdapter?.devices.values.find(device => device.connected) ?? null
+-    readonly property int activeDeviceCount: Bluetooth.defaultAdapter?.devices.values.filter(device => device.connected).length ?? 0
+-    readonly property bool connected: Bluetooth.devices.values.some(d => d.connected)
++
++    // BlueZ can leave Device1.Connected false when a device reconnects on its
++    // own, while audio, AVRCP and battery reporting are all live
++    // (https://github.com/bluez/bluez/issues/2485). Battery1 is only exported
++    // while a device is connected, so count it as a connection too.
++    function isConnected(device): bool {
++        return !!device && (device.connected || device.batteryAvailable);
++    }
++
++    readonly property BluetoothDevice firstActiveDevice: Bluetooth.defaultAdapter?.devices.values.find(device => root.isConnected(device)) ?? null
++    readonly property int activeDeviceCount: Bluetooth.defaultAdapter?.devices.values.filter(device => root.isConnected(device)).length ?? 0
++    readonly property bool connected: Bluetooth.devices.values.some(d => root.isConnected(d))
+ 
+     function sortFunction(a, b) {
+         // Ones with meaningful names before MAC addresses
+@@ -26,9 +35,9 @@ Singleton {
+         // Alphabetical by name
+         return a.name.localeCompare(b.name);
+     }
+-    property list<var> connectedDevices: Bluetooth.devices.values.filter(d => d.connected).sort(sortFunction)
+-    property list<var> pairedButNotConnectedDevices: Bluetooth.devices.values.filter(d => d.paired && !d.connected).sort(sortFunction)
+-    property list<var> unpairedDevices: Bluetooth.devices.values.filter(d => !d.paired && !d.connected).sort(sortFunction)
++    property list<var> connectedDevices: Bluetooth.devices.values.filter(d => root.isConnected(d)).sort(sortFunction)
++    property list<var> pairedButNotConnectedDevices: Bluetooth.devices.values.filter(d => d.paired && !root.isConnected(d)).sort(sortFunction)
++    property list<var> unpairedDevices: Bluetooth.devices.values.filter(d => !d.paired && !root.isConnected(d)).sort(sortFunction)
+     property list<var> friendlyDeviceList: [
+         ...connectedDevices,
+         ...pairedButNotConnectedDevices,
