@@ -1,0 +1,27 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Mon, 28 Sep 2026 16:50:08 +0200
+Subject: [PATCH] fix(notifications): guard against null timer in cancelTimeout
+
+Backport of pctrade/end4-pC 342a45b
+https://github.com/pctrade/end4-pC/commit/342a45b
+Problem: cancelTimeout dereferenced a timer that can already be null, throwing a TypeError.
+Port: clean
+Drop when: the pinned services/Notifications.qml cancelTimeout checks the timer for null.
+---
+ dots/.config/quickshell/ii/services/Notifications.qml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/dots/.config/quickshell/ii/services/Notifications.qml b/dots/.config/quickshell/ii/services/Notifications.qml
+index 420fd11d..1e020bc4 100644
+--- a/dots/.config/quickshell/ii/services/Notifications.qml
++++ b/dots/.config/quickshell/ii/services/Notifications.qml
+@@ -222,7 +222,7 @@ Singleton {
+ 
+     function cancelTimeout(id) {
+         const index = root.list.findIndex((notif) => notif.notificationId === id);
+-        if (root.list[index] != null)
++        if (root.list[index] != null && root.list[index].timer != null)
+             root.list[index].timer.stop();
+     }
+ 
