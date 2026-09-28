@@ -3,6 +3,7 @@
   imports = [
     ./hardware-configuration.nix
     ./disko.nix
+    ./audio.nix
     ../../modules/nixos/gpu/nvidia-prime.nix
   ];
 
