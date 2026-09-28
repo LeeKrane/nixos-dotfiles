@@ -56,16 +56,41 @@ inputs.nixpkgs.lib.nixosSystem {
               };
               # dots-hyprland (`inputs.dotfiles` below), not illogical-flake
               # itself: home-modules/dotfiles.nix copies ~/.config from
-              # `inputs.dotfiles` at HM activation, so the cheatsheet QML
-              # patched here lives in that separate source, not the one
-              # `patched` above rewrites. Cheatsheet's number-key collapsing
-              # regex matches F-keys containing a "1" digit (F1, F10, F11),
-              # mangling their rendered label, and drops F9 entirely (digit
-              # 9, no "1"). See patches/illogical-flake-cheatsheet-fkeys.patch.
+              # `inputs.dotfiles` at HM activation, so everything patched here
+              # lives in that separate source, not the one `patched` above
+              # rewrites. Two things are patched in:
+              # - Cheatsheet's number-key collapsing regex matches F-keys
+              #   containing a "1" digit (F1, F10, F11), mangling their
+              #   rendered label, and drops F9 entirely (digit 9, no "1").
+              #   See patches/illogical-flake-cheatsheet-fkeys.patch.
+              # - Changes carried from pctrade/end4-pC and this repo's own ii
+              #   work, kept as `git format-patch` series, one directory per
+              #   sub-project under patches/ii/ (01-fixes, 02-translator, ...).
+              #   Directories apply in lexical order, and the patches in each
+              #   directory in lexical (= commit) order. A new sub-project only
+              #   adds a directory. See docs/II-INTEGRATION.md
+              #   "Backported fork fixes" for the workflow.
+              # `lib` is the bare nixpkgs lib for the same reason
+              # `applyPatches` is taken from bare nixpkgs above: anything
+              # derived from the module's `config` would recurse infinitely.
+              iiSeries =
+                let
+                  lib = inputs.nixpkgs.lib;
+                  root = ../patches/ii;
+                  sortedNames =
+                    pred: dir:
+                    lib.sort lib.lessThan (builtins.attrNames (lib.filterAttrs pred (builtins.readDir dir)));
+                  patchesIn =
+                    dir:
+                    map (n: dir + "/${n}") (
+                      sortedNames (n: t: t == "regular" && lib.hasSuffix ".patch" n) dir
+                    );
+                in
+                lib.concatMap (d: patchesIn (root + "/${d}")) (sortedNames (n: t: t == "directory") root);
               patchedDotfiles = inputs.nixpkgs.legacyPackages.${system}.applyPatches {
-                name = "dots-hyprland-cheatsheet-fkeys";
+                name = "dots-hyprland-patched";
                 src = inputs.illogical-flake.inputs.dotfiles;
-                patches = [ ../patches/illogical-flake-cheatsheet-fkeys.patch ];
+                patches = [ ../patches/illogical-flake-cheatsheet-fkeys.patch ] ++ iiSeries;
               };
               iiInputs = {
                 inherit (inputs.illogical-flake.inputs) quickshell nur;
