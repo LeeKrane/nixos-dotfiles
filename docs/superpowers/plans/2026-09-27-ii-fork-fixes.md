@@ -15,7 +15,7 @@
 - Run every shell block with `bash` (the interactive shell is fish). Use `command cat`, never bare `cat`, in commands you type.
 - Pinned dots-hyprland revision: read it with `jq -r '.nodes."dots-hyprland".locked.rev' ~/.dotfiles/flake.lock` (currently `97c5bc651f68092351b24aaa935af708b1e04514`).
 - Workspace clone: `~/src/dots-hyprland`, branch `krane`, based on the pinned revision, with `git rerere` enabled. It is disposable; only `patches/ii/01-fixes/*.patch` is committed. The same branch later carries sub-projects 2 to 5, each exported to its own `patches/ii/NN-<name>/` directory (`02-translator`, `03-dock`, `04-agents`, `05-settings`).
-- Export command, always exactly: `rm -f ~/.dotfiles/patches/ii/01-fixes/*.patch && git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature -o ~/.dotfiles/patches/ii/01-fixes "$PIN"..krane`. `--zero-commit --no-signature` keeps unchanged patches byte-identical between exports. The range `"$PIN"..krane` is only right while the branch holds nothing but this plan's commits; Task 6 tags the end of the series `krane/01-fixes`, and every later export uses the per-directory loop documented there.
+- Export command, always exactly: `rm -f ~/.dotfiles/patches/ii/01-fixes/*.patch && git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature --no-numbered -o ~/.dotfiles/patches/ii/01-fixes "$PIN"..krane`. `--zero-commit --no-signature --no-numbered` keeps unchanged patches byte-identical between exports; without `--no-numbered`, subjects become `[PATCH n/m]` once a series has more than one commit. The range `"$PIN"..krane` is only right while the branch holds nothing but this plan's commits; Task 6 tags the end of the series `krane/01-fixes`, and every later export uses the per-directory loop documented there.
 - Fork diffs are relative to the ii root. Apply them with `git apply --directory=dots/.config/quickshell/ii`.
 - Clone commit messages use this format (from the spec):
   ```
@@ -116,7 +116,7 @@ Expected: `Files ... differ`.
 ```bash
 PIN=$(jq -r '.nodes."dots-hyprland".locked.rev' ~/.dotfiles/flake.lock)
 mkdir -p ~/.dotfiles/patches/ii/01-fixes
-rm -f ~/.dotfiles/patches/ii/01-fixes/*.patch && git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature -o ~/.dotfiles/patches/ii/01-fixes "$PIN"..krane
+rm -f ~/.dotfiles/patches/ii/01-fixes/*.patch && git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature --no-numbered -o ~/.dotfiles/patches/ii/01-fixes "$PIN"..krane
 ```
 
 Expected: prints `.../patches/ii/01-fixes/0001-fix-ThumbnailImage-atomic-thumbnail-generation-via-t.patch`.
@@ -311,7 +311,7 @@ Expected: `Files ... differ`.
 
 ```bash
 PIN=$(jq -r '.nodes."dots-hyprland".locked.rev' ~/.dotfiles/flake.lock)
-rm -f ~/.dotfiles/patches/ii/01-fixes/*.patch && git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature -o ~/.dotfiles/patches/ii/01-fixes "$PIN"..krane
+rm -f ~/.dotfiles/patches/ii/01-fixes/*.patch && git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature --no-numbered -o ~/.dotfiles/patches/ii/01-fixes "$PIN"..krane
 cd ~/.dotfiles && git status --short patches/ii/01-fixes
 ```
 
@@ -380,7 +380,7 @@ EOF
 
 ```bash
 PIN=$(jq -r '.nodes."dots-hyprland".locked.rev' ~/.dotfiles/flake.lock)
-rm -f ~/.dotfiles/patches/ii/01-fixes/*.patch && git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature -o ~/.dotfiles/patches/ii/01-fixes "$PIN"..krane
+rm -f ~/.dotfiles/patches/ii/01-fixes/*.patch && git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature --no-numbered -o ~/.dotfiles/patches/ii/01-fixes "$PIN"..krane
 ```
 
 Expected: six files; `0006-fix-colors-support-materialyoucolor-3-palette-key-na.patch` is new.
@@ -571,7 +571,7 @@ Expected: `0`.
 
 ```bash
 PIN=$(jq -r '.nodes."dots-hyprland".locked.rev' ~/.dotfiles/flake.lock)
-rm -f ~/.dotfiles/patches/ii/01-fixes/*.patch && git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature -o ~/.dotfiles/patches/ii/01-fixes "$PIN"..krane
+rm -f ~/.dotfiles/patches/ii/01-fixes/*.patch && git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature --no-numbered -o ~/.dotfiles/patches/ii/01-fixes "$PIN"..krane
 ```
 
 - [ ] **Step 6: Confirm the fix is in the build (passing check)**
@@ -627,7 +627,7 @@ git apply --ignore-whitespace <<'EOF'
 +    // Coalesce bursts of raw Hyprland events (e.g. dragging a window fires
 +    // dozens of "movewindow" events per second) into a single round of
 +    // hyprctl queries, and only re-run the queries an event can actually
-+    // affect instead of all four on every event.
++    // affect instead of all five on every event.
 +    property bool _pendingClients: false
 +    property bool _pendingMonitors: false
 +    property bool _pendingLayers: false
@@ -714,22 +714,28 @@ git apply --ignore-whitespace <<'EOF'
      }
  
      Connections {
-@@ -88,7 +135,19 @@
+@@ -88,7 +135,25 @@
  
          function onRawEvent(event) {
              // console.log("Hyprland raw event:", event.name);
 -            if (["openlayer", "closelayer", "screencast"].includes(event.name)) return;
 -            updateAll()
 +            const name = event.name;
-+            if (["openlayer", "closelayer", "screencast", "submap", "activelayout"].includes(name)) return;
++            if (["screencast", "submap", "activelayout"].includes(name)) return;
 +
-+            if (name.startsWith("workspace") || name.startsWith("createworkspace") || name.startsWith("destroyworkspace") || name.startsWith("moveworkspace") || name === "renameworkspace") {
-+                root.queueUpdate(false, true, false, false);
++            if (name === "openlayer" || name === "closelayer") {
++                root.queueUpdate(false, false, false, true);
++            } else if (name.startsWith("workspace") || name.startsWith("createworkspace") || name.startsWith("destroyworkspace") || name.startsWith("moveworkspace") || name === "renameworkspace") {
++                root.queueUpdate(false, true, true, false);
 +            } else if (name.startsWith("openwindow") || name.startsWith("closewindow") || name.startsWith("movewindow")) {
 +                root.queueUpdate(true, true, false, false);
-+            } else if (name.startsWith("window") || name.startsWith("activewindow") || name === "fullscreen" || name === "changefloatingmode" || name === "pin" || name === "urgent" || name === "minimize") {
++            } else if (name.startsWith("window") || name.startsWith("activewindow") || name === "changefloatingmode" || name === "pin" || name === "urgent" || name === "minimize") {
 +                root.queueUpdate(true, false, false, false);
++            } else if (name === "fullscreen") {
++                root.queueUpdate(true, true, false, false);
 +            } else if (name.startsWith("monitor") || name === "focusedmon") {
++                root.queueUpdate(false, true, true, false);
++            } else if (name.startsWith("activespecial")) {
 +                root.queueUpdate(false, true, true, false);
 +            } else {
 +                root.queueUpdate(true, true, false, false);
@@ -746,9 +752,10 @@ cd ~/src/dots-hyprland
 git apply --ignore-whitespace <<'EOF'
 --- a/dots/.config/quickshell/ii/services/HyprlandData.qml
 +++ b/dots/.config/quickshell/ii/services/HyprlandData.qml
-@@ -146,6 +146,11 @@
-                 root.queueUpdate(true, false, false, false);
+@@ -151,7 +151,12 @@
              } else if (name.startsWith("monitor") || name === "focusedmon") {
+                 root.queueUpdate(false, true, true, false);
+             } else if (name.startsWith("activespecial")) {
                  root.queueUpdate(false, true, true, false);
 +            } else if (name === "configreloaded") {
 +                // A Hyprland config reload can add/remove monitors or change
@@ -786,7 +793,7 @@ Backport of pctrade/end4-pC 1b51f7a, plus the intent of 204f22f
 https://github.com/pctrade/end4-pC/commit/1b51f7a
 https://github.com/pctrade/end4-pC/commit/204f22f
 Problem: every raw Hyprland event ran all five hyprctl queries; dragging a window fires dozens of events per second.
-Port: hand-ported. Dropped the fork's WM.compositor guards (no compositor abstraction at the pin). Added a configreloaded branch that refreshes monitors and workspaces; 204f22f itself only changes a fork-only settings component.
+Port: hand-ported. Dropped the fork's WM.compositor guards (no compositor abstraction at the pin). Added a configreloaded branch that refreshes monitors and workspaces; 204f22f itself only changes a fork-only settings component. Widened the fork's routing so workspace and activespecial events also refresh monitors, fullscreen refreshes workspaces, and openlayer/closelayer refresh layers, since consumers read those.
 Drop when: the pinned services/HyprlandData.qml debounces onRawEvent.
 EOF
 ```
@@ -805,7 +812,7 @@ Expected: `0`.
 
 ```bash
 PIN=$(jq -r '.nodes."dots-hyprland".locked.rev' ~/.dotfiles/flake.lock)
-rm -f ~/.dotfiles/patches/ii/01-fixes/*.patch && git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature -o ~/.dotfiles/patches/ii/01-fixes "$PIN"..krane
+rm -f ~/.dotfiles/patches/ii/01-fixes/*.patch && git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature --no-numbered -o ~/.dotfiles/patches/ii/01-fixes "$PIN"..krane
 ```
 
 - [ ] **Step 7: Confirm the fix is in the build (passing check)**
@@ -879,7 +886,7 @@ commit, the problem, how it was ported and when to drop it.
 | `0005` undefined notification action | `eb76c3d` | clean | pinned `attemptInvokeAction` checks for undefined |
 | `0006` materialyoucolor key name | `3dad196` | clean | pinned `generate_colors_material.py` reads `primaryPaletteKeyColor` |
 | `0007` BlueZ connected state | `d116eef` | hand-ported | bluez#2485 fixed, or pinned `BluetoothStatus.qml` counts `batteryAvailable` |
-| `0008` Hyprland IPC debounce | `1b51f7a` (+ `204f22f` intent) | hand-ported | pinned `HyprlandData.qml` debounces `onRawEvent` |
+| `0008` Hyprland IPC debounce | `1b51f7a` (+ `204f22f` intent) | hand-ported, routing widened | pinned `HyprlandData.qml` debounces `onRawEvent` |
 
 Not portable: `37a9fab` (optimizes CPU-temperature and disk readers that the
 pinned `ResourceUsage.qml` does not have), `204f22f` as its own patch (it
@@ -916,7 +923,7 @@ prev="$PIN"
 for d in ~/.dotfiles/patches/ii/*/; do
   n=$(basename "$d")
   rm -f "$d"*.patch
-  git format-patch --zero-commit --no-signature -o "$d" "$prev..krane/$n"
+  git format-patch --zero-commit --no-signature --no-numbered -o "$d" "$prev..krane/$n"
   prev="krane/$n"
 done
 ```
@@ -962,7 +969,7 @@ prev="$PIN"
 for d in ~/.dotfiles/patches/ii/*/; do
   n=$(basename "$d")
   rm -f "$d"*.patch
-  git format-patch --zero-commit --no-signature -o "$d" "$prev..krane/$n"
+  git format-patch --zero-commit --no-signature --no-numbered -o "$d" "$prev..krane/$n"
   prev="krane/$n"
 done
 git -C ~/.dotfiles status --short patches/ii
@@ -1070,6 +1077,8 @@ busctl get-property org.bluez /org/bluez/hci0/dev_XX_XX_XX_XX_XX_XX org.bluez.De
 - [ ] **Step 7: Hyprland debounce and hotplug (`1b51f7a`)**
 
 First paint: restart qs; workspaces and the active window title are correct at once.
+
+Routing: switch to an empty workspace; the bar's active-window text changes at once. Toggle a special workspace; the bar's special-workspace indicator follows.
 
 Event load: in the clone, temporarily add `console.log("hyprland refresh")` as the first line of `eventDebounceTimer.onTriggered`, copy that one file over the installed one, restart qs, drag a window for 10 s, then:
 
