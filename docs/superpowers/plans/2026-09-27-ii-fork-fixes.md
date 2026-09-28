@@ -911,27 +911,29 @@ commits in order. A lightweight tag `krane/<dir>` (for example
 only in the clone and are recreated by the apply loop. `git rerere` records
 each conflict resolution so the next pin bump replays it.
 
+`git switch -C krane "$PIN"` below force-resets `krane` to the pin, discarding
+any commits on it that are not yet reflected in `patches/ii/`. Only run it on
+a fresh clone, or once `krane` is fully exported; the apply block below warns
+if `krane` already exists.
+
 ```sh
 PIN=$(jq -r '.nodes."dots-hyprland".locked.rev' ~/.dotfiles/flake.lock)
 git clone https://github.com/end-4/dots-hyprland ~/src/dots-hyprland   # once
 cd ~/src/dots-hyprland
 git config rerere.enabled true
 git fetch origin
+if [ -d .git/rebase-apply ]; then
+  echo "an am/rebase is already in progress; resolve it (git am --continue/--skip/--abort) first" >&2
+  exit 1
+fi
+if git rev-parse --verify -q krane >/dev/null; then
+  echo "krane already exists; the switch below discards any commits not yet exported" >&2
+fi
 git switch -C krane "$PIN"
 # apply every series in order and tag the end of each
 for d in ~/.dotfiles/patches/ii/*/; do
   git am -3 "$d"*.patch || break   # on a conflict: resolve, `git am --continue`, tag, resume from the next directory
   git tag -f "krane/$(basename "$d")"
-done
-# add, edit or drop commits with ordinary git commands, then move any tag
-# whose commit was rewritten (tags do not follow a rebase)
-# export every series again
-prev="$PIN"
-for d in ~/.dotfiles/patches/ii/*/; do
-  n=$(basename "$d")
-  rm -f "$d"*.patch
-  git format-patch --zero-commit --no-signature --no-numbered -o "$d" "$prev..krane/$n"
-  prev="krane/$n"
 done
 ```
 
@@ -940,14 +942,39 @@ last commit `krane/NN-<name>` before exporting. Nothing in `lib/mk-host.nix`
 changes.
 
 On a pin bump, run `nix flake update dots-hyprland` first, then the same
-steps. `git am -3` stops at a conflict; resolve it with git's tools and run
-`git am --continue`. A patch that no longer applies otherwise fails the
+apply block. `git am -3` stops at a conflict; resolve it with git's tools and
+run `git am --continue`. A patch that no longer applies otherwise fails the
 `applyPatches` build, and `nixos-rebuild` names the file.
+
+Add, edit or drop commits with ordinary git commands, then move any tag whose
+commit was rewritten (tags do not follow a rebase). Then export every series
+again:
+
+```sh
+cd ~/src/dots-hyprland
+if [ -d .git/rebase-apply ]; then
+  echo "an am/rebase is still in progress; finish it before exporting" >&2
+  exit 1
+fi
+PIN=${PIN:-$(jq -r '.nodes."dots-hyprland".locked.rev' ~/.dotfiles/flake.lock)}
+prev="$PIN"
+for d in ~/.dotfiles/patches/ii/*/; do
+  n=$(basename "$d")
+  if ! git rev-parse --verify -q "krane/$n" >/dev/null; then
+    echo "tag krane/$n is missing; tag the sub-project's last commit before exporting" >&2
+    break
+  fi
+  rm -f "$d"*.patch
+  git format-patch --zero-commit --no-signature --no-numbered -o "$d" "$prev..krane/$n"
+  prev="krane/$n"
+done
+```
 
 To remove one fix, drop its commit (`git am --skip` while re-applying, or
 `git rebase -i` afterwards) and export again. Deleting a patch file directly
-only works when no later patch changes the same file.
-
+only works when no later patch changes the same file. Stage `patches/ii`
+(`git -C ~/.dotfiles add patches/ii`) before running `nixos-rebuild`: it reads
+the flake's git tree, so an unstaged patch edit has no effect on the build.
 ### When to stop using patches
 
 Stay with patch series (decided in the settings spec,
