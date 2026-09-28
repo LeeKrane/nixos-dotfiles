@@ -46,16 +46,17 @@
 - `Config.qml`: add no key that exists after `04-agents` (no second declaration of `dock.*` or `sidebar.agents`), do not touch `sidebar.translator.enable`'s default, and never edit the `property bool launchOnStartup: false` line (the `launchOnStartup` sed in `iiPatches` matches it exactly).
 - The replacement Interface page keeps the "Enable translator" switch and all eight Dock switches.
 - Hyprland keys the GUI may write are exactly those in `pkgs/krane-ii-settings/schema.json`, each checked against Hyprland 0.56.2's source (`src/config/values/ConfigValues.cpp`, and `src/config/lua/bindings/LuaBindingsConfigRules.cpp` for `hl.monitor` fields). Unknown keys are hard errors at Hyprland start.
-- No Niri code paths. Hosts: tariognatha first, then tarmantria. taractias checks wait until its hardware is verified.
+- No Niri code paths. Hosts: the host in use, then the others as they are used; taractias checks wait until its hardware is verified.
 - Scratch work: `mktemp -d -p "$XDG_RUNTIME_DIR"`. Porting tools that must survive a logout live in `~/src/ii-tools/` (outside both repos, never committed).
 
 ### Checking the built source
 
-Prints the patched ii source path Nix built for tariognatha (same block as sub-project 1):
+Several steps check what Nix actually built. This block prints the patched ii source path for the current host; the patched ii source is the same on every host (same input and patches), so checking one host is enough:
 
 ```bash
 cd ~/.dotfiles
-gen=$(nix build --no-link --print-out-paths .#nixosConfigurations.tariognatha.config.home-manager.users.krane.home.activationPackage)
+host=${host:-$(hostname)}
+gen=$(nix build --no-link --print-out-paths .#nixosConfigurations.$host.config.home-manager.users.krane.home.activationPackage)
 iisrc=$(grep -rhoE '/nix/store/[a-z0-9]{32}-dots-hyprland-[a-z-]+' "$gen" | sort -u | head -1)
 echo "$iisrc"
 ```
@@ -341,10 +342,10 @@ No commit.
 
 ```bash
 cd ~/.dotfiles
-nix eval --json .#nixosConfigurations.tariognatha.config.home-manager.users.krane.home.file --apply 'f: f ? ".config/illogical-impulse"'
+for h in tariognatha tarmantria taractias; do nix eval --json .#nixosConfigurations.$h.config.home-manager.users.krane.home.file --apply 'f: f ? ".config/illogical-impulse"'; done
 ```
 
-Expected: `false`.
+Expected: `false` for every host.
 
 - [ ] **Step 2: Write `modules/home/ii-config-dir.nix`**
 
@@ -443,13 +444,14 @@ Then `git add modules/home/ii-config-dir.nix modules/home/default.nix hosts/*/il
 
 ```bash
 cd ~/.dotfiles
-nix eval --json .#nixosConfigurations.tariognatha.config.home-manager.users.krane.home.file --apply 'f: f ? ".config/illogical-impulse"'
-gen=$(nix build --no-link --print-out-paths .#nixosConfigurations.tariognatha.config.home-manager.users.krane.home.activationPackage)
+host=${host:-$(hostname)}
+nix eval --json .#nixosConfigurations.$host.config.home-manager.users.krane.home.file --apply 'f: f ? ".config/illogical-impulse"'
+gen=$(nix build --no-link --print-out-paths .#nixosConfigurations.$host.config.home-manager.users.krane.home.activationPackage)
 readlink -f "$gen/home-files/.config/illogical-impulse"
 grep -n 'Activating %s' "$gen/activate" | grep -E 'checkLinkTargets|kraneIiConfigMigrate|writeBoundary|linkGeneration|kraneIiConfigLinkFirst|copyIllogicalImpulseConfigs'
 ```
 
-Expected: `true`; `/home/krane/.dotfiles/hosts/tariognatha/illogical-impulse`; and the six entries in the order `checkLinkTargets`, `kraneIiConfigMigrate`, `writeBoundary`, `linkGeneration`, `kraneIiConfigLinkFirst`, `copyIllogicalImpulseConfigs`. The last pair matters: the soymou copy step's `mkdir -p` must run after the link exists, or a fresh host gets a real directory that `linkGeneration` then has to move aside. The empty `kraneIiConfigLinkFirst` entry pins it (today's order already has it, by tie-breaking only). If the order differs, stop and report.
+Expected: `true`; `/home/krane/.dotfiles/hosts/$host/illogical-impulse`; and the six entries in the order `checkLinkTargets`, `kraneIiConfigMigrate`, `writeBoundary`, `linkGeneration`, `kraneIiConfigLinkFirst`, `copyIllogicalImpulseConfigs`. The last pair matters: the soymou copy step's `mkdir -p` must run after the link exists, or a fresh host gets a real directory that `linkGeneration` then has to move aside. The empty `kraneIiConfigLinkFirst` entry pins it (today's order already has it, by tie-breaking only). If the order differs, stop and report.
 
 - [ ] **Step 5: Test the migration entry against scratch directories**
 
@@ -525,7 +527,7 @@ git -C ~/.dotfiles status --short hosts/tarmantria/illogical-impulse
 journalctl -u home-manager-krane -b --no-pager | grep kraneIiConfigMigrate
 ```
 
-Expected: `/home/krane/.dotfiles/hosts/tarmantria/illogical-impulse`, `BACKUP`, untracked `config.json` (and `actions/`, if it existed), and the `copying ... into ...` log line. Then on tariognatha: `sudo nixos-rebuild switch --flake .#tariognatha` and the same three checks with `tariognatha`.
+Expected: `/home/krane/.dotfiles/hosts/tarmantria/illogical-impulse`, `BACKUP`, untracked `config.json` (and `actions/`, if it existed), and the `copying ... into ...` log line. Then repeat on the other hosts as they are next used: switch each (`sudo nixos-rebuild switch --flake .#$host`) and run the same three checks against that host; taractias waits until its hardware is verified.
 
 - [ ] **Step 7: A fresh host writes its defaults through the link (Review Focus 5)**
 
@@ -549,7 +551,7 @@ Change the wallpaper through ii's wallpaper selector, then:
 
 ```bash
 test -L ~/.config/illogical-impulse && echo LINK
-jq -r .background.wallpaperPath ~/.dotfiles/hosts/tariognatha/illogical-impulse/config.json
+jq -r .background.wallpaperPath ~/.dotfiles/hosts/$(hostname)/illogical-impulse/config.json
 ```
 
 Expected: `LINK` and the path of the wallpaper just picked (switchwall.sh's `mv` happened inside the repo directory).
@@ -1286,11 +1288,12 @@ for h in tariognatha tarmantria taractias; do nixos-rebuild dry-build --flake .#
 
 Expected: `nix flake check` passes, no `FAIL` lines.
 
-- [ ] **Step 4: Switch and check the logs (tariognatha, then tarmantria)**
+- [ ] **Step 4: Switch and check the logs (the host in use, then the others)**
 
 ```bash
 qs log -c ii > $XDG_RUNTIME_DIR/qs-before.log 2>&1 || true
-sudo nixos-rebuild switch --flake .#tariognatha && sudo nixos-rebuild switch --flake .#tariognatha
+host=$(hostname)
+sudo nixos-rebuild switch --flake .#$host && sudo nixos-rebuild switch --flake .#$host
 pkill -f '[q]s-wrapped -c ii'; hyprctl dispatch exec 'qs -c ii'; sleep 5
 qs log -c ii > $XDG_RUNTIME_DIR/qs-after.log 2>&1 || true
 comm -13 <(grep -iE 'error|warn|TypeError|ReferenceError' $XDG_RUNTIME_DIR/qs-before.log | sed -E 's/:[0-9]+//g' | sort -u) \
@@ -1299,7 +1302,7 @@ hyprctl configerrors
 rm -f $XDG_RUNTIME_DIR/qs-before.log $XDG_RUNTIME_DIR/qs-after.log
 ```
 
-Expected: no output from `comm` and an empty `configerrors`. Repeat on tarmantria.
+Expected: no output from `comm` and an empty `configerrors`. Repeat on the other hosts as they are next used; taractias waits until its hardware is verified.
 
 - [ ] **Step 5: Acceptance checks (spec table, Phase A rows)**
 
@@ -1307,9 +1310,9 @@ Record pass, fail or not run for each:
 
 1. **Settings window:** `SUPER + I` opens it; every page in the rail (Quick, General, Bar, Background, Interface, Services, Profile, Advanced, About) loads; closing it leaves the bar running (`pgrep -f '[q]s-wrapped -c ii'`). All hosts.
 2. **config.json pages:** `config.json` stays untracked until Step 7, so compare against a snapshot instead of `git diff`. On each of Quick, General, Bar, Background, Interface and Services: `command cp ~/.dotfiles/hosts/<host>/illogical-impulse/config.json "$XDG_RUNTIME_DIR/cfg.json"`, change one control, then `diff <(jq -S . "$XDG_RUNTIME_DIR/cfg.json") <(jq -S . ~/.dotfiles/hosts/<host>/illogical-impulse/config.json)`. Expected: exactly that key. Switch, reboot: the value is still set. After Step 7 the same check is `git -C ~/.dotfiles diff hosts/<host>/illogical-impulse/config.json`.
-3. **General 12h clock (tariognatha):** pick a 12h format, run `hyprlock` directly: AM/PM shows. Switch: `grep -c 'TIME12' ~/.config/hypr/hyprlock.conf` is `1` without opening settings.
+3. **General 12h clock (the host in use):** pick a 12h format, run `hyprlock` directly: AM/PM shows. Switch: `grep -c 'TIME12' ~/.config/hypr/hyprlock.conf` is `1` without opening settings.
 4. **About:** shows the pin revision (first 12 characters of `$PIN`), the patch count and `/home/krane/.dotfiles`; no update buttons. All hosts.
-5. **Profile (tariognatha):** change the display name; `jq -r .profile.displayName ~/.dotfiles/hosts/tariognatha/illogical-impulse/config.json` shows it; the hostname field is disabled and shows `tariognatha`. Save a local preset: it appears under `hosts/tariognatha/illogical-impulse/presets/`.
+5. **Profile (the host in use):** change the display name; `jq -r .profile.displayName ~/.dotfiles/hosts/$(hostname)/illogical-impulse/config.json` shows it; the hostname field is disabled and shows the current host's name (`$(hostname)`). Save a local preset: it appears under `hosts/$(hostname)/illogical-impulse/presets/`.
 6. **Phase A calibration:** compare now with `~/src/ii-tools/phase-a-start`. More than 10 working sessions: stop here and re-scope Phases B and C with the user.
 
 - [ ] **Step 6: Commit Phase A (code only)**
@@ -1423,7 +1426,8 @@ The allowlist of keys the GUI may write, and the renderer that turns `ii-setting
 
 ```bash
 cd ~/.dotfiles
-src=$(nix build --no-link --print-out-paths .#nixosConfigurations.tariognatha.pkgs.hyprland.src)
+host=${host:-$(hostname)}
+src=$(nix build --no-link --print-out-paths .#nixosConfigurations.$host.pkgs.hyprland.src)
 V=$src/src/config/values/ConfigValues.cpp
 R=$src/src/config/lua/bindings/LuaBindingsConfigRules.cpp
 jq -r '.hyprland | keys[]' pkgs/krane-ii-settings/schema.json | while read -r k; do
@@ -2818,10 +2822,10 @@ git commit -m "Add the krane-ii-settings writer, its schema and tests, and an em
 
 ```bash
 cd ~/.dotfiles
-nix eval --json .#nixosConfigurations.tariognatha.config.home-manager.users.krane.krane.hypr._rendered --apply 'r: r ? "custom/krane_gui.lua"'
+for h in tariognatha tarmantria taractias; do nix eval --json .#nixosConfigurations.$h.config.home-manager.users.krane.krane.hypr._rendered --apply 'r: r ? "custom/krane_gui.lua"'; done
 ```
 
-Expected: `false`.
+Expected: `false` for every host.
 
 - [ ] **Step 2: Write `modules/home/ii-settings.nix`**
 
@@ -3091,13 +3095,15 @@ in
 5. `flake.nix`, in `checks.${system}` after `ii-settings-writer`:
 
    ```nix
-        # Every schema key and every monitor field, rendered against tariognatha's real
-        # manifest and parsed. checks.lua-syntax only sees what each host's JSON holds.
+        # Every schema key and every monitor field, rendered against one host's real manifest
+        # and parsed. Any host works here: this exercises the render machinery, not host-specific
+        # values, and checks.lua-syntax already checks every host's own JSON separately.
         ii-settings-render =
           let
             writer = pkgs.callPackage ./pkgs/krane-ii-settings { };
             manifest =
-              self.nixosConfigurations.tariognatha.config.home-manager.users.krane.krane.iiSettings.manifestFile;
+              self.nixosConfigurations.${builtins.head (builtins.attrNames self.nixosConfigurations)}
+                .config.home-manager.users.krane.krane.iiSettings.manifestFile;
           in
           pkgs.runCommand "ii-settings-render" { } ''
             ${writer}/bin/krane-ii-settings --manifest ${manifest} \
@@ -3118,13 +3124,14 @@ cd ~/.dotfiles && git add modules/home/ii-settings.nix modules/home/default.nix 
 
 ```bash
 cd ~/.dotfiles
-H=.#nixosConfigurations.tariognatha.config.home-manager.users.krane
+host=${host:-$(hostname)}
+H=.#nixosConfigurations.$host.config.home-manager.users.krane
 cmp "$(nix build --no-link --print-out-paths "$H.krane.hypr._rendered.\"custom/krane_gui.lua\"")" pkgs/krane-ii-settings/tests/golden/empty.lua && echo HEADER-ONLY
 tail -4 "$(nix build --no-link --print-out-paths "$H.krane.hypr._rendered.\"monitors.lua\"")"
 jq -c '.nixOwned, .idleBaseline' "$(nix build --no-link --print-out-paths "$H.krane.iiSettings.manifestFile")"
 ```
 
-Expected: `HEADER-ONLY`; the `if is_file_exists(...krane_gui.lua) ... end` trailer; `{"hyprland":["cursor:default_monitor","input:kb_layout","input:kb_variant"],"idle":true,"monitors":{"DP-1":["disabled","mode","output","position","scale"],"DP-2":["disabled","mode","output","position","scale"]}}` and `{"lock":0,"screenOff":0,"suspend":0}`.
+Expected: `HEADER-ONLY`; the `if is_file_exists(...krane_gui.lua) ... end` trailer; the current host's `nixOwned` keys and monitor outputs (on tariognatha: `{"hyprland":["cursor:default_monitor","input:kb_layout","input:kb_variant"],"idle":true,"monitors":{"DP-1":["disabled","mode","output","position","scale"],"DP-2":["disabled","mode","output","position","scale"]}}`; other hosts list their own monitor outputs and Nix-owned keys) and `{"lock":0,"screenOff":0,"suspend":0}`.
 
 - [ ] **Step 5: Ownership and schema are enforced at eval time**
 
@@ -3132,16 +3139,19 @@ Each case edits a tracked file, evaluates, and restores it:
 
 ```bash
 cd ~/.dotfiles
-ev() { nix eval --raw .#nixosConfigurations.tariognatha.config.system.build.toplevel.drvPath 2>&1 | grep -A4 'Failed assertions' | head -5; }
-printf '{"hyprland":{"input:kb_layout":"us"}}\n' > hosts/tariognatha/ii-settings.json; ev
-printf '{"hyprland":{"general:nope":1}}\n' > hosts/tariognatha/ii-settings.json; ev
-printf '{"hyprland":{"general:gaps_in":12}}\n' > hosts/tariognatha/ii-settings.json
-sed -i 's|    settings.cursor.default_monitor = "DP-2";|    settings.cursor.default_monitor = "DP-2";\n    settings.general.gaps_in = 4;|' hosts/tariognatha/display.nix; ev
-git checkout -- hosts/tariognatha/display.nix; printf '{}\n' > hosts/tariognatha/ii-settings.json
-git diff --stat hosts/tariognatha
+host=${host:-$(hostname)}
+ev() { nix eval --raw .#nixosConfigurations.$host.config.system.build.toplevel.drvPath 2>&1 | grep -A4 'Failed assertions' | head -5; }
+printf '{"hyprland":{"input:kb_layout":"us"}}\n' > hosts/$host/ii-settings.json; ev
+printf '{"hyprland":{"general:nope":1}}\n' > hosts/$host/ii-settings.json; ev
+printf '{"hyprland":{"general:gaps_in":12}}\n' > hosts/$host/ii-settings.json
+# `  krane.hypr = {` is the module's top-level attrset open, identical in every host's display.nix;
+# inserting the sibling key there (rather than after a monitor-specific line) keeps this host-generic.
+sed -i 's|  krane.hypr = {|  krane.hypr = {\n    settings.general.gaps_in = 4;|' hosts/$host/display.nix; ev
+git checkout -- hosts/$host/display.nix; printf '{}\n' > hosts/$host/ii-settings.json
+git diff --stat hosts/$host
 ```
 
-Expected: three assertion failures: `hosts/tariognatha/ii-settings.json sets hyprland.input:kb_layout, which Nix also sets ... hosts/tariognatha/display.nix`; `... hyprland.general:nope not in pkgs/krane-ii-settings/schema.json`; `... sets hyprland.general:gaps_in, which Nix also sets ...`. The final `git diff --stat` prints nothing.
+Expected: three assertion failures: `hosts/$host/ii-settings.json sets hyprland.input:kb_layout, which Nix also sets ... hosts/$host/display.nix`; `... hyprland.general:nope not in pkgs/krane-ii-settings/schema.json`; `... sets hyprland.general:gaps_in, which Nix also sets ...`. The final `git diff --stat` prints nothing.
 
 - [ ] **Step 6: Flake check and dry-builds**
 
@@ -3156,16 +3166,17 @@ Expected: passes (including `lua-syntax`, now with `custom/krane_gui.lua` for ev
 - [ ] **Step 7: Switch and exercise the writer from the command line**
 
 ```bash
-sudo nixos-rebuild switch --flake .#tariognatha
+host=$(hostname)
+sudo nixos-rebuild switch --flake .#$host
 command cat ~/.config/hypr/custom/krane_gui.lua; hyprctl configerrors
 krane-ii-settings set hyprland input:kb_layout us; echo "exit $?"
 krane-ii-settings set hyprland general:gaps_in 12 && sleep 1 && hyprctl getoption general:gaps_in -j | jq -r .css
-git -C ~/.dotfiles diff hosts/tariognatha/ii-settings.json
+git -C ~/.dotfiles diff hosts/$host/ii-settings.json
 krane-ii-settings reset hyprland general:gaps_in && sleep 1 && hyprctl getoption general:gaps_in -j | jq -r .css
-git -C ~/.dotfiles diff --stat hosts/tariognatha/ii-settings.json
+git -C ~/.dotfiles diff --stat hosts/$host/ii-settings.json
 ```
 
-Expected: the header only and no config errors; `krane-ii-settings: hyprland.input:kb_layout: set in Nix (hosts/tariognatha/display.nix or modules/home)` and `exit 1`; `12 12 12 12`; a diff adding `"general:gaps_in": 12`; the value back to ii's (for example `4 4 4 4`) with no switch; no diff.
+Expected: the header only and no config errors; `krane-ii-settings: hyprland.input:kb_layout: set in Nix (hosts/$host/display.nix or modules/home)` and `exit 1`; `12 12 12 12`; a diff adding `"general:gaps_in": 12`; the value back to ii's (for example `4 4 4 4`) with no switch; no diff.
 
 - [ ] **Step 8: Commit B2**
 
@@ -4228,7 +4239,7 @@ Run Task 11, Step 2 (forkcheck delta and `git am` round trip) and Step 3 (`nix f
 
 - [ ] **Step 2: Switch and logs**
 
-Run Task 11, Step 4 on tariognatha, then tarmantria. Expected as there.
+Run Task 11, Step 4 on the host in use, then the others as they are used. Expected as there.
 
 - [ ] **Step 3: Visual and Input (spec table)**
 
@@ -4248,17 +4259,17 @@ The keyboard layout field is disabled and reads "Set in Nix (hosts/<host>/displa
 
 Open the page with `general:gaps_in` at ii's value. Expected: "Gaps in" shows the first number of `hyprctl getoption general:gaps_in -j | jq -r .css`, "Blur" matches `hyprctl getoption decoration:blur:enabled -j | jq .bool`, "Inactive Opacity" shows `round(float * 100)`. No `NaN`, no switch unchecked while Hyprland reports `true`. Opening the page and closing it without touching anything leaves `git -C ~/.dotfiles diff --stat hosts/$(hostname)/ii-settings.json` empty (no value written back on load, idle rows included) on tarmantria, where idle is GUI-owned.
 
-- [ ] **Step 6: External edit and parse error (tariognatha)**
+- [ ] **Step 6: External edit and parse error (the host in use)**
 
-With the page open: `f=~/.dotfiles/hosts/tariognatha/ii-settings.json; jq '.hyprland["general:gaps_out"] = 7' "$f" > "$f.new" && mv "$f.new" "$f"`. Expected: the "changed outside settings" notice appears and `hyprctl getoption general:gaps_out` is unchanged. Press "Apply now": the value becomes 7. Then put `<<<<<<< HEAD` on the first line of the file and change "Gaps in" in the page. Expected: the page shows `cannot parse ...`, the file is byte-for-byte unchanged, gaps unchanged. Restore the file with `git checkout`.
+With the page open: `f=~/.dotfiles/hosts/$(hostname)/ii-settings.json; jq '.hyprland["general:gaps_out"] = 7' "$f" > "$f.new" && mv "$f.new" "$f"`. Expected: the "changed outside settings" notice appears and `hyprctl getoption general:gaps_out` is unchanged. Press "Apply now": the value becomes 7. Then put `<<<<<<< HEAD` on the first line of the file and change "Gaps in" in the page. Expected: the page shows `cannot parse ...`, the file is byte-for-byte unchanged, gaps unchanged. Restore the file with `git checkout`.
 
-- [ ] **Step 7: Game mode (tariognatha)**
+- [ ] **Step 7: Game mode (the host in use)**
 
 With "Gaps in" at 12, toggle game mode on (gaps 0) and off. Expected: `hyprctl getoption general:gaps_in` is back to 12.
 
-- [ ] **Step 8: Border colors (tariognatha)**
+- [ ] **Step 8: Border colors (the host in use)**
 
-Enable custom border colors; change the wallpaper. Expected: borders follow the palette; `git -C ~/.dotfiles diff --stat hosts/tariognatha/ii-settings.json` prints nothing. Watch for a reload loop:
+Enable custom border colors; change the wallpaper. Expected: borders follow the palette; `git -C ~/.dotfiles diff --stat hosts/$(hostname)/ii-settings.json` prints nothing. Watch for a reload loop:
 
 ```bash
 # hyprconfigurator.py writes a temp file in the same directory and renames it, so count only
@@ -4271,24 +4282,25 @@ wait; wc -l < "$XDG_RUNTIME_DIR/ino.log"
 
 Expected: at most one event per change. Switch: the custom colors are back with no qs restart.
 
-- [ ] **Step 9: Animation presets (tariognatha)**
+- [ ] **Step 9: Animation presets (the host in use)**
 
 Pick "Elastic". Expected: `grep -c 'animationPresets.fast' ~/.config/hypr/custom/krane_gui.lua` is `1`, window-open animations change, and there is no "add a require line" notice. Switch: it persists. Pick "Stock": the `require` line and the key are gone.
 
-- [ ] **Step 10: Autostart (tariognatha)**
+- [ ] **Step 10: Autostart (the host in use)**
 
 Add an app (for example `kitty`) with workspace 2, enable autostart, reboot. Expected: it starts on the next boot and the one after; `test -e /tmp/qs-autostart.lock || echo NO-TMP-LOCK` prints `NO-TMP-LOCK`.
 
-- [ ] **Step 11: Hyprland rejects a value (dev only, tariognatha)**
+- [ ] **Step 11: Hyprland rejects a value (dev only, the host in use)**
 
 ```bash
+host=$(hostname)
 t=$(mktemp -d -p "$XDG_RUNTIME_DIR"); command cp -r ~/.dotfiles/pkgs/krane-ii-settings/. "$t/"
 jq '.hyprland["general:nope"] = {"type": "int", "min": 0, "max": 9}' "$t/schema.json" > "$t/s" && mv "$t/s" "$t/schema.json"
 sed -i "s#@hyprctl@#$(command -v hyprctl)#" "$t/krane_ii_settings.py"
-cp ~/.dotfiles/hosts/tariognatha/ii-settings.json "$t/before.json"
+cp ~/.dotfiles/hosts/$host/ii-settings.json "$t/before.json"
 manifest=$(grep -o '/nix/store/[a-z0-9]*-krane-ii-settings-manifest-[a-z]*\.json' "$(readlink -f "$(command -v krane-ii-settings)")")
 python3 "$t/krane_ii_settings.py" --manifest "$manifest" set hyprland general:nope 1; echo "exit $?"
-cmp "$t/before.json" ~/.dotfiles/hosts/tariognatha/ii-settings.json && echo REPO-UNCHANGED
+cmp "$t/before.json" ~/.dotfiles/hosts/$host/ii-settings.json && echo REPO-UNCHANGED
 hyprctl configerrors; rm -rf "$t"
 ```
 
@@ -4318,7 +4330,8 @@ git commit -m "Add the ii Hyprland settings page, persisted through krane-ii-set
 
 ```bash
 cd ~/.dotfiles
-src=$(nix build --no-link --print-out-paths .#nixosConfigurations.tariognatha.pkgs.hyprland.src)
+host=${host:-$(hostname)}
+src=$(nix build --no-link --print-out-paths .#nixosConfigurations.$host.pkgs.hyprland.src)
 R=$src/src/config/lua/bindings/LuaBindingsConfigRules.cpp
 for f in cm sdrbrightness sdrsaturation sdr_min_luminance sdr_max_luminance min_luminance max_luminance max_avg_luminance; do
   grep -o "{\"$f\", \[\]() -> ILuaConfigValue\* { return new CLuaConfig[A-Za-z]*" "$R" | sed "s/.*CLuaConfig/$f: /" || echo "MISSING $f"
@@ -4330,10 +4343,10 @@ Expected: `cm: String`, `sdrbrightness: Float`, `sdrsaturation: Float`, `sdr_min
 - [ ] **Step 2: Show the option is missing (failing check)**
 
 ```bash
-nix eval .#nixosConfigurations.tariognatha.config.home-manager.users.krane.krane.hypr.monitors --apply 'ms: (builtins.head ms) ? cm'
+for h in tariognatha tarmantria taractias; do nix eval .#nixosConfigurations.$h.config.home-manager.users.krane.krane.hypr.monitors --apply 'ms: (builtins.head ms) ? cm'; done
 ```
 
-Expected: `false`.
+Expected: `false` for every host.
 
 - [ ] **Step 3: Add the options and render them**
 
@@ -4458,20 +4471,22 @@ Run `nix fmt modules/home/hypr-config.nix` (the formatter re-indents the list yo
 
 - [ ] **Step 4: Render, ownership and overlap (passing checks)**
 
-Temporarily give DP-2 `cm = "hdr"; bitdepth = 10;`:
+Temporarily give the host's first monitor `cm = "hdr"; bitdepth = 10;`. The insertion anchors on that monitor's `scale = ` line, which every host's `display.nix` has at the same indentation on its first monitor entry (tariognatha `DP-2`, tarmantria `HDMI-A-1`, taractias `eDP-1`):
 
 ```bash
 cd ~/.dotfiles
-sed -i '0,/        scale = 1.5;/s//        scale = 1.5;\n        cm = "hdr";\n        bitdepth = 10;/' hosts/tariognatha/display.nix
-H=.#nixosConfigurations.tariognatha.config.home-manager.users.krane
-sed -n '/output = "DP-2"/,/})/p' "$(nix build --no-link --print-out-paths "$H.krane.hypr._rendered.\"monitors.lua\"")"
-jq -c '.nixOwned.monitors["DP-2"]' "$(nix build --no-link --print-out-paths "$H.krane.iiSettings.manifestFile")"
-printf '{"monitors":{"DP-2":{"cm":"srgb"}}}\n' > hosts/tariognatha/ii-settings.json
-nix eval --raw .#nixosConfigurations.tariognatha.config.system.build.toplevel.drvPath 2>&1 | grep -A1 'Failed assertions'
-git checkout -- hosts/tariognatha/display.nix; printf '{}\n' > hosts/tariognatha/ii-settings.json; git diff --stat hosts/tariognatha
+host=${host:-$(hostname)}
+mon=$(grep -m1 '^        output = "' hosts/$host/display.nix | sed -E 's/.*"(.*)".*/\1/')
+sed -i '0,/^        scale = [0-9.]*;/s//&\n        cm = "hdr";\n        bitdepth = 10;/' hosts/$host/display.nix
+H=.#nixosConfigurations.$host.config.home-manager.users.krane
+sed -n "/output = \"$mon\"/,/})/p" "$(nix build --no-link --print-out-paths "$H.krane.hypr._rendered.\"monitors.lua\"")"
+jq -c ".nixOwned.monitors[\"$mon\"]" "$(nix build --no-link --print-out-paths "$H.krane.iiSettings.manifestFile")"
+printf '{"monitors":{"%s":{"cm":"srgb"}}}\n' "$mon" > hosts/$host/ii-settings.json
+nix eval --raw .#nixosConfigurations.$host.config.system.build.toplevel.drvPath 2>&1 | grep -A1 'Failed assertions'
+git checkout -- hosts/$host/display.nix; printf '{}\n' > hosts/$host/ii-settings.json; git diff --stat hosts/$host
 ```
 
-Expected: the DP-2 rule ends `bitdepth = 10,` / `cm = "hdr"`; the owned list is `["bitdepth","cm","disabled","mode","output","position","scale"]`; the eval fails with `... sets monitors.DP-2.cm, which Nix also sets`; no diff left.
+Expected: the modified monitor's rule ends `bitdepth = 10,` / `cm = "hdr"`; the owned list is `["bitdepth","cm","disabled","mode","output","position","scale"]`; the eval fails with `... sets monitors.$mon.cm, which Nix also sets`; no diff left.
 
 - [ ] **Step 5: Flake check and commit C1**
 
@@ -4797,7 +4812,7 @@ head -1 "$II/scripts/hyprland/monitor_caps.py"
 python3 ~/src/ii-tools/forkcheck.py "$II" "$II"/modules/common/widgets/Monitor{Rect,Canvas}.qml; echo "exit $?"
 ```
 
-Expected: the venv shebang; on tariognatha a JSON object with `DP-1` and `DP-2`, each with `hdr` and `maxBpc` (DP-2 `hdr: true` if its EDID reports it); `exit 0` (make `WM` checks constant as in Task 5 if any are reported). Commit: subject `feat(settings): monitor layout canvas and EDID capability probe`; fork paths as fetched; `Port: clean`; `Drop when: the Displays section is dropped.`
+Expected: the venv shebang; a JSON object keyed by the current host's monitor names, each with `hdr` and `maxBpc` (on tariognatha: `DP-1` and `DP-2`, with `DP-2` `hdr: true` if its EDID reports it); `exit 0` (make `WM` checks constant as in Task 5 if any are reported). Commit: subject `feat(settings): monitor layout canvas and EDID capability probe`; fork paths as fetched; `Port: clean`; `Drop when: the Displays section is dropped.`
 
 - [ ] **Step 2: `MonitorConfigOption.qml`**
 
@@ -5005,7 +5020,8 @@ In `modules/home/ii-settings.nix`, in `config`, after `home.packages = [ wrapped
 
 ```bash
 cd ~/.dotfiles && git add modules/home/ii-settings.nix
-gen=$(nix build --no-link --print-out-paths .#nixosConfigurations.tariognatha.config.home-manager.users.krane.krane.hypr._rendered.'"custom/execs.lua"')
+host=${host:-$(hostname)}
+gen=$(nix build --no-link --print-out-paths .#nixosConfigurations.$host.config.home-manager.users.krane.krane.hypr._rendered.'"custom/execs.lua"')
 grep -c 'krane-ii-settings boot-check' "$gen"
 ```
 
@@ -5017,11 +5033,11 @@ Expected: `1`.
 
 - [ ] **Step 1: Whole-series and build checks, switch**
 
-Run Task 11, Steps 2, 3 and 4 (tariognatha, then tarmantria). Then `qs -c ii ipc call lock isLocked`. Expected: as there, and `false`.
+Run Task 11, Steps 2, 3 and 4 (the host in use, then the others as they are used). Then `qs -c ii ipc call lock isLocked`. Expected: as there, and `false`.
 
-- [ ] **Step 2: Ownership (tariognatha)**
+- [ ] **Step 2: Ownership (the host in use)**
 
-Hyprland page, Displays, select DP-1: resolution, scale and position are disabled with "Set in Nix"; HDR and color fields are editable if DP-1's EDID reports HDR (otherwise hidden). Same for DP-2.
+Hyprland page, Displays, select each monitor declared in the host's `display.nix`: resolution, scale and position are disabled with "Set in Nix"; HDR and color fields are editable if that output's EDID reports HDR (otherwise hidden).
 
 - [ ] **Step 3: Revert (tarmantria's eDP-1, plus an output not in `display.nix` if one can be attached)**
 
@@ -5034,11 +5050,11 @@ Every output in `display.nix` has Nix-owned `mode`, `position` and `scale` (reso
 4. Reboot, unlock (typing the password blind works). Expected: the settings window opens on the Hyprland page with the keep banner. Keep: `bootConfirmed` is gone from the file.
 5. Change it again, Keep, reboot, unlock, and let the banner time out. Expected: the `monitors.<output>` entry is gone from the repo file and the display is back to its Nix or default rule.
 
-- [ ] **Step 4: HDR (tariognatha, DP-2)**
+- [ ] **Step 4: HDR (a monitor whose EDID reports HDR support; on tariognatha, DP-2)**
 
-Turn HDR on. Expected: `hyprctl monitors -j | jq '.[] | select(.name=="DP-2") | {colorManagementPreset, currentFormat}'` shows `hdr` and a 10-bit format, or the timer reverts it (a link that cannot carry 3840x2160@240 at 10 bits). If kept: cold boot, unlock, Keep in the boot banner: it survives. SDR brightness changes are visible while in HDR.
+Turn HDR on. Expected: `hyprctl monitors -j | jq '.[] | select(.name=="<output>") | {colorManagementPreset, currentFormat}'` shows `hdr` and a 10-bit format, or the timer reverts it (a link that cannot carry the mode at 10 bits — on tariognatha's DP-2, 3840x2160@240). If kept: cold boot, unlock, Keep in the boot banner: it survives. SDR brightness changes are visible while in HDR. Record "not run" if no available output reports HDR.
 
-- [ ] **Step 5: Laptop (tarmantria)**
+- [ ] **Step 5: Laptop (the laptop in use)**
 
 eDP-1 scale, mode and position are disabled with "Set in Nix"; a transform change reverts (Step 3); the HDR subsection is hidden (no EDID HDR). taractias: not run until its hardware is verified; record that.
 

@@ -498,7 +498,7 @@ in this sub-project is the optional `claude-notify` package from step 0.
 2. `nixos-rebuild dry-build --flake .#<host>` for tariognatha, tarmantria and
    taractias.
 
-### Acceptance (tariognatha, then each laptop where Claude Code is used)
+### Acceptance (the host in use, then the others as they are used; taractias waits until its hardware is verified)
 
 | # | Check |
 |---|---|

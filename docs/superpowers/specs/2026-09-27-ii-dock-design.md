@@ -58,8 +58,8 @@ Success means:
 
 - The patched ii contains the ported dock and all three hosts build.
 - With the dock enabled, Quickshell starts with no new QML errors or warnings.
-- Each feature passes its acceptance check below on tariognatha, including on
-  both monitors.
+- Each feature passes its acceptance check below on the host it is tested on,
+  per the Hosts column, including on both monitors where that host has two.
 - With the dock disabled (the current config.json), nothing changes: no new
   log lines and no new layer surfaces.
 
@@ -265,7 +265,8 @@ sub-project 2 only for its place in the branch. The order is:
 1. Sub-projects 1 and 2 land (layout, wiring, docs, translator).
 2. Patch 1 of this sub-project lands on its own and passes its checks. It is
    useful even if the rest is never finished.
-3. Patches 2 to 4 land together, after their checks pass on tariognatha.
+3. Patches 2 to 4 land together, after their checks pass on the host they're
+   tested on.
 
 ### Wiring
 
@@ -295,12 +296,13 @@ be committed or discarded by hand like any other GUI change.
 The new keys from patch 4 need no action. ii's config adapter uses the QML
 default for a key missing from `config.json`.
 
-### Multi-monitor behaviour (tariognatha)
+### Multi-monitor behaviour
 
 The dock is a `Variants` over `Quickshell.screens`, so each monitor gets its own
-dock window: DP-2 (3840x2160 at scale 1.5, 2560x1440 logical) and DP-1
-(2560x1440 at scale 1). Both are 1440 logical pixels tall and share a bottom
-edge, so the 2 px hover strip sits at the same height on both.
+dock window. On tariognatha, for example: DP-2 (3840x2160 at scale 1.5,
+2560x1440 logical) and DP-1 (2560x1440 at scale 1). Both are 1440 logical
+pixels tall and share a bottom edge, so the 2 px hover strip sits at the same
+height on both.
 
 - **Pinned state** (`root.pinned`) is one property on the outer `Scope`, so
   pinning the dock pins it on both monitors. This is upstream behaviour and is
@@ -365,15 +367,15 @@ deferred, and how to enable the dock.
 
 | Feature | Check | Hosts |
 |---|---|---|
-| Fullscreen autohide | Pin the dock. Fullscreen a window (`hyprctl dispatch fullscreen`) on DP-2: the DP-2 dock slides away, the window covers the bottom edge (no exclusive zone), and the DP-1 dock stays. Hovering the DP-2 bottom edge still reveals it. Leave fullscreen: the dock returns and reserves space again. | tariognatha; tarmantria built-in screen |
-| Hotplug | With the dock enabled, unplug and replug DP-1. No `TypeError` about `name` in `qs log`, and DP-1 gets its dock back. | tariognatha |
-| Reorder | Drag kitty in front of dolphin. The order changes on both monitors, and `jq .dock.pinnedApps ~/.config/illogical-impulse/config.json` shows the new order after a qs restart. | tariognatha |
-| Pin/unpin | Right-click a running unpinned app, pin it: it moves from the running row to the pinned slots. Unpin it: it moves back. Unpin every app: the pinned section and its separator disappear, with no empty gap. | tariognatha |
-| Running indicator | Pin an app whose id has capitals (edit `pinnedApps` in `config.json`, restart qs), launch it: its slot shows the running dots and clicking focuses the window. | tariognatha |
-| Previews | Hover a pinned app with two windows, then an unpinned app with two windows (for example two Firefox windows): each time the popup shows both previews, centred over the icon, on each monitor. Repeat with `pinnedApps` empty: unpinned previews still appear. | tariognatha |
-| Monochrome tint | Toggle monochrome icons: pinned and running icons are desaturated and tinted together when on, full colour when off. | tariognatha |
-| Now playing | Play audio in a player with cover art: the card appears with the cover, title and artist; play/pause and next work. Stop the player: the card and its separator disappear. | tariognatha |
-| Options | Before touching anything, the four new switches show as on (the QML defaults fill the keys missing from `config.json`). Toggle each: the background, pin button, apps button and media card appear and disappear, and separators do not double up. | tariognatha |
+| Fullscreen autohide | Pin the dock. Fullscreen a window (`hyprctl dispatch fullscreen`) on one monitor: that monitor's dock slides away, the window covers the bottom edge (no exclusive zone), and the other monitor's dock stays. Hovering the fullscreened monitor's bottom edge still reveals it. Leave fullscreen: the dock returns and reserves space again. | any host with two monitors; a host with only its built-in screen can still check the hover-reveal part |
+| Hotplug | With the dock enabled, unplug and replug an external monitor. No `TypeError` about `name` in `qs log`, and that monitor gets its dock back. | any host with an external monitor |
+| Reorder | Drag kitty in front of dolphin. The order changes on both monitors, and `jq .dock.pinnedApps ~/.config/illogical-impulse/config.json` shows the new order after a qs restart. | any host with two monitors |
+| Pin/unpin | Right-click a running unpinned app, pin it: it moves from the running row to the pinned slots. Unpin it: it moves back. Unpin every app: the pinned section and its separator disappear, with no empty gap. | any host |
+| Running indicator | Pin an app whose id has capitals (edit `pinnedApps` in `config.json`, restart qs), launch it: its slot shows the running dots and clicking focuses the window. | any host |
+| Previews | Hover a pinned app with two windows, then an unpinned app with two windows (for example two Firefox windows): each time the popup shows both previews, centred over the icon, on each monitor. Repeat with `pinnedApps` empty: unpinned previews still appear. | any host with two monitors |
+| Monochrome tint | Toggle monochrome icons: pinned and running icons are desaturated and tinted together when on, full colour when off. | any host |
+| Now playing | Play audio in a player with cover art: the card appears with the cover, title and artist; play/pause and next work. Stop the player: the card and its separator disappear. | any host |
+| Options | Before touching anything, the four new switches show as on (the QML defaults fill the keys missing from `config.json`). Toggle each: the background, pin button, apps button and media card appear and disappear, and separators do not double up. | any host |
 | Disabled | Step 3 above. | all three hosts |
 
 taractias checks wait until it has been verified on hardware, as in sub-project

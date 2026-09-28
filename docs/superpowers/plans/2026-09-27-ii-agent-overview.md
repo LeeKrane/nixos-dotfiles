@@ -40,11 +40,12 @@
 
 ### Checking the built source
 
-This block prints the patched ii source path for tariognatha (it is the same block as in sub-project 1):
+This block prints the patched ii source path for the current host (it is the same block as in sub-project 1). The patched ii source is the same on every host (same pinned input, same patches), so checking one host is enough:
 
 ```bash
 cd ~/.dotfiles
-gen=$(nix build --no-link --print-out-paths .#nixosConfigurations.tariognatha.config.home-manager.users.krane.home.activationPackage)
+host=${host:-$(hostname)}
+gen=$(nix build --no-link --print-out-paths .#nixosConfigurations.$host.config.home-manager.users.krane.home.activationPackage)
 iisrc=$(grep -rhoE '/nix/store/[a-z0-9]{32}-dots-hyprland-[a-z-]+' "$gen" | sort -u | head -1)
 echo "$iisrc"
 ```
@@ -213,7 +214,7 @@ git commit -m "Add claude-notify, a desktop notification hook for blocked Claude
 - [ ] **Step 9: Switch and confirm it is on PATH**
 
 ```bash
-cd ~/.dotfiles && sudo nixos-rebuild switch --flake .#tariognatha
+cd ~/.dotfiles && sudo nixos-rebuild switch --flake .#$(hostname)
 command -v claude-notify
 ```
 
@@ -1430,11 +1431,11 @@ These are the spec's manual checks, plus the Review Focus checks. Record each on
 
 **Files:** none, unless Step 12 applies the gate (then `scripts/claude/agents.sh` in the clone, `scripts/ii-agents/test-agents-sh.sh`, `patches/ii/04-agents/0001-*.patch`).
 
-- [ ] **Step 1: Switch tariognatha and restart qs**
+- [ ] **Step 1: Switch the current host and restart qs**
 
 ```bash
 qs log -c ii > $XDG_RUNTIME_DIR/qs-before.log 2>&1 || true
-cd ~/.dotfiles && sudo nixos-rebuild switch --flake .#tariognatha
+cd ~/.dotfiles && sudo nixos-rebuild switch --flake .#$(hostname)
 pkill -f '[q]s-wrapped -c ii'; hyprctl dispatch exec 'qs -c ii'
 sleep 5; qs log -c ii > $XDG_RUNTIME_DIR/qs-after.log 2>&1 || true
 grep -iE 'error|warn|TypeError|ReferenceError' $XDG_RUNTIME_DIR/qs-after.log | sort -u > $XDG_RUNTIME_DIR/qs-after.err
@@ -1592,7 +1593,7 @@ GIT_SEQUENCE_EDITOR=: git rebase -q --autosquash krane/03-dock
 git tag -f krane/04-agents krane
 rm -f ~/.dotfiles/patches/ii/04-agents/*.patch && git -C ~/src/dots-hyprland format-patch --zero-commit --no-signature --no-numbered -o ~/.dotfiles/patches/ii/04-agents krane/03-dock..krane/04-agents
 cd ~/.dotfiles && git add patches/ii/04-agents scripts/ii-agents
-sudo nixos-rebuild switch --flake .#tariognatha
+sudo nixos-rebuild switch --flake .#$(hostname)
 ```
 
 Repeat Step 11 and Step 2. Expected: no daemon remains, and sessions still list while any exist. Commit:
@@ -1609,9 +1610,9 @@ Repeat Task 1, Step 2 with the sidebar closed. Expected: a notification naming t
 
 Only if the user has an Anthropic API key and wants to try it: add the `extraModels` entry from `docs/II-INTEGRATION.md` "Claude in the sidebar chat", `/model` → "Claude Sonnet 5", `/key <key>`, ask a question. Expected: the reply streams. Otherwise record "not run: no API key".
 
-- [ ] **Step 15: Laptops**
+- [ ] **Step 15: The other hosts**
 
-On tarmantria: `sudo nixos-rebuild switch --flake .#tarmantria`, then Steps 1, 2, 3, 4 and 7, and Step 13 if Task 1 added the hook (the package comes with the switch, and the hook entry comes with a `git pull` + `/dotfiles-apply` in `~/.claude` after the user's release). taractias: skip until its hardware is verified (`hosts/taractias/default.nix`), and record that.
+On each other host, as it is next used: `sudo nixos-rebuild switch --flake .#$(hostname)`, then Steps 1, 2, 3, 4 and 7, and Step 13 if Task 1 added the hook (the package comes with the switch, and the hook entry comes with a `git pull` + `/dotfiles-apply` in `~/.claude` after the user's release). taractias waits until its hardware is verified (`hosts/taractias/default.nix`); record that when it applies.
 
 - [ ] **Step 16: Report**
 

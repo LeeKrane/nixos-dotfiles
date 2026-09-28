@@ -26,11 +26,12 @@
 
 ### Checking the built source
 
-Same block as sub-project 1. It prints the patched ii source path for tariognatha:
+Same block as sub-project 1. It prints the patched ii source path for the current host; the patched ii source is the same on every host (same input and patches), so checking one host is enough:
 
 ```bash
 cd ~/.dotfiles
-gen=$(nix build --no-link --print-out-paths .#nixosConfigurations.tariognatha.config.home-manager.users.krane.home.activationPackage)
+host=${host:-$(hostname)}
+gen=$(nix build --no-link --print-out-paths .#nixosConfigurations.$host.config.home-manager.users.krane.home.activationPackage)
 iisrc=$(grep -rhoE '/nix/store/[a-z0-9]{32}-dots-hyprland-[a-z-]+' "$gen" | sort -u | head -1)
 echo "$iisrc"
 ```
@@ -60,7 +61,7 @@ Expected: every line starts with `0`.
 
 The spec's open questions, each taken at its recommended default:
 
-1. **Existing hosts are enabled through the GUI** (Settings, Interface, "Enable translator") or the documented `jq` command. No activation script. A switch alone does not show the tab on tariognatha or tarmantria. Task 2 does the one-time toggle on tariognatha because the scrolling check must run before export; Task 5 does it on tarmantria.
+1. **Existing hosts are enabled through the GUI** (Settings, Interface, "Enable translator") or the documented `jq` command. No activation script. A switch alone does not show the tab on any host that has run ii before. Task 2 does the one-time toggle on the host in use because the scrolling check must run before export; Task 5 repeats it on the other hosts as they come into use.
 2. **The `engine` config key is not wired** into the `trans` command. Google (translate-shell's default) stays.
 3. **Target language stays `auto`** (English from the locale).
 4. **The fixes to the fork's design are included**: no `buttonColor` shadow, per-pill hover tokens, scrolling inside each box.
@@ -638,7 +639,7 @@ Drop when: never (feature, not a fix); revisit if upstream restyles Translator.q
 EOF
 ```
 
-- [ ] **Step 7: Install the three files and enable the tab on tariognatha**
+- [ ] **Step 7: Install the three files and enable the tab on the host in use**
 
 The spec requires the long-text check to pass before this patch is exported. Copy the clone's files over the installed ones (the next switch recopies them from the build), and do the one-time toggle (assumed decision 1). Either click Settings, Interface, "Enable translator", or:
 
@@ -933,15 +934,15 @@ git commit -m "Document the ii translator patch series and how to enable it"
 
 ### Task 5: Switch and runtime acceptance checks
 
-Manual checks from the spec. Record each result (pass, fail, not run and why) in the task report. A failed check means fixing the commit in the clone, not patching around it here: edit the files, `git -C ~/src/dots-hyprland commit -a --fixup=<commit>`, `git -C ~/src/dots-hyprland rebase --autosquash krane/01-fixes` (no `-i` needed since git 2.44), then `git -C ~/src/dots-hyprland tag -f krane/02-translator krane`, export with Task 4, Step 3, and commit the changed patch files.
+Manual checks from the spec. Run every check on the host in use, then the other hosts as they are used; taractias waits until its hardware is verified (`hosts/taractias/default.nix`). Record each result (pass, fail, not run and why) in the task report. A failed check means fixing the commit in the clone, not patching around it here: edit the files, `git -C ~/src/dots-hyprland commit -a --fixup=<commit>`, `git -C ~/src/dots-hyprland rebase --autosquash krane/01-fixes` (no `-i` needed since git 2.44), then `git -C ~/src/dots-hyprland tag -f krane/02-translator krane`, export with Task 4, Step 3, and commit the changed patch files.
 
 **Files:** none changed unless a check fails.
 
-- [ ] **Step 1: Switch tariognatha and compare logs**
+- [ ] **Step 1: Switch the host in use and compare logs**
 
 ```bash
 qs log -c ii > $XDG_RUNTIME_DIR/qs-before.log 2>&1 || true
-cd ~/.dotfiles && sudo nixos-rebuild switch --flake .#tariognatha
+cd ~/.dotfiles && sudo nixos-rebuild switch --flake .#$(hostname)
 pkill -f '[q]s-wrapped -c ii'; hyprctl dispatch exec 'qs -c ii'
 sleep 5; qs log -c ii > $XDG_RUNTIME_DIR/qs-after.log 2>&1 || true
 grep -iE 'error|warn|TypeError|ReferenceError' $XDG_RUNTIME_DIR/qs-after.log | sort -u > $XDG_RUNTIME_DIR/qs-after.err
@@ -953,7 +954,7 @@ jq .sidebar.translator.enable ~/.config/illogical-impulse/config.json
 
 Expected: `comm` and the second `grep` print nothing; `jq` prints `true` (the Task 2 toggle survived the switch). Delete the four `$XDG_RUNTIME_DIR/qs-*` files afterwards.
 
-- [ ] **Step 2: Layout and palette (tariognatha DP-2 and DP-1)**
+- [ ] **Step 2: Layout and palette (each monitor)**
 
 Open the left sidebar on each monitor. Expected: input box on top, then a centred row with source pill, round swap button and target pill, then the output box. The input box and source pill are secondary-container tinted, the swap button tertiary, the output box and target pill primary. Change the wallpaper through ii's selector: all tints follow.
 
@@ -988,19 +989,19 @@ Expected: `sourceLanguage` and `targetLanguage` hold the swapped choices and the
 
 Hover each pill and the swap button. Expected: each changes visibly on hover (each uses its own `…ContainerHover` token). Then set both pills to `Português Brasileiro` (Review Focus 4). Expected: both pills and the swap button are fully visible within the sidebar. If they are not, record it as a fail with a screenshot and report it; do not change the layout in this task. Set both back to `auto`.
 
-- [ ] **Step 6: Readability (tariognatha DP-2)**
+- [ ] **Step 6: Readability**
 
 On one light and one dark wallpaper, read the pill labels and both boxes' text. Expected: easy to read against the 20% tints. A failure is reported (assumed decision 9), not fixed here.
 
-- [ ] **Step 7: tarmantria**
+- [ ] **Step 7: The other host, as it is next used**
 
 ```bash
-cd ~/.dotfiles && sudo nixos-rebuild switch --flake .#tarmantria
+cd ~/.dotfiles && sudo nixos-rebuild switch --flake .#$(hostname)
 ```
 
-Restart qs, then toggle Settings, Interface, "Enable translator" on. Expected: the Translator tab appears after Intelligence without restarting qs. Run Step 1's log comparison, Step 2 (one monitor), Step 3, and Task 2, Step 8 checks 1 to 6 (the spec runs the long-text check, including copy, search, paste and clear, on both hosts).
+Restart qs, then toggle Settings, Interface, "Enable translator" on. Expected: the Translator tab appears after Intelligence without restarting qs. Run Step 1's log comparison, Step 2, Step 3, and Task 2, Step 8 checks 1 to 6 (the spec runs the long-text check, including copy, search, paste and clear, on every host).
 
-- [ ] **Step 8: Missing-key default (tarmantria)**
+- [ ] **Step 8: Missing-key default (the other host)**
 
 ```bash
 f=~/.config/illogical-impulse/config.json

@@ -299,13 +299,13 @@ The materialyoucolor bullet in its "Patched files" list moves there.
 
 | Fix | Check | Hosts |
 |---|---|---|
-| `05b50d9` | Open the wallpaper selector (the only user of `ThumbnailImage` at the pin) twice with an empty thumbnail cache. The second open spawns no `magick` process (`pgrep -c magick` stays 0). | tariognatha |
-| `6f1dc5f` | Swipe away a notification group of 10 or more. The rest slide up with no visible freeze. | tariognatha |
-| `2cf76f8` | Truncate the saved notifications file, restart qs. It starts, and the log shows the handled parse error instead of a crash. | tariognatha |
-| `342a45b`, `eb76c3d` | Dismiss notifications with and without actions. No `TypeError` in the log. | tariognatha |
-| `d116eef` | Reconnect the JBL headset and play audio. Whenever `busctl get-property org.bluez <device path> org.bluez.Device1 Connected` reports `false` during playback, ii still shows the device as connected. If the BlueZ bug does not reproduce, confirm connect and disconnect still show correctly. | tariognatha |
-| `1b51f7a` | Add a temporary `console.log` counter to the refresh function. Drag a window for 10 s before and after the patch: the count drops. Workspaces and the active-window title still update. | tariognatha |
-| `1b51f7a` (hotplug) | Unplug and replug DP-1, and run `hyprctl reload`. The bar leaves and returns, and workspaces stay on the right monitors, without restarting qs. On the laptops, repeat with an external monitor if one is available; otherwise note the check as not run. | tariognatha, laptops if possible |
+| `05b50d9` | Open the wallpaper selector (the only user of `ThumbnailImage` at the pin) twice with an empty thumbnail cache. The second open spawns no `magick` process (`pgrep -c magick` stays 0). | any host |
+| `6f1dc5f` | Swipe away a notification group of 10 or more. The rest slide up with no visible freeze. | any host |
+| `2cf76f8` | Truncate the saved notifications file, restart qs. It starts, and the log shows the handled parse error instead of a crash. | any host |
+| `342a45b`, `eb76c3d` | Dismiss notifications with and without actions. No `TypeError` in the log. | any host |
+| `d116eef` | Reconnect the JBL headset and play audio. Whenever `busctl get-property org.bluez <device path> org.bluez.Device1 Connected` reports `false` during playback, ii still shows the device as connected. If the BlueZ bug does not reproduce, confirm connect and disconnect still show correctly. | any host with the Bluetooth headset |
+| `1b51f7a` | Add a temporary `console.log` counter to the refresh function. Drag a window for 10 s before and after the patch: the count drops. Workspaces and the active-window title still update. | any host |
+| `1b51f7a` (hotplug) | Unplug and replug an external monitor (name from `hyprctl monitors`), and run `hyprctl reload`. The bar leaves and returns, and workspaces stay on the right monitors, without restarting qs. If the host has no external monitor, note the check as not run. | any host with an external monitor |
 
 taractias has not yet been verified on its real hardware (see
 `hosts/taractias/default.nix`). Checks there wait until it has been.

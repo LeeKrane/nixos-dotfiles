@@ -598,7 +598,7 @@ standard-library only.
     non-null there. `output`, `mode`, `position` and `scale` always count as
     set, since they have defaults. The GUI may only fill the null fields
     (`transform`, `vrr`, `bitdepth`, `cm`, the SDR and HDR luminance
-    fields). So on tariognatha today, HDR and color management are
+    fields). So on any host today, HDR and color management are
     GUI-editable, while resolution, scale and position are shown with "Set
     in Nix".
   - **For an output not in `krane.hypr.monitors`,** the GUI owns the whole
@@ -704,10 +704,10 @@ standard-library only.
      validation, sparse write, no-op on unchanged content, refusal on bad
      JSON, locked key, unknown key, render golden files);
    - `ii-settings-render`: renders a fixture JSON with every schema key and
-     every monitor field against tariognatha's manifest, then runs `luac -p`.
+     every monitor field against each host's manifest, then runs `luac -p`.
 2. `nixos-rebuild dry-build --flake .#<host>` for all three hosts.
-3. `nix eval` of the rendered `custom/krane_gui.lua` for tariognatha with
-   `{}`. It must contain only the header.
+3. `nix eval` of the rendered `custom/krane_gui.lua` for all three hosts
+   with `{}`. Each must contain only the header.
 
 ### Runtime, every phase and every host
 
@@ -722,25 +722,25 @@ standard-library only.
 | Quick, General, Bar, Background, Interface, Services | Change one control per page. `git -C ~/.dotfiles diff hosts/<host>/illogical-impulse/config.json` shows exactly that key. The value survives a switch and a reboot. | all |
 | Directory symlink | `readlink ~/.config/illogical-impulse` points at the repo. After a wallpaper change (`switchwall.sh`) it is still a symlink, and `config.json` in the repo has the new `wallpaperPath`. | all |
 | Migration | On a host with a real `~/.config/illogical-impulse`, the first switch copies it into the repo, and `illogical-impulse.hm-bak` exists. | tarmantria first |
-| General 12h clock | Toggle to 12h and lock with hyprlock (`hyprlock` directly). The clock shows AM/PM. After a switch, the setting is still correct without opening settings. | tariognatha |
+| General 12h clock | Toggle to 12h and lock with hyprlock (`hyprlock` directly). The clock shows AM/PM. After a switch, the setting is still correct without opening settings. | any host |
 | About | Shows the pin rev and `~/.dotfiles`. There are no update buttons. | all |
-| Profile | Display name persists in the repo config.json. The hostname field is read-only. | tariognatha |
-| Autostart | Add an app, reboot. It starts on the next boot and the one after, and there is no lock file in `/tmp`. | tariognatha |
+| Profile | Display name persists in the repo config.json. The hostname field is read-only and shows the current host's name. | any host |
+| Autostart | Add an app, reboot. It starts on the next boot and the one after, and there is no lock file in `/tmp`. | any host |
 | Visual (gaps, rounding, blur, opacity, border size) | Set `general:gaps_in` to 12. `hyprctl getoption general:gaps_in` shows 12 within 1 s, and the repo JSON shows the key. Reset: the key is gone and the value is back to the baseline without a switch. Set it again, switch twice, reboot: still 12. | all |
 | Input (repeat, follow mouse, numlock, touchpad) | As for Visual. Touchpad keys on the laptops only. | all, touchpad on laptops |
 | Ownership | The keyboard layout control is disabled with "Set in Nix". `krane-ii-settings set hyprland input:kb_layout us` exits non-zero. A hand-edited JSON with that key fails `nix flake check`, naming both files. Also: set gaps in the GUI, then add `general.gaps_in` to `display.nix`. `nix flake check` fails naming both. | all |
-| External edit | Change `general:gaps_in` in the repo JSON by hand while settings is open. The "changed outside settings" notice appears. Apply now sets the live value. With no Apply, nothing changes until a switch. | tariognatha |
+| External edit | Change `general:gaps_in` in the repo JSON by hand while settings is open. The "changed outside settings" notice appears. Apply now sets the live value. With no Apply, nothing changes until a switch. | any host |
 | Migration conflict | With differing `config.json` in both the real dir and the repo dir, the switch fails before changing anything and names both paths. A dry run prints the same thing. | tarmantria |
-| Game mode interplay | With gaps set to 12 in the GUI, toggle game mode on (gaps 0) and off: gaps are back to 12. | tariognatha |
-| Border colors | Enable custom colors, change the wallpaper: borders follow the palette. The repo `ii-settings.json` has no diff. After a switch, the custom colors are back with no qs restart. `shellOverrides/main.lua` is not rewritten in a loop (`inotifywait` shows at most one write per change). | tariognatha |
-| Animation presets | Pick "fast": `krane_gui.lua` contains the require, and window-open animations change. There is no "add a require line" notice. Switch: it persists. | tariognatha |
+| Game mode interplay | With gaps set to 12 in the GUI, toggle game mode on (gaps 0) and off: gaps are back to 12. | any host |
+| Border colors | Enable custom colors, change the wallpaper: borders follow the palette. The repo `ii-settings.json` has no diff. After a switch, the custom colors are back with no qs restart. `shellOverrides/main.lua` is not rewritten in a loop (`inotifywait` shows at most one write per change). | any host |
+| Animation presets | Pick "fast": `krane_gui.lua` contains the require, and window-open animations change. There is no "add a require line" notice. Switch: it persists. | any host |
 | Idle | On a laptop, set lock 60 and suspend 0. `hypridle.conf` has one lock listener at 60 and no suspend listener. hypridle restarted (new PID). Idle 60 s locks. Switch twice: still so. On tariognatha, the idle controls are disabled with "Set in Nix". | tarmantria, tariognatha |
-| Displays: ownership | On tariognatha, DP-1 resolution, scale and position are disabled ("Set in Nix"), and its HDR and color fields are editable. | tariognatha |
-| Displays: revert | With an external monitor that is not in `display.nix`, change its position (on a laptop's Nix-declared eDP-1, change its transform instead: position is Nix-owned) and wait 15 s: it reverts and the repo has no diff. Change it again, then `pkill -f settings.qml` inside the window: it still reverts (the timer is outside the UI). Change it and confirm: the repo JSON has the entry with `bootConfirmed: false`. Reboot and unlock: the dialog appears. Keep clears the flag. Let a second change time out after reboot: it is removed from the repo. | tarmantria, tariognatha if an extra output is available |
-| Displays: HDR | On DP-2, turn on HDR: `hyprctl monitors -j` shows `colorManagementPreset` `hdr` and a 10-bit format, or the change is reverted by the timer. If kept, it survives a cold boot (first-boot check confirmed). SDR brightness changes are visible. | tariognatha |
+| Displays: ownership | On any host, a Nix-declared output's resolution, scale and position are disabled ("Set in Nix"), and its HDR and color fields are editable. | any host |
+| Displays: revert | With an external monitor that is not in `display.nix`, change its position (on a laptop's Nix-declared eDP-1, change its transform instead: position is Nix-owned) and wait 15 s: it reverts and the repo has no diff. Change it again, then `pkill -f settings.qml` inside the window: it still reverts (the timer is outside the UI). Change it and confirm: the repo JSON has the entry with `bootConfirmed: false`. Reboot and unlock: the dialog appears. Keep clears the flag. Let a second change time out after reboot: it is removed from the repo. | tarmantria; any host with an extra display output beyond those in `display.nix` |
+| Displays: HDR | On an HDR-capable output, turn on HDR: `hyprctl monitors -j` shows `colorManagementPreset` `hdr` and a 10-bit format, or the change is reverted by the timer. If kept, it survives a cold boot (first-boot check confirmed). SDR brightness changes are visible. | any host with an HDR-capable display |
 | Displays: laptop | eDP-1 scale, mode and position are disabled ("Set in Nix"); a transform change and its revert work. HDR controls are hidden (no EDID HDR). | tarmantria; taractias once verified |
-| Parse error | Put a conflict marker in `ii-settings.json` and change gaps in the GUI. An error is shown, the file is untouched, and gaps are unchanged. | tariognatha |
-| Hyprland rejects a value | Temporarily add a bad key to the schema in a dev build and set it. The writer reverts and reports the error, and `hyprctl configerrors` ends empty. | tariognatha, dev only |
+| Parse error | Put a conflict marker in `ii-settings.json` and change gaps in the GUI. An error is shown, the file is untouched, and gaps are unchanged. | any host |
+| Hyprland rejects a value | Temporarily add a bad key to the schema in a dev build and set it. The writer reverts and reports the error, and `hyprctl configerrors` ends empty. | any host, dev only |
 
 taractias checks wait until its hardware is verified, as in the fixes spec.
 

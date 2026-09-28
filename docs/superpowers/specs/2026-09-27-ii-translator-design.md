@@ -297,14 +297,14 @@ target `auto`. The language pickers already save the user's choice into
 
 | Check | Hosts |
 |---|---|
-| Layout is input, centred source/swap/target row, output. Boxes and pills are tinted from the wallpaper palette; change the wallpaper and the tints follow. | tariognatha (both monitors), tarmantria |
-| Type "Bonjour le monde": after about 300 ms the output shows "Hello world". | tariognatha, tarmantria |
-| Pick source `fr` and target `de`, translate, then press swap: the pills swap, the output re-translates, and after restarting qs both choices persist (`jq .language.translator ~/.config/illogical-impulse/config.json`). | tariognatha |
-| Hover each pill and the swap button: each shows a visible hover change. | tariognatha |
-| Paste a 1500-character paragraph: the input scrolls, the caret stays visible while typing at the end, the output scrolls, and the character count, paste, clear, copy and search buttons stay visible and work. | tariognatha, tarmantria |
-| Empty input: the counter shows "0 characters" and no `TypeError` appears in the log. | tariognatha |
+| Layout is input, centred source/swap/target row, output. Boxes and pills are tinted from the wallpaper palette; change the wallpaper and the tints follow. | every host, each monitor on a host with more than one |
+| Type "Bonjour le monde": after about 300 ms the output shows "Hello world". | any host |
+| Pick source `fr` and target `de`, translate, then press swap: the pills swap, the output re-translates, and after restarting qs both choices persist (`jq .language.translator ~/.config/illogical-impulse/config.json`). | any host |
+| Hover each pill and the swap button: each shows a visible hover change. | any host |
+| Paste a 1500-character paragraph: the input scrolls, the caret stays visible while typing at the end, the output scrolls, and the character count, paste, clear, copy and search buttons stay visible and work. | any host |
+| Empty input: the counter shows "0 characters" and no `TypeError` appears in the log. | any host |
 | Missing-key default: copy `config.json` to a backup, remove only the key with `jq 'del(.sidebar.translator.enable)'`, restart qs, and confirm the tab is present. The key is not expected back in the file yet: ii writes `config.json` only after an option changes (`onAdapterUpdated`), so it reappears as `true` after the next settings change. Restore the backup afterwards. The rest of the file is never moved or regenerated. | tarmantria |
-| Readability: on one light and one dark wallpaper, the pill and box text are easy to read against the 20% tints. | tariognatha DP-2 |
+| Readability: on one light and one dark wallpaper, the pill and box text are easy to read against the 20% tints. | any host |
 
 taractias checks wait until it is verified on its hardware, as in sub-project 1.
 

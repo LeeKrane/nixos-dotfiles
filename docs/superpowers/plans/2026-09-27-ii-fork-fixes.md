@@ -34,11 +34,12 @@
 
 ### Checking the built source
 
-Several steps check what Nix actually built. This block prints the patched ii source path for tariognatha:
+Several steps check what Nix actually built. This block prints the patched ii source path for the current host; the patched ii source is the same on every host (same input and patches), so checking one host is enough:
 
 ```bash
 cd ~/.dotfiles
-gen=$(nix build --no-link --print-out-paths .#nixosConfigurations.tariognatha.config.home-manager.users.krane.home.activationPackage)
+host=${host:-$(hostname)}
+gen=$(nix build --no-link --print-out-paths .#nixosConfigurations.$host.config.home-manager.users.krane.home.activationPackage)
 iisrc=$(grep -rhoE '/nix/store/[a-z0-9]{32}-dots-hyprland-[a-z-]+' "$gen" | sort -u | head -1)
 echo "$iisrc"
 ```
@@ -1026,17 +1027,17 @@ git commit -m "Document the backported end4-pC fix series and its workflow"
 
 ### Task 7: Switch and runtime acceptance checks
 
-Manual checks from the spec. Record each result (pass, fail, not run and why) in the task report. A failed check means dropping that fix's commit in the clone (`git -C ~/src/dots-hyprland rebase --onto "$C^" "$C" krane`, with `C` the fix's commit), moving the tag (`git tag -f krane/01-fixes krane`), exporting with the loop from Task 6, and committing the removal; do not patch around it here.
+Manual checks from the spec. Run every check on the host in use, then the other hosts as they are used; taractias waits until its hardware is verified (`hosts/taractias/default.nix`). Record each result (pass, fail, not run and why) in the task report. A failed check means dropping that fix's commit in the clone (`git -C ~/src/dots-hyprland rebase --onto "$C^" "$C" krane`, with `C` the fix's commit), moving the tag (`git tag -f krane/01-fixes krane`), exporting with the loop from Task 6, and committing the removal; do not patch around it here.
 
 **Files:** none changed unless a fix is dropped.
 
-- [ ] **Step 1: Switch tariognatha and capture the baseline log**
+- [ ] **Step 1: Switch the host in use and capture the baseline log**
 
 Before switching, save the current log for comparison:
 
 ```bash
 qs log -c ii > $XDG_RUNTIME_DIR/qs-before.log 2>&1 || true
-cd ~/.dotfiles && sudo nixos-rebuild switch --flake .#tariognatha
+cd ~/.dotfiles && sudo nixos-rebuild switch --flake .#$(hostname)
 ```
 
 - [ ] **Step 2: Restart qs and compare logs**
@@ -1122,12 +1123,8 @@ qs log -c ii | grep -c 'hyprland refresh'
 
 Expected: far fewer refreshes than 10 s of events (roughly one per 60 ms at most, and none while the window is still). Afterwards `git -C ~/src/dots-hyprland checkout -- .` and switch again to restore the built file.
 
-Hotplug: unplug DP-1, wait, plug it back, then run `hyprctl reload`. Expected: the bar leaves and returns and workspaces stay on the right monitors, with no qs restart.
+Hotplug: unplug and replug an external monitor (name from `hyprctl monitors`), then run `hyprctl reload`. Expected: the bar leaves and returns and workspaces stay on the right monitors, with no qs restart. If the host in use has no external monitor available, record this part as not run.
 
-- [ ] **Step 8: Laptops**
-
-On tarmantria: `sudo nixos-rebuild switch --flake .#tarmantria`, then Steps 2, 3 and 4. Run the hotplug part of Step 7 if an external monitor is available; otherwise record it as not run. taractias: skip until its hardware is verified (`hosts/taractias/default.nix`), and record that.
-
-- [ ] **Step 9: Report**
+- [ ] **Step 8: Report**
 
 List each check with pass, fail or not run. No commit unless a fix was dropped.
