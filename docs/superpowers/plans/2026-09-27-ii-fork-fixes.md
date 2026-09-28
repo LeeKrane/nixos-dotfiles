@@ -714,7 +714,7 @@ git apply --ignore-whitespace <<'EOF'
      }
  
      Connections {
-@@ -88,7 +135,25 @@
+@@ -88,7 +135,33 @@
  
          function onRawEvent(event) {
              // console.log("Hyprland raw event:", event.name);
@@ -725,15 +725,23 @@ git apply --ignore-whitespace <<'EOF'
 +
 +            if (name === "openlayer" || name === "closelayer") {
 +                root.queueUpdate(false, false, false, true);
-+            } else if (name.startsWith("workspace") || name.startsWith("createworkspace") || name.startsWith("destroyworkspace") || name.startsWith("moveworkspace") || name === "renameworkspace") {
++            } else if (name.startsWith("moveworkspace")) {
++                // Background.qml filters its window list by win.monitor, so a
++                // workspace moving to another monitor needs fresh clients too.
++                root.queueUpdate(true, true, true, false);
++            } else if (name.startsWith("workspace") || name.startsWith("createworkspace") || name.startsWith("destroyworkspace") || name === "renameworkspace") {
 +                root.queueUpdate(false, true, true, false);
 +            } else if (name.startsWith("openwindow") || name.startsWith("closewindow") || name.startsWith("movewindow")) {
 +                root.queueUpdate(true, true, false, false);
-+            } else if (name.startsWith("window") || name.startsWith("activewindow") || name === "changefloatingmode" || name === "pin" || name === "urgent" || name === "minimize") {
++            } else if (name.startsWith("window") || name.startsWith("activewindow") || name === "changefloatingmode" || name === "pin" || name === "urgent" || name === "minimized") {
 +                root.queueUpdate(true, false, false, false);
 +            } else if (name === "fullscreen") {
 +                root.queueUpdate(true, true, false, false);
-+            } else if (name.startsWith("monitor") || name === "focusedmon") {
++            } else if (name.startsWith("monitor")) {
++                // monitoradded[v2]/monitorremoved[v2]: hotplug can also
++                // reshuffle which clients report which monitor.
++                root.queueUpdate(true, true, true, false);
++            } else if (name === "focusedmon") {
 +                root.queueUpdate(false, true, true, false);
 +            } else if (name.startsWith("activespecial")) {
 +                root.queueUpdate(false, true, true, false);
@@ -752,8 +760,7 @@ cd ~/src/dots-hyprland
 git apply --ignore-whitespace <<'EOF'
 --- a/dots/.config/quickshell/ii/services/HyprlandData.qml
 +++ b/dots/.config/quickshell/ii/services/HyprlandData.qml
-@@ -151,7 +151,12 @@
-             } else if (name.startsWith("monitor") || name === "focusedmon") {
+@@ -160,6 +160,11 @@
                  root.queueUpdate(false, true, true, false);
              } else if (name.startsWith("activespecial")) {
                  root.queueUpdate(false, true, true, false);
@@ -793,7 +800,7 @@ Backport of pctrade/end4-pC 1b51f7a, plus the intent of 204f22f
 https://github.com/pctrade/end4-pC/commit/1b51f7a
 https://github.com/pctrade/end4-pC/commit/204f22f
 Problem: every raw Hyprland event ran all five hyprctl queries; dragging a window fires dozens of events per second.
-Port: hand-ported. Dropped the fork's WM.compositor guards (no compositor abstraction at the pin). Added a configreloaded branch that refreshes monitors and workspaces; 204f22f itself only changes a fork-only settings component. Widened the fork's routing so workspace and activespecial events also refresh monitors, fullscreen refreshes workspaces, and openlayer/closelayer refresh layers, since consumers read those.
+Port: hand-ported. Dropped the fork's WM.compositor guards (no compositor abstraction at the pin). Added a configreloaded branch that refreshes monitors and workspaces; 204f22f itself only changes a fork-only settings component. Widened the fork's routing so workspace and activespecial events also refresh monitors, fullscreen refreshes workspaces, and openlayer/closelayer refresh layers, since consumers read those. Also refreshes clients on moveworkspace and monitor hotplug, and matches Hyprland's minimized event name.
 Drop when: the pinned services/HyprlandData.qml debounces onRawEvent.
 EOF
 ```
