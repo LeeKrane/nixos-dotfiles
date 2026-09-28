@@ -207,12 +207,6 @@ Besides the owned/appended Hyprland files above, `kraneIiPatches` (also
 writes or wipes on every switch, guarded by `[ -f "<file>" ]` so a missing
 file is skipped rather than failing activation:
 
-- `~/.config/quickshell/ii/scripts/colors/generate_colors_material.py`:
-  `s/primary_paletteKeyColor/primaryPaletteKeyColor/g`. ii's pinned rev
-  reads the old `materialyoucolor` key name; nixpkgs' packaged
-  `materialyoucolor` (3.0.4) renamed it, so unpatched `switchwall.sh`
-  throws `KeyError` and leaves `material_colors.scss` empty. Remove once
-  the pinned rev or the packaged version makes the names agree again.
 - `~/.config/fish/config.fish`:
   `s|^\(\s*\)cat \(~/.local/state/quickshell/user/generated/terminal/sequences.txt\)|\1command cat \2|`.
   `modules/nixos/shells.nix` aliases `cat` to `bat --color=always` at
@@ -263,6 +257,94 @@ That file holds fish's universal variables, including
 fish's 4.3 upgrade notice and `conf.d/fish_frozen_key_bindings.fish` on
 every new terminal after each activation. The backup lives at
 `~/.local/state/krane/fish_variables`.
+
+## Backported fork fixes
+
+`patches/ii/` holds one `git format-patch` series per sub-project:
+`01-fixes` (fixes from [pctrade/end4-pC](https://github.com/pctrade/end4-pC)),
+then `02-translator`, `03-dock`, `04-agents` and `05-settings` as they land.
+`lib/mk-host.nix` applies them with `applyPatches`, after the cheatsheet
+patch, to build the `dots-hyprland-patched` source the soymou module copies:
+directories in lexical order, and the files in each directory in lexical
+order, which is commit order. The table below covers `01-fixes`. Each patch's commit message records the fork
+commit, the problem, how it was ported and when to drop it.
+
+| Patch | Fork commit | Port | Drop when |
+|---|---|---|---|
+| `0001` thumbnail temp file + `mv` | `05b50d9` | clean | pinned `ThumbnailImage.qml` writes via a temp file |
+| `0002` notification discard freeze | `6f1dc5f` | clean | pinned `Notifications.qml` no longer uses `list.splice()` to discard |
+| `0003` corrupt notifications file | `2cf76f8` | clean | pinned `Notifications.qml` wraps the file `JSON.parse` in try/catch |
+| `0004` null notification timer | `342a45b` | clean | pinned `cancelTimeout` checks for null |
+| `0005` undefined notification action | `eb76c3d` | clean | pinned `attemptInvokeAction` checks for undefined |
+| `0006` materialyoucolor key name | `3dad196` | clean | pinned `generate_colors_material.py` reads `primaryPaletteKeyColor` |
+| `0007` BlueZ connected state | `d116eef` | hand-ported | bluez#2485 fixed, or pinned `BluetoothStatus.qml` counts `batteryAvailable` |
+| `0008` Hyprland IPC debounce | `1b51f7a` (+ `204f22f` intent) | hand-ported, routing widened | pinned `HyprlandData.qml` debounces `onRawEvent` |
+
+Not portable: `37a9fab` (optimizes CPU-temperature and disk readers that the
+pinned `ResourceUsage.qml` does not have), `204f22f` as its own patch (it
+changes only a fork-only settings component) and `9c7b0e1` (the pinned
+`Background.qml` wallpaper is a `StyledImage`, which already decodes at the
+rendered size times the device pixel ratio; the fork's other hunks touch
+fork-only files or a fork-only config key).
+
+### Workflow
+
+The clone at `~/src/dots-hyprland` is a disposable workspace; the patch files
+are the source of truth. One local branch, `krane`, holds every sub-project's
+commits in order. A lightweight tag `krane/<dir>` (for example
+`krane/01-fixes`) marks the last commit of each sub-project; the tags exist
+only in the clone and are recreated by the apply loop. `git rerere` records
+each conflict resolution so the next pin bump replays it.
+
+```sh
+PIN=$(jq -r '.nodes."dots-hyprland".locked.rev' ~/.dotfiles/flake.lock)
+git clone https://github.com/end-4/dots-hyprland ~/src/dots-hyprland   # once
+cd ~/src/dots-hyprland
+git config rerere.enabled true
+git fetch origin
+git switch -C krane "$PIN"
+# apply every series in order and tag the end of each
+for d in ~/.dotfiles/patches/ii/*/; do
+  git am -3 "$d"*.patch || break   # on a conflict: resolve, `git am --continue`, tag, resume from the next directory
+  git tag -f "krane/$(basename "$d")"
+done
+# add, edit or drop commits with ordinary git commands, then move any tag
+# whose commit was rewritten (tags do not follow a rebase)
+# export every series again
+prev="$PIN"
+for d in ~/.dotfiles/patches/ii/*/; do
+  n=$(basename "$d")
+  rm -f "$d"*.patch
+  git format-patch --zero-commit --no-signature --no-numbered -o "$d" "$prev..krane/$n"
+  prev="krane/$n"
+done
+```
+
+A new sub-project creates its `patches/ii/NN-<name>/` directory and tags its
+last commit `krane/NN-<name>` before exporting. Nothing in `lib/mk-host.nix`
+changes.
+
+On a pin bump, run `nix flake update dots-hyprland` first, then the same
+steps. `git am -3` stops at a conflict; resolve it with git's tools and run
+`git am --continue`. A patch that no longer applies otherwise fails the
+`applyPatches` build, and `nixos-rebuild` names the file.
+
+To remove one fix, drop its commit (`git am --skip` while re-applying, or
+`git rebase -i` afterwards) and export again. Deleting a patch file directly
+only works when no later patch changes the same file.
+
+### When to stop using patches
+
+Stay with patch series (decided in the settings spec,
+`docs/superpowers/specs/2026-09-27-ii-settings-design.md`). Re-evaluate a
+private fork of dots-hyprland as the flake input if:
+
+- a pin bump needs more than 5 hand-resolved conflict hunks, or more than one
+  sitting; or
+- the user sets up a private remote that every host and the docker check can
+  already reach; or
+- upstream ii ships its own rewrite of settings that overlaps the settings
+  port.
 
 ## Verifying on the target
 
