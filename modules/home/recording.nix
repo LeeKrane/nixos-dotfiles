@@ -3,8 +3,16 @@
 # listens for gsr-ui-cli commands; everything below drives that daemon through Hyprland binds
 # instead of gsr-ui's own native evdev hotkeys, so upstream ii's wf-recorder binds are unbound
 # to free the keys and gsr-ui's config is seeded to disable its own hotkey grabbing.
-{ lib, pkgs, ... }:
+{
+  lib,
+  pkgs,
+  osConfig,
+  ...
+}:
 let
+  # PRIME offload hosts (tarmantria) switch the recorder between GPUs; this comes from the host
+  # config rather than sysfs, so an NVIDIA desktop with an enabled iGPU is not taken for one.
+  primeOffload = osConfig.hardware.nvidia.prime.offload.enable or false;
   # Seed content for ~/.config/gpu-screen-recorder/config_ui, verified against
   # gpu-screen-recorder-ui's own Config.cpp: config_ui is a flat "key value" (single space,
   # no "=") file, one setting per line (parse_key_value, Config.cpp ~L165); keys the file
@@ -63,6 +71,8 @@ let
       pkgs.util-linux
     ];
     text = ''
+      prime_offload=${if primeOffload then "1" else "0"}
+
       on_mains() {
         local ps type have_battery=0
         for ps in /sys/class/power_supply/*; do
@@ -80,20 +90,31 @@ let
 
       # Prints nvidia-offload, nvidia or default.
       pick_mode() {
-        local card nvidia=0 other=0
+        local card nvidia=0
         for card in /sys/class/drm/card[0-9]*; do
           # Skip connectors (card1-eDP-1) and non-PCI framebuffers (simpledrm has no vendor).
           [[ $(basename "$card") == *-* ]] && continue
           [ -r "$card/device/vendor" ] || continue
-          if [ "$(<"$card/device/vendor")" = 0x10de ]; then nvidia=1; else other=1; fi
+          [ "$(<"$card/device/vendor")" = 0x10de ] && nvidia=1
         done
-        if [ "$nvidia" = 1 ] && [ "$other" = 0 ]; then
+        if [ "$nvidia" = 0 ]; then
+          echo default
+        elif [ "$prime_offload" = 0 ]; then
           echo nvidia
-        elif [ "$nvidia" = 1 ] && on_mains; then
+        elif on_mains; then
           echo nvidia-offload
         else
           echo default
         fi
+      }
+
+      log() { logger -t gsr-ui-power "$*" || true; }
+
+      # Hyprland's exec_cmd detaches this script and logind keeps leftover processes, so a
+      # logout or compositor restart does not stop it. Leave once the compositor is gone.
+      session_alive() {
+        [ -d "$XDG_RUNTIME_DIR/hypr/''${HYPRLAND_INSTANCE_SIGNATURE:-}" ] &&
+          [ -S "$XDG_RUNTIME_DIR/''${WAYLAND_DISPLAY:-}" ]
       }
 
       # gsr-ui runs in its own session (setsid), so its pid is also its process group id. It
@@ -110,7 +131,16 @@ let
         kill -KILL -- "-$gsr_pid" 2>/dev/null || true
         gsr_pid=""
       }
-      trap 'stop_gsr; exit 0' TERM INT
+
+      # A regular recording (a recorder without -r, which replay uses) holds unsaved work, so a
+      # mode switch waits for it to end. Replay restarts with gsr-ui, so it does not block.
+      recording_active() {
+        local pid
+        for pid in $(pgrep -g "$gsr_pid" -x gpu-screen-reco || true); do
+          tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | grep -q -- ' -r ' || return 0
+        done
+        return 1
+      }
 
       start_gsr() {
         local mode=$1
@@ -120,25 +150,44 @@ let
           setsid gsr-ui &
         fi
         gsr_pid=$!
-        logger -t gsr-ui-power "started gsr-ui in $mode mode"
+        log "started gsr-ui in $mode mode"
       }
+
+      udev_pid=""
+      cleanup() {
+        stop_gsr
+        [ -z "$udev_pid" ] || kill "$udev_pid" 2>/dev/null || true
+      }
+      trap 'exit 0' TERM INT
+      trap cleanup EXIT
 
       mode=$(pick_mode)
       start_gsr "$mode"
 
-      # Power plug events arrive as power_supply change uevents. Each line re-checks the mode;
-      # gsr-ui restarts only when the mode actually differs. A dead gsr-ui is restarted too.
-      # Process substitution, not a pipe, keeps the loop in this shell so the TERM trap sees
-      # the current gsr_pid.
-      while read -r _; do
-        sleep 2
+      # Power plug events arrive as power_supply change uevents; the 30 s read timeout also
+      # wakes the loop without them (a desktop has none), so a crashed gsr-ui comes back and a
+      # dead compositor is noticed. gsr-ui restarts only when it died or the mode differs.
+      exec 3< <(udevadm monitor --udev --subsystem-match=power_supply)
+      udev_pid=$!
+      while :; do
+        if read -r -t 30 _ <&3; then
+          sleep 2
+        elif [ $? -le 128 ]; then
+          log "udevadm monitor ended, stopping"
+          exit 1
+        fi
+        session_alive || { log "compositor gone, stopping"; exit 0; }
         new=$(pick_mode)
-        if [ "$new" != "$mode" ] || ! kill -0 "$gsr_pid" 2>/dev/null; then
+        if ! kill -0 "$gsr_pid" 2>/dev/null; then
+          stop_gsr
+          mode=$new
+          start_gsr "$mode"
+        elif [ "$new" != "$mode" ] && ! recording_active; then
           stop_gsr
           mode=$new
           start_gsr "$mode"
         fi
-      done < <(udevadm monitor --udev --subsystem-match=power_supply)
+      done
     '';
   };
 in
