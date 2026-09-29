@@ -1,0 +1,11 @@
+--- a/depends/mglpp/depends/mgl/src/window/wayland.c
++++ b/depends/mglpp/depends/mgl/src/window/wayland.c
+@@ -1829,7 +1829,7 @@
+             const int32_t logical_w = (self->size.x * 120 + s120 / 2) / s120;
+             const int32_t logical_h = (self->size.y * 120 + s120 / 2) / s120;
+             wp_viewport_set_destination(impl->viewport, logical_w, logical_h);
+-        } else {
++        } else if(!impl->fractional_scale) {
+             /* No fractional-scale path. Fall back to the legacy integer wl_output.scale.
+                Pick the scale of the target output (or the highest among all outputs
+                if none was specified). */
