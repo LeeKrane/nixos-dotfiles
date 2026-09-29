@@ -12,11 +12,11 @@ Drop when: never (feature, not a fix); revisit if upstream restyles Translator.q
 ---
  .../ii/modules/ii/sidebarLeft/Translator.qml  | 178 +++++++++++-------
  .../translator/LanguageSelectorButton.qml     |   9 +-
- .../ii/sidebarLeft/translator/TextCanvas.qml  |  99 ++++++----
- 3 files changed, 180 insertions(+), 106 deletions(-)
+ .../ii/sidebarLeft/translator/TextCanvas.qml  | 101 ++++++----
+ 3 files changed, 182 insertions(+), 106 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
-index bbb2ac23..98803d1b 100644
+index 994880eb..bde79536 100644
 --- a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
 @@ -39,6 +39,18 @@ Item {
@@ -245,10 +245,10 @@ index f23e3b84..54d829ff 100644
      contentItem: Item {
          anchors.centerIn: parent
 diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml
-index ec6fbe26..d6f7a453 100644
+index ec6fbe26..234033c5 100644
 --- a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml
-@@ -11,57 +11,92 @@ Rectangle {
+@@ -11,57 +11,94 @@ Rectangle {
      property bool isInput: true // true for input, false for output
      property string placeholderText
      property string text: ""
@@ -272,7 +272,7 @@ index ec6fbe26..d6f7a453 100644
 +    function ensureVisible(r, margin) {
 +        const f = textFlickable;
 +        if (f.height <= 0) return;
-+        let y = f.contentY;
++        let y = f.scrollTargetY;
 +        if (r.y - margin < y)
 +            y = r.y - margin;
 +        else if (r.y + r.height + margin > y + f.height)
@@ -280,7 +280,9 @@ index ec6fbe26..d6f7a453 100644
 +        // No upper clamp: contentHeight can lag one layout pass behind the
 +        // caret while typing at the end, and Flickable fixes contentY up to
 +        // its bounds when contentHeight changes.
-+        f.contentY = Math.max(0, y);
++        y = Math.max(0, y);
++        f.scrollTargetY = y;
++        f.contentY = y;
 +    }
 +
      ColumnLayout {

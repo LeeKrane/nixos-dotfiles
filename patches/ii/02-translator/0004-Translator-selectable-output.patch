@@ -7,14 +7,24 @@ Problem: the output box rendered the translation as plain Text, so it could not 
 Port: new. The output is a read-only StyledTextArea with the input box's settings, and it follows the caret while it has focus so a selection drag scrolls the box. Its placeholder uses the text area's placeholder colour (m3outline, as the input does) instead of colSubtext. displayedText, copy and search are unchanged.
 Drop when: the pinned modules/ii/sidebarLeft/translator/TextCanvas.qml output area is selectable.
 ---
- .../ii/sidebarLeft/translator/TextCanvas.qml     | 16 +++++++++++-----
- 1 file changed, 11 insertions(+), 5 deletions(-)
+ .../ii/sidebarLeft/translator/TextCanvas.qml  | 19 ++++++++++++-------
+ 1 file changed, 12 insertions(+), 7 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml
-index d6f7a453..c195f9e7 100644
+index 234033c5..6964984c 100644
 --- a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml
-@@ -85,13 +85,19 @@ Rectangle {
+@@ -13,8 +13,7 @@ Rectangle {
+     property string text: ""
+     property color containerColor: Appearance.colors.colLayer2
+     property var inputTextArea: isInput ? inputLoader.item : undefined
+-    readonly property string displayedText: isInput ? inputLoader.item?.text ?? "" :
+-        root.text.length > 0 ? outputLoader.item?.text ?? "" : ""
++    readonly property string displayedText: isInput ? inputLoader.item?.text ?? "" : root.text
+     default property alias actionButtons: actions.data
+     Layout.fillWidth: true
+     Layout.fillHeight: true
+@@ -87,13 +86,19 @@ Rectangle {
                      visible: !root.isInput
                      Layout.fillWidth: true
                      Layout.fillHeight: true

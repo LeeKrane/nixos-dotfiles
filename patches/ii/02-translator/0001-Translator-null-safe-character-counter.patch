@@ -5,13 +5,36 @@ Subject: [PATCH] Translator: null-safe character counter
 
 Backport of pctrade/end4-pC 966162c (translator hunk)
 https://github.com/pctrade/end4-pC/commit/966162c
-Problem: the input box's character counter and TextCanvas.displayedText read inputLoader.item.text (and outputLoader.item.text) while the Loader item can still be null, throwing a TypeError; the counter also used a plain Text, so it ignored the shell font.
-Port: clean. Only the TextCanvas.qml hunk. Dropped the bar, sidebarRight and WallpaperBrowser hunks, and the Translator.qml spacing hunk (it edits the 4da3e83 swap row that the restyle patch replaces). Also guards displayedText, the same null read.
+Problem: the input box's character counter and TextCanvas.displayedText read inputLoader.item.text (and outputLoader.item.text) while the Loader item can still be null, throwing a TypeError; the counter also used a plain Text, so it ignored the shell font. Translator.qml's deleteButton.enabled and the translateProc command read inputCanvas.inputTextArea.text and root.inputField.text the same way, with no null guard.
+Port: clean. Only the TextCanvas.qml hunk. Dropped the bar, sidebarRight and WallpaperBrowser hunks, and the Translator.qml spacing hunk (it edits the 4da3e83 swap row that the restyle patch replaces). Also guards displayedText, the same null read, and Translator.qml's deleteButton.enabled and translateProc command reads.
 Drop when: the pinned modules/ii/sidebarLeft/translator/TextCanvas.qml counter reads inputLoader.item?.text.
 ---
+ .../quickshell/ii/modules/ii/sidebarLeft/Translator.qml   | 4 ++--
  .../ii/modules/ii/sidebarLeft/translator/TextCanvas.qml   | 8 ++++----
- 1 file changed, 4 insertions(+), 4 deletions(-)
+ 2 files changed, 6 insertions(+), 6 deletions(-)
 
+diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
+index bbb2ac23..994880eb 100644
+--- a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
++++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
+@@ -66,7 +66,7 @@ Item {
+         command: ["bash", "-c", `trans -brief -no-bidi`
+             + ` -source '${StringUtils.shellSingleQuoteEscape(root.sourceLanguage)}'`
+             + ` -target '${StringUtils.shellSingleQuoteEscape(root.targetLanguage)}'`
+-            + ` '${StringUtils.shellSingleQuoteEscape(root.inputField.text.trim())}'`]
++            + ` '${StringUtils.shellSingleQuoteEscape((root.inputField?.text ?? "").trim())}'`]
+         property string buffer: ""
+         stdout: SplitParser {
+             onRead: data => {
+@@ -204,7 +204,7 @@ Item {
+                 id: deleteButton
+                 baseWidth: height
+                 buttonRadius: Appearance.rounding.small
+-                enabled: inputCanvas.inputTextArea.text.length > 0
++                enabled: inputCanvas.inputTextArea?.text.length > 0
+                 contentItem: MaterialSymbol {
+                     anchors.centerIn: parent
+                     horizontalAlignment: Text.AlignHCenter
 diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml
 index b585a07d..ec6fbe26 100644
 --- a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml

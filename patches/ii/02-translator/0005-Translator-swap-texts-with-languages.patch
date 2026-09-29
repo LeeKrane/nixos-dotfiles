@@ -7,11 +7,11 @@ Problem: the swap button swapped only the languages, so the input kept the old s
 Port: new. Swap also moves the output into the input and the input into the output; while a translation is pending the swap waits for it (a second press cancels), and the swap button shows the queued state.
 Drop when: the pinned modules/ii/sidebarLeft/Translator.qml swap exchanges the texts.
 ---
- .../ii/modules/ii/sidebarLeft/Translator.qml  | 22 ++++++++++++++++++-
- 1 file changed, 21 insertions(+), 1 deletion(-)
+ .../ii/modules/ii/sidebarLeft/Translator.qml  | 35 +++++++++++++++++--
+ 1 file changed, 33 insertions(+), 2 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
-index 98803d1b..afa09020 100644
+index bde79536..a4669870 100644
 --- a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
 @@ -33,6 +33,7 @@ Item {
@@ -38,7 +38,7 @@ index 98803d1b..afa09020 100644
          let temp = root.targetLanguage;
          root.targetLanguage = root.sourceLanguage;
          root.sourceLanguage = temp;
-@@ -48,7 +58,14 @@ Item {
+@@ -48,7 +58,15 @@ Item {
          Config.options.language.translator.targetLanguage = root.targetLanguage;
          Config.options.language.translator.sourceLanguage = root.sourceLanguage;
  
@@ -48,29 +48,53 @@ index 98803d1b..afa09020 100644
 +        if (input.trim().length > 0 && output.length > 0) {
 +            root.inputField.text = output; // Restarts translateTimer via onInputTextChanged
 +            root.translatedText = input.trim();
++            translateTimer.stop();
 +        } else {
 +            translateTimer.restart(); // Restart translation after swap
 +        }
      }
  
      onFocusChanged: (focus) => {
-@@ -69,6 +86,7 @@ Item {
+@@ -64,11 +82,17 @@ Item {
+         onTriggered: () => {
+             if (root.inputField.text.trim().length > 0) {
+                 // console.log("Translating with command:", translateProc.command);
++                translateProc.stale = translateProc.running;
+                 translateProc.running = false;
+                 translateProc.buffer = ""; // Clear the buffer
                  translateProc.running = true; // Restart the process
              } else {
++                if (translateProc.running) {
++                    translateProc.stale = true;
++                    translateProc.running = false;
++                }
                  root.translatedText = "";
 +                if (root.swapPending && !translateProc.running) root.doSwap();
              }
          }
      }
-@@ -88,6 +106,7 @@ Item {
+@@ -80,14 +104,20 @@ Item {
+             + ` -target '${StringUtils.shellSingleQuoteEscape(root.targetLanguage)}'`
+             + ` '${StringUtils.shellSingleQuoteEscape((root.inputField?.text ?? "").trim())}'`]
+         property string buffer: ""
++        property bool stale: false
+         stdout: SplitParser {
+             onRead: data => {
+                 translateProc.buffer += data + "\n";
+             }
+         }
          onExited: (exitCode, exitStatus) => {
++            if (translateProc.stale) {
++                translateProc.stale = false;
++                return;
++            }
              // With -brief mode, we get output with no metadata
              root.translatedText = translateProc.buffer.trim();
 +            if (root.swapPending && !translateProc.running && !translateTimer.running) root.doSwap();
          }
      }
  
-@@ -179,6 +198,7 @@ Item {
+@@ -179,6 +209,7 @@ Item {
              GroupButton { // Swap languages button
                  id: swapButton
                  Layout.preferredWidth: height
@@ -78,3 +102,12 @@ index 98803d1b..afa09020 100644
                  colBackground: Appearance.colors.colTertiaryContainer
                  colBackgroundHover: Appearance.colors.colTertiaryContainerHover
                  buttonRadius: Appearance.rounding.full
+@@ -187,7 +218,7 @@ Item {
+                     horizontalAlignment: Text.AlignHCenter
+                     iconSize: Appearance.font.pixelSize.larger
+                     text: "autorenew"
+-                    color: Appearance.colors.colOnLayer1
++                    color: swapButton.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer1
+                 }
+                 onClicked: {
+                     root.swapLanguages();
