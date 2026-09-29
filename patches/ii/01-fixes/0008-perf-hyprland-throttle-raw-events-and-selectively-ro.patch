@@ -1,30 +1,32 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: krane <chris@krane.dev>
 Date: Mon, 28 Sep 2026 16:59:46 +0200
-Subject: [PATCH] perf(hyprland): debounce raw events and selectively route IPC
+Subject: [PATCH] perf(hyprland): throttle raw events and selectively route IPC
  queries
 
 Backport of pctrade/end4-pC 1b51f7a, plus the intent of 204f22f
 https://github.com/pctrade/end4-pC/commit/1b51f7a
 https://github.com/pctrade/end4-pC/commit/204f22f
 Problem: every raw Hyprland event ran all five hyprctl queries; dragging a window fires dozens of events per second.
-Port: hand-ported. Dropped the fork's WM.compositor guards (no compositor abstraction at the pin). Added a configreloaded branch that refreshes monitors and workspaces; 204f22f itself only changes a fork-only settings component. Widened the fork's routing so workspace and activespecial events also refresh monitors, fullscreen refreshes workspaces, and openlayer/closelayer refresh layers, since consumers read those. Also refreshes clients on moveworkspace and monitor hotplug, and matches Hyprland's minimized event name.
-Drop when: the pinned services/HyprlandData.qml debounces onRawEvent.
+Port: hand-ported. Dropped the fork's WM.compositor guards (no compositor abstraction at the pin). Added a configreloaded branch that refreshes monitors and workspaces; 204f22f itself only changes a fork-only settings component. Widened the fork's routing so workspace and activespecial events also refresh monitors, fullscreen refreshes workspaces, and openlayer/closelayer refresh layers, since consumers read those. Also refreshes clients on moveworkspace and monitor hotplug, and matches Hyprland's minimized event name. Coalesces events into at most one round of queries every 60ms (leading-edge throttle) rather than debouncing until the stream goes quiet, so a continuous stream of events (a drag, a spinner title) cannot starve refreshes indefinitely.
+Drop when: the pinned services/HyprlandData.qml throttles onRawEvent.
 ---
- .../quickshell/ii/services/HyprlandData.qml   | 102 +++++++++++++++---
- 1 file changed, 90 insertions(+), 12 deletions(-)
+ .../quickshell/ii/services/HyprlandData.qml   | 104 ++++++++++++++++--
+ 1 file changed, 92 insertions(+), 12 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/services/HyprlandData.qml b/dots/.config/quickshell/ii/services/HyprlandData.qml
-index 5dfedab6..682929af 100644
+index 5dfedab6..8f474e88 100644
 --- a/dots/.config/quickshell/ii/services/HyprlandData.qml
 +++ b/dots/.config/quickshell/ii/services/HyprlandData.qml
-@@ -46,28 +46,71 @@ Singleton {
+@@ -46,28 +46,73 @@ Singleton {
  
      // Internals
  
 +    // Coalesce bursts of raw Hyprland events (e.g. dragging a window fires
-+    // dozens of "movewindow" events per second) into a single round of
-+    // hyprctl queries, and only re-run the queries an event can actually
++    // dozens of "movewindow" events per second) into at most one round of
++    // hyprctl queries every 60ms, instead of debouncing until the stream goes
++    // quiet (which a continuous stream, like a drag or a spinner title, would
++    // starve indefinitely), and only re-run the queries an event can actually
 +    // affect instead of all five on every event.
 +    property bool _pendingClients: false
 +    property bool _pendingMonitors: false
@@ -66,7 +68,7 @@ index 5dfedab6..682929af 100644
 +        if (workspaces) root._pendingWorkspaces = true;
 +        if (monitors) root._pendingMonitors = true;
 +        if (layers) root._pendingLayers = true;
-+        eventDebounceTimer.restart();
++        if (!eventDebounceTimer.running) eventDebounceTimer.start();
 +    }
 +
      function updateWindowList() {
@@ -99,7 +101,7 @@ index 5dfedab6..682929af 100644
      }
  
      function biggestWindowForWorkspace(workspaceId) {
-@@ -80,7 +123,11 @@ Singleton {
+@@ -80,7 +125,11 @@ Singleton {
      }
  
      Component.onCompleted: {
@@ -112,7 +114,7 @@ index 5dfedab6..682929af 100644
      }
  
      Connections {
-@@ -88,8 +135,39 @@ Singleton {
+@@ -88,8 +137,39 @@ Singleton {
  
          function onRawEvent(event) {
              // console.log("Hyprland raw event:", event.name);
