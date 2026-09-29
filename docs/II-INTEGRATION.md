@@ -314,6 +314,34 @@ changes only a fork-only settings component) and `9c7b0e1` (the pinned
 rendered size times the device pixel ratio; the fork's other hunks touch
 fork-only files or a fork-only config key).
 
+### Translator (`02-translator`)
+
+The left sidebar's Translator tab, restyled after the fork (input box,
+centred source/swap/target row, output box, surfaces tinted from the
+wallpaper palette), plus three fixes the fork lacked: pill hover feedback,
+scrolling inside each box, and selectable output text.
+
+| Patch | Fork commit | Port | Drop when |
+|---|---|---|---|
+| `0001` null-safe character counter | `966162c` (`TextCanvas.qml` hunk) | clean | pinned `TextCanvas.qml` counter reads `inputLoader.item?.text` |
+| `0002` restyle with swap button | `4da3e83` + `c7aaeb5` + `6868389` (translator hunks) | hand-ported | never; revisit if upstream restyles `Translator.qml` |
+| `0003` enable by default | none | new | upstream defaults `sidebar.translator.enable` to `true` |
+| `0004` selectable output | none | new | pinned `TextCanvas.qml` output area is selectable |
+
+The `0003` default only reaches hosts whose `config.json` has no
+`sidebar.translator.enable` key yet (a fresh host). ii saves its whole
+options tree, so a host where ii has already run holds an explicit `false`:
+turn the translator on once in Settings, Interface, "Enable translator", or
+from a terminal (ii applies it live):
+
+```sh
+f=~/.config/illogical-impulse/config.json
+jq '.sidebar.translator.enable = true' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+```
+
+Not ported: `9f63cce`, which hardcodes `trans -e bing`; Bing rejects the
+default `auto` source and target.
+
 ### Workflow
 
 The clone at `~/src/dots-hyprland` is a disposable workspace; the patch files
