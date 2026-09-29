@@ -1,0 +1,29 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Tue, 29 Sep 2026 16:25:26 +0200
+Subject: [PATCH] Translator: null-safe character counter
+
+Backport of pctrade/end4-pC 966162c (translator hunk)
+https://github.com/pctrade/end4-pC/commit/966162c
+Problem: the input box's character counter read inputLoader.item.text while the Loader item can still be null, throwing a TypeError, and used a plain Text, so it ignored the shell font.
+Port: clean. Only the TextCanvas.qml hunk. Dropped the bar, sidebarRight and WallpaperBrowser hunks, and the Translator.qml spacing hunk (it edits the 4da3e83 swap row that the restyle patch replaces).
+Drop when: the pinned modules/ii/sidebarLeft/translator/TextCanvas.qml counter reads inputLoader.item?.text.
+---
+ .../ii/modules/ii/sidebarLeft/translator/TextCanvas.qml       | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml
+index b585a07d..07af7a8d 100644
+--- a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml
++++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml
+@@ -71,8 +71,8 @@ Rectangle {
+                 active: root.isInput
+                 visible: root.isInput
+                 Layout.leftMargin: 10
+-                sourceComponent: Text {
+-                    text: Translation.tr("%1 characters").arg(inputLoader.item.text.length)
++                sourceComponent: StyledText {
++                    text: Translation.tr("%1 characters").arg(inputLoader.item?.text.length ?? 0)
+                     color: Appearance.colors.colOnLayer1
+                     font.pixelSize: Appearance.font.pixelSize.smaller
+                 }
