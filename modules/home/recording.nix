@@ -39,15 +39,11 @@ let
   # is offloaded, so the dGPU can sleep. A host whose only GPU is NVIDIA (tariognatha) is
   # NVIDIA mode always, without the wrapper.
   #
-  # NVIDIA mode also sets the record and replay codec to hevc_vulkan, because NVENC through
-  # FFmpeg fails ("your nvidia driver only supports nvenc api version 13.0, but the FFmpeg
-  # version that GPU Screen Recorder uses requires nvenc api version 13.1") and gsr-ui then
-  # falls back to CPU encoding. Vulkan video encode drives the same NVENC hardware. hevc, not
-  # h264: an h264_vulkan replay hung on SIGINT in 2 of 3 tries, hevc_vulkan stopped in 6 of 6.
-  # The iGPU
-  # lacks hevc_vulkan, so the default mode puts those keys back to auto. The script owns these
-  # two keys per section; config_ui is edited only while gsr-ui is stopped, since gsr-ui
-  # rewrites the file itself.
+  # Encoding uses NVENC through gsr's normal codec choice. The NVIDIA hosts run
+  # nvidiaPackages.latest because the stable 595 driver only offers NVENC API 13.0 and gsr's
+  # FFmpeg needs 13.1; without it gsr-ui fell back to CPU encoding, and the Vulkan encode
+  # workaround hung on stop and sat idle mid-replay.
+  #
   # Offload for the recorder only. Execs the system copy by absolute path, so it cannot find
   # itself again through PATH.
   gsrOffload = pkgs.writeShellScriptBin "gpu-screen-recorder" ''
@@ -67,8 +63,6 @@ let
       pkgs.util-linux
     ];
     text = ''
-      config="$HOME/.config/gpu-screen-recorder/config_ui"
-
       on_mains() {
         local ps type have_battery=0
         for ps in /sys/class/power_supply/*; do
@@ -102,15 +96,6 @@ let
         fi
       }
 
-      set_codec() {
-        local codec=$1 vulkan=$2
-        [ -f "$config" ] || return 0
-        sed -i -E \
-          -e "s/^((record|replay)\.record_options\.codec) .*/\1 $codec/" \
-          -e "s/^((record|replay)\.record_options\.enable_vulkan_video_encoding) .*/\1 $vulkan/" \
-          "$config"
-      }
-
       # gsr-ui runs in its own session (setsid), so its pid is also its process group id. It
       # ignores SIGTERM, and a force-killed gsr-ui leaves its replay recorder running with its
       # RAM buffer, so the whole group is stopped: TERM first, KILL whatever is left after 5s.
@@ -129,20 +114,11 @@ let
 
       start_gsr() {
         local mode=$1
-        case "$mode" in
-          nvidia-offload)
-            set_codec hevc_vulkan true
-            PATH="${gsrOffload}/bin:$PATH" setsid gsr-ui &
-            ;;
-          nvidia)
-            set_codec hevc_vulkan true
-            setsid gsr-ui &
-            ;;
-          *)
-            set_codec auto false
-            setsid gsr-ui &
-            ;;
-        esac
+        if [ "$mode" = nvidia-offload ]; then
+          PATH="${gsrOffload}/bin:$PATH" setsid gsr-ui &
+        else
+          setsid gsr-ui &
+        fi
         gsr_pid=$!
         logger -t gsr-ui-power "started gsr-ui in $mode mode"
       }

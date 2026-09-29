@@ -30,7 +30,8 @@
     # finegrained only helps a PRIME laptop. Explicit false for this single-GPU desktop.
     powerManagement.finegrained = false;
     # Follows boot.nix's kernelPackages mkDefault, not hardcoded here.
-    package = config.boot.kernelPackages.nvidiaPackages.stable;
+    # latest, not stable: stable 595 offers NVENC API 13.0, gpu-screen-recorder needs 13.1.
+    package = config.boot.kernelPackages.nvidiaPackages.latest;
   };
 
   # nouveau must never load alongside the proprietary/open nvidia module.

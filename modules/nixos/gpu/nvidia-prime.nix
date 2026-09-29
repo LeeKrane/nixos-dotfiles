@@ -50,7 +50,8 @@
       };
     };
 
-    hardware.nvidia.package = config.boot.kernelPackages.nvidiaPackages.stable;
+    # latest, not stable: stable 595 offers NVENC API 13.0, gpu-screen-recorder needs 13.1.
+    hardware.nvidia.package = config.boot.kernelPackages.nvidiaPackages.latest;
 
     # glxinfo, used by the install.sh VERIFY check `nvidia-offload glxinfo`.
     environment.systemPackages = [ pkgs.mesa-demos ];
