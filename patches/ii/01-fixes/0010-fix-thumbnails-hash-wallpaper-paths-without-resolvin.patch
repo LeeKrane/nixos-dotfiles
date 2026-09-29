@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Tue, 29 Sep 2026 16:01:53 +0200
+Subject: [PATCH] fix(thumbnails): hash wallpaper paths without resolving
+ symlinks
+
+Local fix (not a pctrade/end4-pC backport)
+Problem: generate-thumbnails-magick.sh named thumbnails after the symlink target, while the wallpaper selector looks them up by the listed path, so symlinked wallpapers (home-manager puts them in /nix/store) never showed a thumbnail.
+Port: local
+Drop when: the pinned thumbnail scripts hash the listed path, not its realpath.
+---
+ .../ii/scripts/thumbnails/generate-thumbnails-magick.sh        | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/dots/.config/quickshell/ii/scripts/thumbnails/generate-thumbnails-magick.sh b/dots/.config/quickshell/ii/scripts/thumbnails/generate-thumbnails-magick.sh
+index 3c464601..8571c24d 100755
+--- a/dots/.config/quickshell/ii/scripts/thumbnails/generate-thumbnails-magick.sh
++++ b/dots/.config/quickshell/ii/scripts/thumbnails/generate-thumbnails-magick.sh
+@@ -46,7 +46,8 @@ urlencode() {
+ generate_thumbnail() {
+     local src="$1"
+     local abs_path
+-    abs_path="$(realpath "$src")"
++    # -s/--no-symlinks: the selector's ThumbnailImage hashes the path as listed, not its symlink target
++    abs_path="$(realpath -s "$src")"
+     # Skip files with multiple frames (GIFs, videos, etc.)
+     case "${abs_path,,}" in
+         *.gif|*.mp4|*.webm|*.mkv|*.avi|*.mov)

@@ -280,12 +280,23 @@ commit, the problem, how it was ported and when to drop it.
 | `0007` BlueZ connected state | `d116eef` | hand-ported | bluez#2485 fixed, or pinned `BluetoothStatus.qml` counts `batteryAvailable` |
 | `0008` Hyprland IPC debounce | `1b51f7a` (+ `204f22f` intent) | hand-ported, routing widened | pinned `HyprlandData.qml` debounces `onRawEvent` |
 | `0009` trust on Always connect | `local` | local | pinned `BluetoothDeviceItem.qml` trusts devices it pairs |
+| `0010` thumbnail hash for symlinked wallpapers | `local` | local | pinned thumbnail scripts hash the listed path, not its realpath |
 
-`0009` is not a fork backport: ii's sidebar registers no BlueZ agent, so
-pairing needs one running in the session (the `bluetooth-agent` user service
-in `modules/nixos/bluetooth.nix`), and even then a paired-but-untrusted
-device makes BlueZ ask that agent to authorize every profile connection.
-`0009` sets `trusted` right after `pair()` so audio reconnects stop dropping.
+`0009` and `0010` are not fork backports. `0009`: ii's sidebar registers no
+BlueZ agent, so pairing needs one running in the session (the
+`bluetooth-agent` user service in `modules/nixos/bluetooth.nix`), and even
+then a paired-but-untrusted device makes BlueZ ask that agent to authorize
+every profile connection. `0009` sets `trusted` right after `pair()` so audio
+reconnects stop dropping. `0010`: `generate-thumbnails-magick.sh` hashed
+`realpath "$src"`, the symlink target, while the wallpaper selector's
+`ThumbnailImage` hashes the path as listed; home-manager's wallpaper symlinks
+into `/nix/store` made every thumbnail miss. `0010` hashes `realpath -s "$src"`
+instead, which resolves `.`/`..` and makes the path absolute but leaves
+symlinks unresolved.
+
+At the pin, the wallpaper selector does not use `ThumbnailImage`'s own
+generation (`generateThumbnail: false` in `WallpaperDirectoryItem.qml`), so
+`0001` has no effect until something enables it.
 
 Not portable: `37a9fab` (optimizes CPU-temperature and disk readers that the
 pinned `ResourceUsage.qml` does not have), `204f22f` as its own patch (it
