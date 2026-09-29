@@ -1,0 +1,80 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Wed, 30 Sep 2026 00:00:04 +0200
+Subject: [PATCH] Translator: swap texts with languages
+
+Problem: the swap button swapped only the languages, so the input kept the old source text and was re-translated in the wrong direction; pressing it before a translation finished swapped against stale output.
+Port: new. Swap also moves the output into the input and the input into the output; while a translation is pending the swap waits for it (a second press cancels), and the swap button shows the queued state.
+Drop when: the pinned modules/ii/sidebarLeft/Translator.qml swap exchanges the texts.
+---
+ .../ii/modules/ii/sidebarLeft/Translator.qml  | 22 ++++++++++++++++++-
+ 1 file changed, 21 insertions(+), 1 deletion(-)
+
+diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
+index 98803d1b..afa09020 100644
+--- a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
++++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
+@@ -33,6 +33,7 @@ Item {
+     // States
+     property bool showLanguageSelector: false
+     property bool languageSelectorTarget: false // true for target language, false for source language
++    property bool swapPending: false // Swap requested while a translation was still running
+ 
+     function showLanguageSelectorDialog(isTargetLang: bool) {
+         root.languageSelectorTarget = isTargetLang;
+@@ -40,6 +41,15 @@ Item {
+     }
+ 
+     function swapLanguages() {
++        if (translateTimer.running || translateProc.running) {
++            root.swapPending = !root.swapPending; // Wait for the translation, or cancel a queued swap
++            return;
++        }
++        root.doSwap();
++    }
++
++    function doSwap() {
++        root.swapPending = false;
+         let temp = root.targetLanguage;
+         root.targetLanguage = root.sourceLanguage;
+         root.sourceLanguage = temp;
+@@ -48,7 +58,14 @@ Item {
+         Config.options.language.translator.targetLanguage = root.targetLanguage;
+         Config.options.language.translator.sourceLanguage = root.sourceLanguage;
+ 
+-        translateTimer.restart(); // Restart translation after swap
++        const input = root.inputField.text;
++        const output = root.translatedText.trim();
++        if (input.trim().length > 0 && output.length > 0) {
++            root.inputField.text = output; // Restarts translateTimer via onInputTextChanged
++            root.translatedText = input.trim();
++        } else {
++            translateTimer.restart(); // Restart translation after swap
++        }
+     }
+ 
+     onFocusChanged: (focus) => {
+@@ -69,6 +86,7 @@ Item {
+                 translateProc.running = true; // Restart the process
+             } else {
+                 root.translatedText = "";
++                if (root.swapPending && !translateProc.running) root.doSwap();
+             }
+         }
+     }
+@@ -88,6 +106,7 @@ Item {
+         onExited: (exitCode, exitStatus) => {
+             // With -brief mode, we get output with no metadata
+             root.translatedText = translateProc.buffer.trim();
++            if (root.swapPending && !translateProc.running && !translateTimer.running) root.doSwap();
+         }
+     }
+ 
+@@ -179,6 +198,7 @@ Item {
+             GroupButton { // Swap languages button
+                 id: swapButton
+                 Layout.preferredWidth: height
++                toggled: root.swapPending
+                 colBackground: Appearance.colors.colTertiaryContainer
+                 colBackgroundHover: Appearance.colors.colTertiaryContainerHover
+                 buttonRadius: Appearance.rounding.full

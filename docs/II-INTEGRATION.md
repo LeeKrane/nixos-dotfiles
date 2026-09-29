@@ -319,7 +319,7 @@ fork-only files or a fork-only config key).
 The left sidebar's Translator tab, restyled after the fork (input box,
 centred source/swap/target row, output box, surfaces tinted from the
 wallpaper palette), plus three fixes the fork lacked: pill hover feedback,
-scrolling inside each box, and selectable output text.
+scrolling inside each box, selectable output text, and a swap that also exchanges the texts.
 
 | Patch | Fork commit | Port | Drop when |
 |---|---|---|---|
@@ -327,6 +327,7 @@ scrolling inside each box, and selectable output text.
 | `0002` restyle with swap button | `4da3e83` + `c7aaeb5` + `6868389` (translator hunks) | hand-ported | never; revisit if upstream restyles `Translator.qml` |
 | `0003` enable by default | none | new | upstream defaults `sidebar.translator.enable` to `true` |
 | `0004` selectable output | none | new | pinned `TextCanvas.qml` output area is selectable |
+| `0005` swap texts with languages | none | new | pinned `Translator.qml` swap exchanges the texts |
 
 The `0003` default only reaches hosts whose `config.json` has no
 `sidebar.translator.enable` key yet (a fresh host). ii saves its whole
