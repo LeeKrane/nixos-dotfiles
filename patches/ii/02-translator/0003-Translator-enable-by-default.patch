@@ -1,0 +1,25 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Tue, 29 Sep 2026 16:55:32 +0200
+Subject: [PATCH] Translator: enable by default
+
+Problem: the Translator tab only exists when sidebar.translator.enable is true, and the pinned default is false, so a new host needs a manual toggle before the tab appears.
+Port: new
+Drop when: upstream defaults sidebar.translator.enable to true
+---
+ dots/.config/quickshell/ii/modules/common/Config.qml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/dots/.config/quickshell/ii/modules/common/Config.qml b/dots/.config/quickshell/ii/modules/common/Config.qml
+index 5fcd1bbd..30e87439 100644
+--- a/dots/.config/quickshell/ii/modules/common/Config.qml
++++ b/dots/.config/quickshell/ii/modules/common/Config.qml
+@@ -498,7 +498,7 @@ Singleton {
+             property JsonObject sidebar: JsonObject {
+                 property bool keepRightSidebarLoaded: true
+                 property JsonObject translator: JsonObject {
+-                    property bool enable: false
++                    property bool enable: true
+                     property int delay: 300 // Delay before sending request. Reduces (potential) rate limits and lag.
+                 }
+                 property JsonObject ai: JsonObject {
