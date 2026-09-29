@@ -27,22 +27,36 @@ let
     main.hotkeys_enable_option disable_hotkeys
   '';
 
-  # Runs gsr-ui on the GPU that suits the power state, and restarts it when that changes.
-  # gsr only lists monitors of the GPU it runs on, and on a hybrid laptop that is the iGPU
-  # Hyprland renders on, so the dGPU's HDMI port could not be picked and replay captured and
-  # encoded the internal panel on the iGPU, costing about 20% game FPS. On mains power, with an
-  # NVIDIA card next to another GPU, gsr-ui runs under PRIME offload instead: it captures the
-  # NVIDIA-attached monitors and encodes on NVIDIA. On battery it stays on the default GPU, so
-  # the dGPU can sleep. A host whose only GPU is NVIDIA (tariognatha) is NVIDIA mode always,
-  # without the offload variables.
+  # Runs gsr-ui's recorder on the GPU that suits the power state, and restarts gsr-ui when
+  # that changes. gsr only lists monitors of the GPU it runs on, and on a hybrid laptop that is
+  # the iGPU Hyprland renders on, so the dGPU's HDMI port could not be picked and replay
+  # captured and encoded the internal panel on the iGPU, costing about 20% game FPS. On mains
+  # power, with an NVIDIA card next to another GPU, only the gpu-screen-recorder processes run
+  # under PRIME offload, through a PATH wrapper (gsr-ui appends its own copy to the end of
+  # PATH, so an earlier entry wins): they capture the NVIDIA-attached monitors and encode on
+  # NVIDIA. gsr-ui itself stays on the iGPU: its overlay is an XWayland window, and running it
+  # under offload froze the overlay on stopping replay, holding every input. On battery nothing
+  # is offloaded, so the dGPU can sleep. A host whose only GPU is NVIDIA (tariognatha) is
+  # NVIDIA mode always, without the wrapper.
   #
   # NVIDIA mode also sets the record and replay codec to hevc_vulkan, because NVENC through
   # FFmpeg fails ("your nvidia driver only supports nvenc api version 13.0, but the FFmpeg
   # version that GPU Screen Recorder uses requires nvenc api version 13.1") and gsr-ui then
-  # falls back to CPU encoding. Vulkan video encode drives the same NVENC hardware. The iGPU
+  # falls back to CPU encoding. Vulkan video encode drives the same NVENC hardware. hevc, not
+  # h264: an h264_vulkan replay hung on SIGINT in 2 of 3 tries, hevc_vulkan stopped in 6 of 6.
+  # The iGPU
   # lacks hevc_vulkan, so the default mode puts those keys back to auto. The script owns these
   # two keys per section; config_ui is edited only while gsr-ui is stopped, since gsr-ui
   # rewrites the file itself.
+  # Offload for the recorder only. Execs the system copy by absolute path, so it cannot find
+  # itself again through PATH.
+  gsrOffload = pkgs.writeShellScriptBin "gpu-screen-recorder" ''
+    export __NV_PRIME_RENDER_OFFLOAD=1
+    export __VK_LAYER_NV_optimus=NVIDIA_only
+    export __EGL_VENDOR_LIBRARY_FILENAMES=/run/opengl-driver/share/glvnd/egl_vendor.d/10_nvidia.json
+    exec /run/current-system/sw/bin/gpu-screen-recorder "$@"
+  '';
+
   gsrUiPower = pkgs.writeShellApplication {
     name = "gsr-ui-power";
     runtimeInputs = [
@@ -118,10 +132,7 @@ let
         case "$mode" in
           nvidia-offload)
             set_codec hevc_vulkan true
-            __NV_PRIME_RENDER_OFFLOAD=1 \
-              __VK_LAYER_NV_optimus=NVIDIA_only \
-              __EGL_VENDOR_LIBRARY_FILENAMES=/run/opengl-driver/share/glvnd/egl_vendor.d/10_nvidia.json \
-              setsid gsr-ui &
+            PATH="${gsrOffload}/bin:$PATH" setsid gsr-ui &
             ;;
           nvidia)
             set_codec hevc_vulkan true
