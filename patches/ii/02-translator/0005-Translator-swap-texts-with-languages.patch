@@ -7,11 +7,11 @@ Problem: the swap button swapped only the languages, so the input kept the old s
 Port: new. Swap also moves the output into the input and the input into the output; while a translation is pending the swap waits for it (a second press cancels), and the swap button shows the queued state.
 Drop when: the pinned modules/ii/sidebarLeft/Translator.qml swap exchanges the texts.
 ---
- .../ii/modules/ii/sidebarLeft/Translator.qml  | 35 +++++++++++++++++--
- 1 file changed, 33 insertions(+), 2 deletions(-)
+ .../ii/modules/ii/sidebarLeft/Translator.qml  | 40 ++++++++++++++++++-
+ 1 file changed, 38 insertions(+), 2 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
-index bde79536..a4669870 100644
+index bde79536..2f68669c 100644
 --- a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
 @@ -33,6 +33,7 @@ Item {
@@ -73,7 +73,7 @@ index bde79536..a4669870 100644
              }
          }
      }
-@@ -80,14 +104,20 @@ Item {
+@@ -80,14 +104,25 @@ Item {
              + ` -target '${StringUtils.shellSingleQuoteEscape(root.targetLanguage)}'`
              + ` '${StringUtils.shellSingleQuoteEscape((root.inputField?.text ?? "").trim())}'`]
          property string buffer: ""
@@ -86,6 +86,11 @@ index bde79536..a4669870 100644
          onExited: (exitCode, exitStatus) => {
 +            if (translateProc.stale) {
 +                translateProc.stale = false;
++                // The kill that made this run stale may have been the empty-input
++                // branch abandoning it rather than a restart. Resolve any pending
++                // swap here too, but only once nothing newer is in flight.
++                if (root.swapPending && !translateProc.running && !translateTimer.running
++                    && root.inputField.text.trim().length === 0) root.doSwap();
 +                return;
 +            }
              // With -brief mode, we get output with no metadata
@@ -94,7 +99,7 @@ index bde79536..a4669870 100644
          }
      }
  
-@@ -179,6 +209,7 @@ Item {
+@@ -179,6 +214,7 @@ Item {
              GroupButton { // Swap languages button
                  id: swapButton
                  Layout.preferredWidth: height
@@ -102,7 +107,7 @@ index bde79536..a4669870 100644
                  colBackground: Appearance.colors.colTertiaryContainer
                  colBackgroundHover: Appearance.colors.colTertiaryContainerHover
                  buttonRadius: Appearance.rounding.full
-@@ -187,7 +218,7 @@ Item {
+@@ -187,7 +223,7 @@ Item {
                      horizontalAlignment: Text.AlignHCenter
                      iconSize: Appearance.font.pixelSize.larger
                      text: "autorenew"
