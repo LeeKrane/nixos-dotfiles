@@ -1,0 +1,40 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Tue, 29 Sep 2026 16:57:53 +0200
+Subject: [PATCH] Translator: selectable output
+
+Problem: the output box rendered the translation as plain Text, so it could not be selected to copy part of it.
+Port: new. The output is a read-only StyledTextArea with the input box's settings; displayedText, copy and search are unchanged.
+Drop when: the pinned modules/ii/sidebarLeft/translator/TextCanvas.qml output area is selectable.
+---
+ .../ii/sidebarLeft/translator/TextCanvas.qml      | 15 ++++++++++-----
+ 1 file changed, 10 insertions(+), 5 deletions(-)
+
+diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml
+index ca102753..244124a9 100644
+--- a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml
++++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml
+@@ -82,13 +82,18 @@ Rectangle {
+                     active: !root.isInput
+                     visible: !root.isInput
+                     Layout.fillWidth: true
+-                    sourceComponent: StyledText { // Output area
++                    sourceComponent: StyledTextArea { // Output area
+                         id: outputTextArea
+-                        padding: 15
+-                        wrapMode: Text.Wrap
++                        readOnly: true
++                        selectByMouse: true
++                        placeholderText: root.placeholderText
++                        text: root.text
++                        wrapMode: TextEdit.Wrap
++                        textFormat: TextEdit.PlainText
+                         font.pixelSize: Appearance.font.pixelSize.small
+-                        color: root.text.length > 0 ? Appearance.colors.colOnLayer1 : Appearance.colors.colSubtext
+-                        text: root.text.length > 0 ? root.text : root.placeholderText
++                        color: Appearance.colors.colOnLayer1
++                        padding: 15
++                        background: null
+                     }
+                 }
+             }
