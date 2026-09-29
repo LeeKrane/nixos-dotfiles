@@ -332,11 +332,11 @@ The `0003` default only reaches hosts whose `config.json` has no
 `sidebar.translator.enable` key yet (a fresh host). ii saves its whole
 options tree, so a host where ii has already run holds an explicit `false`:
 turn the translator on once in Settings, Interface, "Enable translator", or
-from a terminal (ii applies it live):
+from a terminal with bash (ii applies it live; `--indent 4` keeps ii's own
+formatting):
 
 ```sh
-f=~/.config/illogical-impulse/config.json
-jq '.sidebar.translator.enable = true' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+bash -c 'f=~/.config/illogical-impulse/config.json; jq --indent 4 ".sidebar.translator.enable = true" "$f" > "$f.tmp" && mv "$f.tmp" "$f"'
 ```
 
 Not ported: `9f63cce`, which hardcodes `trans -e bing`; Bing rejects the
