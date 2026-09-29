@@ -278,7 +278,7 @@ commit, the problem, how it was ported and when to drop it.
 | `0005` undefined notification action | `eb76c3d` | clean | pinned `attemptInvokeAction` checks for undefined |
 | `0006` materialyoucolor key name | `3dad196` | clean | pinned `generate_colors_material.py` reads `primaryPaletteKeyColor` |
 | `0007` BlueZ connected state | `d116eef` | hand-ported | bluez#2485 fixed, or pinned `BluetoothStatus.qml` counts `batteryAvailable` |
-| `0008` Hyprland IPC debounce | `1b51f7a` (+ `204f22f` intent) | hand-ported, routing widened | pinned `HyprlandData.qml` debounces `onRawEvent` |
+| `0008` Hyprland IPC throttle | `1b51f7a` (+ `204f22f` intent) | hand-ported, routing widened | pinned `HyprlandData.qml` throttles or coalesces `onRawEvent` |
 | `0009` trust on Always connect | `local` | local | pinned `BluetoothDeviceItem.qml` trusts devices it pairs |
 | `0010` thumbnail hash for symlinked wallpapers | `local` | local | pinned thumbnail scripts hash the listed path, not its realpath |
 | `0011` unterminated OSC in terminal sequences | `local` | local | pinned `sequences.txt` ends with `ESC \` |
@@ -318,8 +318,10 @@ fork-only files or a fork-only config key).
 
 The left sidebar's Translator tab, restyled after the fork (input box,
 centred source/swap/target row, output box, surfaces tinted from the
-wallpaper palette), plus three fixes the fork lacked: pill hover feedback,
-scrolling inside each box, selectable output text, and a swap that also exchanges the texts.
+wallpaper palette), plus five fixes the fork lacked: pill hover feedback,
+scrolling inside each box, selectable output text, a swap that also exchanges
+the texts, and a paste icon that stays enabled on its own state instead of
+the delete button's.
 
 | Patch | Fork commit | Port | Drop when |
 |---|---|---|---|
@@ -328,6 +330,7 @@ scrolling inside each box, selectable output text, and a swap that also exchange
 | `0003` enable by default | none | new | upstream defaults `sidebar.translator.enable` to `true` |
 | `0004` selectable output | none | new | pinned `TextCanvas.qml` output area is selectable |
 | `0005` swap texts with languages | none | new | pinned `Translator.qml` swap exchanges the texts |
+| `0006` paste icon follows its own button | none | new | pinned `Translator.qml` paste icon colour reads `pasteButton.enabled` |
 
 The `0003` default only reaches hosts whose `config.json` has no
 `sidebar.translator.enable` key yet (a fresh host). ii saves its whole
