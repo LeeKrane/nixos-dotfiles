@@ -12,8 +12,8 @@ Drop when: never (feature, not a fix); revisit if upstream restyles Translator.q
 ---
  .../ii/modules/ii/sidebarLeft/Translator.qml  | 178 +++++++++++-------
  .../translator/LanguageSelectorButton.qml     |   9 +-
- .../ii/sidebarLeft/translator/TextCanvas.qml  |  96 ++++++----
- 3 files changed, 177 insertions(+), 106 deletions(-)
+ .../ii/sidebarLeft/translator/TextCanvas.qml  |  99 ++++++----
+ 3 files changed, 180 insertions(+), 106 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
 index bbb2ac23..98803d1b 100644
@@ -245,10 +245,10 @@ index f23e3b84..54d829ff 100644
      contentItem: Item {
          anchors.centerIn: parent
 diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml
-index ec6fbe26..e975a1e7 100644
+index ec6fbe26..d6f7a453 100644
 --- a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml
-@@ -11,57 +11,89 @@ Rectangle {
+@@ -11,57 +11,92 @@ Rectangle {
      property bool isInput: true // true for input, false for output
      property string placeholderText
      property string text: ""
@@ -310,7 +310,7 @@ index ec6fbe26..e975a1e7 100644
 +            Layout.fillHeight: true
 +            clip: true
 +            contentWidth: width
-+            contentHeight: textColumn.implicitHeight
++            contentHeight: textColumn.height
  
 -        Loader {
 -            id: outputLoader
@@ -327,6 +327,7 @@ index ec6fbe26..e975a1e7 100644
 +            ColumnLayout {
 +                id: textColumn
 +                width: textFlickable.width
++                height: Math.max(implicitHeight, textFlickable.height)
 +                spacing: 0
 +
 +                Loader {
@@ -334,6 +335,7 @@ index ec6fbe26..e975a1e7 100644
 +                    active: root.isInput
 +                    visible: root.isInput
 +                    Layout.fillWidth: true
++                    Layout.fillHeight: true
 +                    sourceComponent: StyledTextArea { // Input area
 +                        id: inputTextArea
 +                        placeholderText: root.placeholderText
@@ -353,6 +355,7 @@ index ec6fbe26..e975a1e7 100644
 +                    active: !root.isInput
 +                    visible: !root.isInput
 +                    Layout.fillWidth: true
++                    Layout.fillHeight: true
 +                    sourceComponent: StyledText { // Output area
 +                        id: outputTextArea
 +                        padding: 15
