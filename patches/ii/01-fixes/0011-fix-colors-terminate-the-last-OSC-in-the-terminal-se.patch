@@ -1,0 +1,23 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Tue, 29 Sep 2026 16:32:09 +0200
+Subject: [PATCH] fix(colors): terminate the last OSC in the terminal sequences
+ template
+
+Local fix (not a pctrade/end4-pC backport)
+Problem: sequences.txt ended its final OSC 708 with a bare ESC instead of ST (ESC \), so after applycolor.sh wrote it into a pty, kitty stayed inside that OSC string and swallowed the foreground program's output until some later ST. Neovim looked frozen, and its exit sequences (including the kitty keyboard-protocol pop) were lost, leaving the shell with doubled keystrokes.
+Port: local
+Drop when: the pinned sequences.txt ends with ESC \.
+---
+ .../.config/quickshell/ii/scripts/colors/terminal/sequences.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/dots/.config/quickshell/ii/scripts/colors/terminal/sequences.txt b/dots/.config/quickshell/ii/scripts/colors/terminal/sequences.txt
+index a677181e..c5efaecc 100644
+--- a/dots/.config/quickshell/ii/scripts/colors/terminal/sequences.txt
++++ b/dots/.config/quickshell/ii/scripts/colors/terminal/sequences.txt
+@@ -1 +1 @@
+-]4;0;#$term0 #\]1;0;#$term0 #\]4;1;#$term1 #\]4;2;#$term2 #\]4;3;#$term3 #\]4;4;#$term4 #\]4;5;#$term5 #\]4;6;#$term6 #\]4;7;#$term7 #\]4;8;#$term8 #\]4;9;#$term9 #\]4;10;#$term10 #\]4;11;#$term11 #\]4;12;#$term12 #\]4;13;#$term13 #\]4;14;#$term14 #\]4;15;#$term15 #\]4;232;#$term7 #\]4;255;#$primary #\]4;254;#$primaryContainer #\]4;253;#$secondary #\]4;252;#$secondaryContainer #\]4;251;#$tertiary #\]4;250;#$tertiaryContainer #\]4;249;#$error #\]4;248;#$errorContainer #\]4;232;#$onPrimary #\]4;233;#$onPrimaryContainer #\]4;234;#$onSecondary #\]4;235;#$onSecondaryContainer #\]4;236;#$onTertiary #\]4;237;#$onTertiaryContainer #\]4;238;#$onError #\]4;239;#$onErrorContainer #\]4;240;#$onPrimary #\]4;243;#$primary #\]4;244;#$error #\]4;245;#$outlineVariant #\]10;#$term7 #\]11;[100]#$term0 #\]12;#$term7 #\]13;#$term7 #\]17;#$term7 #\]19;#$term0 #\]708;[100]#$term0 #
+\ No newline at end of file
++]4;0;#$term0 #\]1;0;#$term0 #\]4;1;#$term1 #\]4;2;#$term2 #\]4;3;#$term3 #\]4;4;#$term4 #\]4;5;#$term5 #\]4;6;#$term6 #\]4;7;#$term7 #\]4;8;#$term8 #\]4;9;#$term9 #\]4;10;#$term10 #\]4;11;#$term11 #\]4;12;#$term12 #\]4;13;#$term13 #\]4;14;#$term14 #\]4;15;#$term15 #\]4;232;#$term7 #\]4;255;#$primary #\]4;254;#$primaryContainer #\]4;253;#$secondary #\]4;252;#$secondaryContainer #\]4;251;#$tertiary #\]4;250;#$tertiaryContainer #\]4;249;#$error #\]4;248;#$errorContainer #\]4;232;#$onPrimary #\]4;233;#$onPrimaryContainer #\]4;234;#$onSecondary #\]4;235;#$onSecondaryContainer #\]4;236;#$onTertiary #\]4;237;#$onTertiaryContainer #\]4;238;#$onError #\]4;239;#$onErrorContainer #\]4;240;#$onPrimary #\]4;243;#$primary #\]4;244;#$error #\]4;245;#$outlineVariant #\]10;#$term7 #\]11;[100]#$term0 #\]12;#$term7 #\]13;#$term7 #\]17;#$term7 #\]19;#$term0 #\]708;[100]#$term0 #\
+\ No newline at end of file

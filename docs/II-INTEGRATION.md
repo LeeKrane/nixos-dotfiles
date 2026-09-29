@@ -281,8 +281,9 @@ commit, the problem, how it was ported and when to drop it.
 | `0008` Hyprland IPC debounce | `1b51f7a` (+ `204f22f` intent) | hand-ported, routing widened | pinned `HyprlandData.qml` debounces `onRawEvent` |
 | `0009` trust on Always connect | `local` | local | pinned `BluetoothDeviceItem.qml` trusts devices it pairs |
 | `0010` thumbnail hash for symlinked wallpapers | `local` | local | pinned thumbnail scripts hash the listed path, not its realpath |
+| `0011` unterminated OSC in terminal sequences | `local` | local | pinned `sequences.txt` ends with `ESC \` |
 
-`0009` and `0010` are not fork backports. `0009`: ii's sidebar registers no
+`0009` to `0011` are not fork backports. `0009`: ii's sidebar registers no
 BlueZ agent, so pairing needs one running in the session (the
 `bluetooth-agent` user service in `modules/nixos/bluetooth.nix`), and even
 then a paired-but-untrusted device makes BlueZ ask that agent to authorize
@@ -293,6 +294,14 @@ reconnects stop dropping. `0010`: `generate-thumbnails-magick.sh` hashed
 into `/nix/store` made every thumbnail miss. `0010` hashes `realpath -s "$src"`
 instead, which resolves `.`/`..` and makes the path absolute but leaves
 symlinks unresolved.
+
+`0011`: `applycolor.sh` writes the filled-in `sequences.txt` into every
+`/dev/pts/N`, and the template's last OSC (708) ended with a bare `ESC`
+instead of `ESC \`. kitty then stayed inside that OSC and discarded the
+foreground program's output until a later terminator arrived: Neovim looked
+frozen, and its exit sequences, including the kitty keyboard-protocol pop,
+were lost, so the shell afterwards got every key on press and on release.
+`0011` appends the missing `\`.
 
 At the pin, the wallpaper selector does not use `ThumbnailImage`'s own
 generation (`generateThumbnail: false` in `WallpaperDirectoryItem.qml`), so
