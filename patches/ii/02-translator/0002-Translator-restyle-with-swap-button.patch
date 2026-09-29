@@ -1,0 +1,372 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Tue, 29 Sep 2026 16:33:41 +0200
+Subject: [PATCH] Translator: restyle with swap button
+
+Backport of pctrade/end4-pC 4da3e83, c7aaeb5, 6868389 (translator hunks)
+https://github.com/pctrade/end4-pC/commit/c7aaeb5a58a7c4c965d9e692877ace415b4171bb
+Problem: user wants the fork's translator layout
+Port: hand-ported (squashed; dropped bar hunks and comment stripping; removed
+  buttonColor shadow; per-pill hover tokens; added scrolling)
+Drop when: never (feature, not a fix); revisit if upstream restyles Translator.qml
+---
+ .../ii/modules/ii/sidebarLeft/Translator.qml  | 178 +++++++++++-------
+ .../translator/LanguageSelectorButton.qml     |   9 +-
+ .../ii/sidebarLeft/translator/TextCanvas.qml  |  96 ++++++----
+ 3 files changed, 177 insertions(+), 106 deletions(-)
+
+diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
+index bbb2ac23..98803d1b 100644
+--- a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
++++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
+@@ -39,6 +39,18 @@ Item {
+         root.showLanguageSelector = true
+     }
+ 
++    function swapLanguages() {
++        let temp = root.targetLanguage;
++        root.targetLanguage = root.sourceLanguage;
++        root.sourceLanguage = temp;
++
++        // Save to config
++        Config.options.language.translator.targetLanguage = root.targetLanguage;
++        Config.options.language.translator.sourceLanguage = root.sourceLanguage;
++
++        translateTimer.restart(); // Restart translation after swap
++    }
++
+     onFocusChanged: (focus) => {
+         if (focus) {
+             root.inputField.forceActiveFocus()
+@@ -105,82 +117,12 @@ Item {
+             fill: parent
+             margins: root.padding
+         }
+-
+-        StyledFlickable {
+-            Layout.fillWidth: true
+-            Layout.fillHeight: true
+-            contentHeight: contentColumn.implicitHeight
+-
+-            ColumnLayout {
+-                id: contentColumn
+-                anchors.fill: parent
+-
+-                LanguageSelectorButton { // Target language button
+-                    id: targetLanguageButton
+-                    displayText: root.targetLanguage
+-                    onClicked: {
+-                        root.showLanguageSelectorDialog(true);
+-                    }
+-                }
+-
+-                TextCanvas { // Content translation
+-                    id: outputCanvas
+-                    isInput: false
+-                    placeholderText: Translation.tr("Translation goes here...")
+-                    property bool hasTranslation: (root.translatedText.trim().length > 0)
+-                    text: hasTranslation ? root.translatedText : ""
+-                    GroupButton {
+-                        id: copyButton
+-                        baseWidth: height
+-                        buttonRadius: Appearance.rounding.small
+-                        enabled: outputCanvas.displayedText.trim().length > 0
+-                        contentItem: MaterialSymbol {
+-                            anchors.centerIn: parent
+-                            horizontalAlignment: Text.AlignHCenter
+-                            iconSize: Appearance.font.pixelSize.larger
+-                            text: "content_copy"
+-                            color: copyButton.enabled ? Appearance.colors.colOnLayer1 : Appearance.colors.colSubtext
+-                        }
+-                        onClicked: {
+-                            Quickshell.clipboardText = outputCanvas.displayedText
+-                        }
+-                    }
+-                    GroupButton {
+-                        id: searchButton
+-                        baseWidth: height
+-                        buttonRadius: Appearance.rounding.small
+-                        enabled: outputCanvas.displayedText.trim().length > 0
+-                        contentItem: MaterialSymbol {
+-                            anchors.centerIn: parent
+-                            horizontalAlignment: Text.AlignHCenter
+-                            iconSize: Appearance.font.pixelSize.larger
+-                            text: "travel_explore"
+-                            color: searchButton.enabled ? Appearance.colors.colOnLayer1 : Appearance.colors.colSubtext
+-                        }
+-                        onClicked: {
+-                            let url = Config.options.search.engineBaseUrl + outputCanvas.displayedText;
+-                            for (let site of Config.options.search.excludedSites) {
+-                                url += ` -site:${site}`;
+-                            }
+-                            Qt.openUrlExternally(url);
+-                        }
+-                    }
+-                }
+-
+-            }    
+-        }
+-
+-        LanguageSelectorButton { // Source language button
+-            id: sourceLanguageButton
+-            displayText: root.sourceLanguage
+-            onClicked: {
+-                root.showLanguageSelectorDialog(false);
+-            }
+-        }
++        spacing: 10
+ 
+         TextCanvas { // Content input
+             id: inputCanvas
+             isInput: true
++            containerColor: ColorUtils.transparentize(Appearance.colors.colSecondaryContainer, 0.8)
+             placeholderText: Translation.tr("Enter text to translate...")
+             onInputTextChanged: {
+                 translateTimer.restart();
+@@ -217,6 +159,98 @@ Item {
+                 }
+             }
+         }
++
++        RowLayout { // Language row: source, swap, target
++            Layout.fillWidth: true
++            spacing: 20
++
++            Item { Layout.fillWidth: true }
++
++            LanguageSelectorButton { // Source language button
++                id: sourceLanguageButton
++                displayText: root.sourceLanguage
++                colBackground: Appearance.colors.colSecondaryContainer
++                colBackgroundHover: Appearance.colors.colSecondaryContainerHover
++                onClicked: {
++                    root.showLanguageSelectorDialog(false);
++                }
++            }
++
++            GroupButton { // Swap languages button
++                id: swapButton
++                Layout.preferredWidth: height
++                colBackground: Appearance.colors.colTertiaryContainer
++                colBackgroundHover: Appearance.colors.colTertiaryContainerHover
++                buttonRadius: Appearance.rounding.full
++                contentItem: MaterialSymbol {
++                    anchors.centerIn: parent
++                    horizontalAlignment: Text.AlignHCenter
++                    iconSize: Appearance.font.pixelSize.larger
++                    text: "autorenew"
++                    color: Appearance.colors.colOnLayer1
++                }
++                onClicked: {
++                    root.swapLanguages();
++                }
++            }
++
++            LanguageSelectorButton { // Target language button
++                id: targetLanguageButton
++                displayText: root.targetLanguage
++                colBackground: Appearance.colors.colPrimaryContainer
++                colBackgroundHover: Appearance.colors.colPrimaryContainerHover
++                onClicked: {
++                    root.showLanguageSelectorDialog(true);
++                }
++            }
++
++            Item { Layout.fillWidth: true }
++        }
++
++        TextCanvas { // Content translation
++            id: outputCanvas
++            isInput: false
++            containerColor: ColorUtils.transparentize(Appearance.colors.colPrimaryContainer, 0.8)
++            placeholderText: Translation.tr("Translation goes here...")
++            property bool hasTranslation: (root.translatedText.trim().length > 0)
++            text: hasTranslation ? root.translatedText : ""
++            GroupButton {
++                id: copyButton
++                baseWidth: height
++                buttonRadius: Appearance.rounding.small
++                enabled: outputCanvas.displayedText.trim().length > 0
++                contentItem: MaterialSymbol {
++                    anchors.centerIn: parent
++                    horizontalAlignment: Text.AlignHCenter
++                    iconSize: Appearance.font.pixelSize.larger
++                    text: "content_copy"
++                    color: copyButton.enabled ? Appearance.colors.colOnLayer1 : Appearance.colors.colSubtext
++                }
++                onClicked: {
++                    Quickshell.clipboardText = outputCanvas.displayedText
++                }
++            }
++            GroupButton {
++                id: searchButton
++                baseWidth: height
++                buttonRadius: Appearance.rounding.small
++                enabled: outputCanvas.displayedText.trim().length > 0
++                contentItem: MaterialSymbol {
++                    anchors.centerIn: parent
++                    horizontalAlignment: Text.AlignHCenter
++                    iconSize: Appearance.font.pixelSize.larger
++                    text: "travel_explore"
++                    color: searchButton.enabled ? Appearance.colors.colOnLayer1 : Appearance.colors.colSubtext
++                }
++                onClicked: {
++                    let url = Config.options.search.engineBaseUrl + outputCanvas.displayedText;
++                    for (let site of Config.options.search.excludedSites) {
++                        url += ` -site:${site}`;
++                    }
++                    Qt.openUrlExternally(url);
++                }
++            }
++        }
+     }
+ 
+     Loader {
+diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/LanguageSelectorButton.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/LanguageSelectorButton.qml
+index f23e3b84..54d829ff 100644
+--- a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/LanguageSelectorButton.qml
++++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/LanguageSelectorButton.qml
+@@ -9,10 +9,15 @@ import QtQuick.Layouts
+ RippleButton {
+     id: root
+     property string displayText: ""
++    // Fallback surface; Translator.qml sets colBackground and
++    // colBackgroundHover per pill. Do not add a `buttonColor` property here:
++    // RippleButton already has one (the hover/toggled/disabled blend the
++    // background binds to), and redeclaring it would drop that feedback.
+     colBackground: Appearance.colors.colLayer2
++    buttonRadius: Appearance.rounding.full
+ 
+-    implicitWidth: contentItem.implicitWidth + horizontalPadding * 2
+-    implicitHeight: contentItem.implicitHeight + verticalPadding * 2
++    implicitWidth: contentItem.implicitWidth + horizontalPadding * 2 + 10
++    implicitHeight: contentItem.implicitHeight + verticalPadding * 2 + 20
+ 
+     contentItem: Item {
+         anchors.centerIn: parent
+diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml
+index 07af7a8d..ca102753 100644
+--- a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml
++++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml
+@@ -11,57 +11,89 @@ Rectangle {
+     property bool isInput: true // true for input, false for output
+     property string placeholderText
+     property string text: ""
++    property color containerColor: Appearance.colors.colLayer2
+     property var inputTextArea: isInput ? inputLoader.item : undefined
+     readonly property string displayedText: isInput ? inputLoader.item.text : 
+         root.text.length > 0 ? outputLoader.item.text : ""
+     default property alias actionButtons: actions.data
+     Layout.fillWidth: true
+-    implicitHeight: Math.max(150, inputColumn.implicitHeight)
+-    color: Appearance.colors.colLayer2
++    Layout.fillHeight: true
++    color: containerColor
+     radius: Appearance.rounding.normal
++    clip: true
+ 
+     signal inputTextChanged(); // Signal emitted when text changes
+ 
++    // Scroll textFlickable so the caret rectangle `r` (text area coordinates)
++    // is visible, keeping `margin` px of the text area's padding around it.
++    function ensureVisible(r, margin) {
++        const f = textFlickable;
++        if (f.height <= 0) return;
++        let y = f.contentY;
++        if (r.y - margin < y)
++            y = r.y - margin;
++        else if (r.y + r.height + margin > y + f.height)
++            y = r.y + r.height + margin - f.height;
++        // No upper clamp: contentHeight can lag one layout pass behind the
++        // caret while typing at the end, and Flickable fixes contentY up to
++        // its bounds when contentHeight changes.
++        f.contentY = Math.max(0, y);
++    }
++
+     ColumnLayout {
+         id: inputColumn
+         anchors.fill: parent
+         spacing: 0
+ 
+-        Loader {
+-            id: inputLoader
+-            active: root.isInput
+-            visible: root.isInput
++        StyledFlickable { // Text area; scrolls so the status row stays in view
++            id: textFlickable
+             Layout.fillWidth: true
+-            sourceComponent: StyledTextArea { // Input area
+-                id: inputTextArea
+-                placeholderText: root.placeholderText
+-                wrapMode: TextEdit.Wrap
+-                textFormat: TextEdit.PlainText
+-                font.pixelSize: Appearance.font.pixelSize.small
+-                color: Appearance.colors.colOnLayer1
+-                padding: 15
+-                background: null
+-                onTextChanged: root.inputTextChanged()
+-            }
+-        }
++            Layout.fillHeight: true
++            clip: true
++            contentWidth: width
++            contentHeight: textColumn.implicitHeight
+ 
+-        Loader {
+-            id: outputLoader
+-            active: !root.isInput
+-            visible: !root.isInput
+-            Layout.fillWidth: true
+-            sourceComponent: StyledText { // Output area
+-                id: outputTextArea
+-                padding: 15
+-                wrapMode: Text.Wrap
+-                font.pixelSize: Appearance.font.pixelSize.small
+-                color: root.text.length > 0 ? Appearance.colors.colOnLayer1 : Appearance.colors.colSubtext
+-                text: root.text.length > 0 ? root.text : root.placeholderText
++            ColumnLayout {
++                id: textColumn
++                width: textFlickable.width
++                spacing: 0
++
++                Loader {
++                    id: inputLoader
++                    active: root.isInput
++                    visible: root.isInput
++                    Layout.fillWidth: true
++                    sourceComponent: StyledTextArea { // Input area
++                        id: inputTextArea
++                        placeholderText: root.placeholderText
++                        wrapMode: TextEdit.Wrap
++                        textFormat: TextEdit.PlainText
++                        font.pixelSize: Appearance.font.pixelSize.small
++                        color: Appearance.colors.colOnLayer1
++                        padding: 15
++                        background: null
++                        onTextChanged: root.inputTextChanged()
++                        onCursorRectangleChanged: root.ensureVisible(cursorRectangle, padding)
++                    }
++                }
++
++                Loader {
++                    id: outputLoader
++                    active: !root.isInput
++                    visible: !root.isInput
++                    Layout.fillWidth: true
++                    sourceComponent: StyledText { // Output area
++                        id: outputTextArea
++                        padding: 15
++                        wrapMode: Text.Wrap
++                        font.pixelSize: Appearance.font.pixelSize.small
++                        color: root.text.length > 0 ? Appearance.colors.colOnLayer1 : Appearance.colors.colSubtext
++                        text: root.text.length > 0 ? root.text : root.placeholderText
++                    }
++                }
+             }
+         }
+ 
+-        Item { Layout.fillHeight: true } 
+-
+         RowLayout { // Status row
+             Layout.fillWidth: true
+             Layout.margins: 10
