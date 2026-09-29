@@ -245,7 +245,7 @@ index f23e3b84..54d829ff 100644
      contentItem: Item {
          anchors.centerIn: parent
 diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml
-index 07af7a8d..ca102753 100644
+index ec6fbe26..e975a1e7 100644
 --- a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml
 @@ -11,57 +11,89 @@ Rectangle {
@@ -254,8 +254,8 @@ index 07af7a8d..ca102753 100644
      property string text: ""
 +    property color containerColor: Appearance.colors.colLayer2
      property var inputTextArea: isInput ? inputLoader.item : undefined
-     readonly property string displayedText: isInput ? inputLoader.item.text : 
-         root.text.length > 0 ? outputLoader.item.text : ""
+     readonly property string displayedText: isInput ? inputLoader.item?.text ?? "" :
+         root.text.length > 0 ? outputLoader.item?.text ?? "" : ""
      default property alias actionButtons: actions.data
      Layout.fillWidth: true
 -    implicitHeight: Math.max(150, inputColumn.implicitHeight)
