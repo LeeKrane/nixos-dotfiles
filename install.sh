@@ -55,8 +55,9 @@ gum_tty() {
     fi
 }
 
-# hosts/ is the single source of truth here, same as flake.nix's hosts,
-# known_hosts() and docker-check.sh's HOSTS.
+# hosts/ is the single source of truth: flake.nix discovers its hosts from
+# the same directories, as do bootstrap-sops.sh's known_hosts() and
+# docker-check.sh's HOSTS.
 AVAILABLE_HOSTS=()
 for _d in "$REPO_ROOT"/hosts/*/; do
     AVAILABLE_HOSTS+=("$(basename "$_d")")

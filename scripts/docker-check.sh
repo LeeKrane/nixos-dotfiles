@@ -22,8 +22,8 @@ cd "$REPO_ROOT"
 IMAGE="nixos/nix:latest"
 VOLUME="nixstore"
 
-# hosts/ is the single source of truth here, same as flake.nix's hosts
-# and bootstrap-sops.sh's known_hosts().
+# hosts/ is the single source of truth: flake.nix discovers its hosts from
+# the same directories, as do install.sh and bootstrap-sops.sh's known_hosts().
 HOSTS=()
 for d in "$REPO_ROOT"/hosts/*/; do
     HOSTS+=("$(basename "$d")")

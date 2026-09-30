@@ -13,8 +13,8 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# hosts/ is the single source of truth here, same as flake.nix's hosts
-# list and docker-check.sh's HOSTS.
+# hosts/ is the single source of truth: flake.nix discovers its hosts from
+# the same directories, as do install.sh and docker-check.sh's HOSTS.
 known_hosts() {
     (
         cd "$REPO_ROOT/hosts"

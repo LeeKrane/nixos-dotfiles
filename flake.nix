@@ -1,5 +1,5 @@
 {
-  description = "NixOS + Hyprland (illogical-impulse) dotfiles flake for tariognatha, tarmantria and taractias";
+  description = "NixOS + Hyprland (illogical-impulse) dotfiles flake, one nixosConfiguration per hosts/ directory";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -33,7 +33,8 @@
     nixvim.url = "github:nix-community/nixvim";
 
     # No `nixpkgs.follows`: nixos-hardware's modules aren't pinned to a
-    # nixpkgs revision. Applied only to taractias.
+    # nixpkgs revision. Imported by taractias and by hosts scaffolded from
+    # templates/host/ (GPU profile and form-factor imports).
     nixos-hardware.url = "github:NixOS/nixos-hardware/master";
   };
 
@@ -61,21 +62,13 @@
       };
       nvim = nvimEval.config.build.package;
 
-      # Single source of truth for this flake's host list, checked
-      # against hosts/ by checks.lua-syntax below.
-      hosts = [
-        "tariognatha"
-        "tarmantria"
-        "taractias"
-      ];
-
-      # Sorted the same way as `hosts` for comparison below.
-      hostDirs = nixpkgs.lib.sort (a: b: a < b) (
-        nixpkgs.lib.attrNames (
-          nixpkgs.lib.filterAttrs (_: type: type == "directory") (builtins.readDir ./hosts)
-        )
+      # Every directory under hosts/ is a host. install.sh's new-host flow adds one by
+      # scaffolding hosts/<name>/ from templates/host/. install.sh, bootstrap-sops.sh's
+      # known_hosts() and docker-check.sh's HOSTS glob the same directories. Plain files
+      # under hosts/ are ignored.
+      hosts = nixpkgs.lib.attrNames (
+        nixpkgs.lib.filterAttrs (_: type: type == "directory") (builtins.readDir ./hosts)
       );
-      hostsSorted = nixpkgs.lib.sort (a: b: a < b) hosts;
     in
     {
       nixosConfigurations =
@@ -131,31 +124,25 @@
               nixpkgs.lib.attrValues cfg.home-manager.users.${cfg.krane.user.name}.krane.hypr._rendered
             ) hosts;
           in
-          # Keeps `hosts` honest against hosts/: a mismatch fails loudly
-          # instead of silently skipping a host.
-          nixpkgs.lib.throwIf (hostDirs != hostsSorted)
-            "checks.lua-syntax: flake.nix's `hosts` list [${nixpkgs.lib.concatStringsSep ", " hostsSorted}] does not match hosts/ directory contents [${nixpkgs.lib.concatStringsSep ", " hostDirs}] -- add/remove a hosts/<name>/ directory or update `hosts` in flake.nix so they match"
+          # Refuse an empty `_rendered` list here, at eval time, and
+          # again in the builder, so this check can't pass vacuously.
+          nixpkgs.lib.throwIf (renderedFiles == [ ])
+            "checks.lua-syntax: krane.hypr._rendered is empty for all hosts; the check would pass vacuously"
             (
-              # Refuse an empty `_rendered` list here, at eval time, and
-              # again in the builder, so this check can't pass vacuously.
-              nixpkgs.lib.throwIf (renderedFiles == [ ])
-                "checks.lua-syntax: krane.hypr._rendered is empty for all hosts; the check would pass vacuously"
-                (
-                  pkgs.runCommand "krane-hypr-lua-syntax" { } ''
-                    count=0
-                    for f in ${nixpkgs.lib.escapeShellArgs renderedFiles}; do
-                      echo "luac -p $f"
-                      ${pkgs.lua5_4}/bin/luac -p "$f"
-                      count=$((count + 1))
-                    done
-                    if [ "$count" -eq 0 ]; then
-                      echo "no rendered Lua files were checked" >&2
-                      exit 1
-                    fi
-                    echo "checked $count rendered Lua files"
-                    touch "$out"
-                  ''
-                )
+              pkgs.runCommand "krane-hypr-lua-syntax" { } ''
+                count=0
+                for f in ${nixpkgs.lib.escapeShellArgs renderedFiles}; do
+                  echo "luac -p $f"
+                  ${pkgs.lua5_4}/bin/luac -p "$f"
+                  count=$((count + 1))
+                done
+                if [ "$count" -eq 0 ]; then
+                  echo "no rendered Lua files were checked" >&2
+                  exit 1
+                fi
+                echo "checked $count rendered Lua files"
+                touch "$out"
+              ''
             );
 
         # krane.user wiring (modules/nixos/user.nix): the stock hosts keep "krane", and
