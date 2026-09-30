@@ -141,23 +141,27 @@ case "$mode" in
         # build-time check of its own. --self-test proves run_sh honours
         # pipefail, the ERR trap, the disko/PRIME sed helpers and the
         # new-host templates. The four --dry-run runs cover install mode's
-        # plain and PRIME branches, a new host's scaffold, and setup mode,
-        # exiting 0 with no real hardware via soft_fail. Wrapped in a
+        # plain and PRIME branches, a new host's scaffold, and setup mode.
+        # The two existing hosts get their committed disk, so they take
+        # patch_disko_file's "already patched" branch; a host's disko.nix
+        # only holds /dev/CHANGE-ME before its first install. All four exit 0
+        # with no real hardware via soft_fail. Wrapped in a
         # git-state assertion: these must not leave a staged change, a new
         # commit or a hosts/newbox/ behind.
         git add -A
         before_status=$(git status --porcelain | sort | md5sum)
         before_head=$(git rev-parse HEAD)
+        # shellcheck disable=SC2016 # the disk lookups expand inside the container, not here
         run_in_container '
             set -eu
-            nix shell nixpkgs#bash nixpkgs#shellcheck nixpkgs#gum nixpkgs#gnugrep nixpkgs#gnused nixpkgs#gawk nixpkgs#findutils nixpkgs#util-linux nixpkgs#coreutils nixpkgs#git nixpkgs#btrfs-progs --command bash -c '"'"'
+            nix shell nixpkgs#bash nixpkgs#shellcheck nixpkgs#gum nixpkgs#gnugrep nixpkgs#gnused nixpkgs#gawk nixpkgs#findutils nixpkgs#util-linux nixpkgs#coreutils nixpkgs#diffutils nixpkgs#git nixpkgs#btrfs-progs --command bash -c '"'"'
                 set -eu
                 bash -n install.sh
                 shellcheck -x -S style install.sh
                 ./install.sh --help >/dev/null
                 ./install.sh --self-test
-                ./install.sh --mode install --host taractias --disk /dev/null --yes --dry-run
-                ./install.sh --mode install --host tarmantria --disk /dev/null --yes --dry-run
+                ./install.sh --mode install --host taractias --disk "$(awk -F\" "/device = /{print \$2; exit}" hosts/taractias/disko.nix)" --yes --dry-run
+                ./install.sh --mode install --host tarmantria --disk "$(awk -F\" "/device = /{print \$2; exit}" hosts/tarmantria/disko.nix)" --yes --dry-run
                 ./install.sh --mode install --new-host newbox --user alice --profile intel-nvidia-prime --form-factor laptop --disk /dev/null --yes --dry-run
                 ./install.sh --mode setup --host taractias --yes --dry-run
             '"'"'

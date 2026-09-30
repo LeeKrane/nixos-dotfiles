@@ -1339,8 +1339,14 @@ patch_disko_file() {
         log_info "disko.nix already patched for $disk"
         return 0
     fi
+    # A committed disk that differs from the chosen one stays a hard stop: the
+    # by-id path in git is the only check on the disk choice that lives
+    # outside this prompt flow. Replacing a disk means recording the new one
+    # in git first, so the message says how.
     if ! grep -qF 'device = "/dev/CHANGE-ME";' "$disko_file"; then
-        die "$disko_file has neither the CHANGE-ME placeholder nor $disk already patched in, check it by hand"
+        local committed
+        committed=$(sed -n 's/^[[:space:]]*device = "\(.*\)";.*/\1/p' "$disko_file" | head -n 1)
+        die "$disko_file is set up for ${committed:-another disk}, not $disk. To install onto $disk (e.g. after replacing the disk), set its device line to \"$disk\" or \"/dev/CHANGE-ME\", commit, and rerun"
     fi
     run sed -i "s#device = \"/dev/CHANGE-ME\";#device = \"$disk\";#" "$disko_file"
     if ! $DRY_RUN; then
