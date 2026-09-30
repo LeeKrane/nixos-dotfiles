@@ -24,6 +24,7 @@ let
     "custom/keybinds.lua"
     "custom/execs.lua"
     "custom/rules.lua"
+    "custom/krane_gui.lua"
   ];
 
   appendedFiles = [

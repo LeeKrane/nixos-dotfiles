@@ -7,6 +7,7 @@
     ./hypr-config.nix
     ./illogical-impulse.nix
     ./ii-config-dir.nix
+    ./ii-settings.nix
     ./cli.nix
     ./neovim.nix
     ./dev.nix

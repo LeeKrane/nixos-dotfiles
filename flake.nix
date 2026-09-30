@@ -756,6 +756,25 @@
               touch "$out"
             '';
 
+        # Every schema key and every monitor field, rendered against one host's real manifest
+        # and parsed. Any host works here: this exercises the render machinery, not host-specific
+        # values, and checks.lua-syntax already checks every host's own JSON separately. A fixed
+        # stock host, so a new host that sorts first cannot break this check.
+        ii-settings-render =
+          let
+            writer = pkgs.callPackage ./pkgs/krane-ii-settings { };
+            cfg = self.nixosConfigurations.taractias.config;
+            manifest = cfg.home-manager.users.${cfg.krane.user.name}.krane.iiSettings.manifestFile;
+          in
+          pkgs.runCommand "ii-settings-render" { } ''
+            ${writer}/bin/krane-ii-settings --manifest ${manifest} \
+              render --json ${./pkgs/krane-ii-settings/tests/fixtures/all-keys.json} > krane_gui.lua
+            ${pkgs.lua5_4}/bin/luac -p krane_gui.lua
+            grep -q 'require("hyprland.animationPresets.fast")' krane_gui.lua
+            grep -q 'cm = "hdr"' krane_gui.lua
+            touch "$out"
+          '';
+
         # NixVim's own startup test: fails on errors or warnings at startup.
         nvim = nvimEval.config.build.test;
 

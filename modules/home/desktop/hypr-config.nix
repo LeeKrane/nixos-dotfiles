@@ -195,11 +195,19 @@ let
     + (lib.optionalString (opts != [ ]) ", { ${lib.concatStringsSep ", " opts} }")
     + ")\n";
 
+  # The trailer loads the settings saved from the ii settings window (modules/home/ii-settings.nix)
+  # last, after every krane.hypr.* file and extraMonitorsLua, and before ii's transient shellOverrides.
   monitorsFile =
     header "monitors.lua"
     + "\n"
     + lib.concatMapStrings monitorLua cfg.monitors
-    + lib.optionalString (cfg.extraMonitorsLua != "") ("\n" + cfg.extraMonitorsLua + "\n");
+    + lib.optionalString (cfg.extraMonitorsLua != "") ("\n" + cfg.extraMonitorsLua + "\n")
+    + ''
+
+      if is_file_exists(HOME .. "/.config/hypr/custom/krane_gui.lua") then
+          require("custom.krane_gui")
+      end
+    '';
 
   envFile =
     header "custom/env.lua"
@@ -499,9 +507,9 @@ in
     _rendered = lib.mkOption {
       type = lib.types.attrsOf lib.types.path;
       internal = true;
-      readOnly = true;
       description = ''
         Rendered Lua files, keyed by their path relative to ~/.config/hypr.
+        Set here and by modules/home/desktop/ii-settings.nix (custom/krane_gui.lua).
         Consumed by modules/home/desktop/illogical-impulse.nix (installation) and by
         the flake's `lua-syntax` check (`luac -p`).
       '';
