@@ -71,13 +71,10 @@ TEMPLATE_DIR="$REPO_ROOT/templates/host"
 GPU_PROFILES=(amd-igpu intel-igpu nvidia-desktop intel-nvidia-prime)
 FORM_FACTORS=(laptop desktop)
 # Defaults for a new host's answers, the values the original hosts use.
-# shellcheck disable=SC2034 # read by the interactive new-host flow, a later task.
 DEFAULT_INSTALL_USER=krane
-# shellcheck disable=SC2034 # read by the interactive new-host flow, a later task.
 DEFAULT_GIT_EMAIL=chris@krane.dev
-# shellcheck disable=SC2034,SC2209 # "at" is the keyboard layout, not the job-scheduling command.
+# shellcheck disable=SC2209 # "at" is the keyboard layout, not the job-scheduling command.
 DEFAULT_KB_LAYOUT="at"
-# shellcheck disable=SC2034 # read by the interactive new-host flow, a later task.
 DEFAULT_KB_VARIANT=nodeadkeys
 
 MODE=""
@@ -104,6 +101,27 @@ USAGE_EXIT=false
 # and on_exit know whether there is anything to remove.
 INSTALL_SWAP_ACTIVE=false
 INSTALL_SWAP_ON=false
+
+# New-host flow (--new-host, or "+ new host" in the host menu). Empty means
+# not given yet: prompt_new_host fills the rest from a prompt or, under
+# --yes, from the DEFAULT_* values.
+NEW_HOST_MODE=false
+NEW_HOST=""
+NEW_USER=""
+NEW_GIT_NAME=""
+NEW_GIT_EMAIL=""
+NEW_PROFILE=""
+NEW_FORM_FACTOR=""
+NEW_KB_LAYOUT=""
+NEW_KB_VARIANT=""
+# --kb-variant "" is a real answer (no variant), so it needs its own flag.
+NEW_KB_VARIANT_SET=false
+# Account names a new host's login user must not take: root and the system
+# accounts NixOS or this flake's modules create. nixbld* and systemd-* are
+# matched as prefixes in check_new_username.
+SYSTEM_ACCOUNT_NAMES=(root nobody daemon bin sys sync games man lp mail news uucp proxy backup operator
+    sshd messagebus polkituser rtkit avahi geoclue nscd dhcpcd greeter flatpak ollama pipewire colord
+    cups usbmux qemu-libvirtd nm-openvpn nm-iodine fwupd-refresh)
 
 # Runs from run_install_mode after a successful install and from on_exit, so
 # an aborted run never leaves the swapfile inside the new root. Warns
@@ -342,6 +360,18 @@ Usage: install.sh [options]
 
   --mode install|setup   Force a mode instead of auto-detecting it.
   --host HOST             One of: ${AVAILABLE_HOSTS[*]}
+  --new-host NAME         Install mode only: create hosts/NAME from
+                            templates/host/ instead of using an existing
+                            host. Asks for the settings below unless given.
+  --user NAME             New host's login user (default $DEFAULT_INSTALL_USER).
+  --git-name NAME         New host's git user.name (default: the login user).
+  --git-email EMAIL       New host's git user.email (default $DEFAULT_GIT_EMAIL).
+  --profile PROFILE       New host's GPU profile: ${GPU_PROFILES[*]}
+  --form-factor FF        New host's form factor: ${FORM_FACTORS[*]}
+  --kb-layout LAYOUT      New host's keyboard layout (default $DEFAULT_KB_LAYOUT).
+  --kb-variant VARIANT    New host's keyboard variant (default
+                            $DEFAULT_KB_VARIANT). --yes --new-host also
+                            requires --user, --profile and --form-factor.
   --disk DISK              Target block device, install mode only.
   -y, --yes               Assume yes and auto-confirm every prompt. Live
                             install also requires --confirm-wipe unless
@@ -397,6 +427,82 @@ while [ "$#" -gt 0 ]; do
             ;;
         --disk=*)
             DISK="${1#*=}"
+            shift
+            ;;
+        --new-host)
+            require_arg "$@"
+            NEW_HOST_MODE=true
+            NEW_HOST="$2"
+            shift 2
+            ;;
+        --new-host=*)
+            NEW_HOST_MODE=true
+            NEW_HOST="${1#*=}"
+            shift
+            ;;
+        --user)
+            require_arg "$@"
+            NEW_USER="$2"
+            shift 2
+            ;;
+        --user=*)
+            NEW_USER="${1#*=}"
+            shift
+            ;;
+        --git-name)
+            require_arg "$@"
+            NEW_GIT_NAME="$2"
+            shift 2
+            ;;
+        --git-name=*)
+            NEW_GIT_NAME="${1#*=}"
+            shift
+            ;;
+        --git-email)
+            require_arg "$@"
+            NEW_GIT_EMAIL="$2"
+            shift 2
+            ;;
+        --git-email=*)
+            NEW_GIT_EMAIL="${1#*=}"
+            shift
+            ;;
+        --profile)
+            require_arg "$@"
+            NEW_PROFILE="$2"
+            shift 2
+            ;;
+        --profile=*)
+            NEW_PROFILE="${1#*=}"
+            shift
+            ;;
+        --form-factor)
+            require_arg "$@"
+            NEW_FORM_FACTOR="$2"
+            shift 2
+            ;;
+        --form-factor=*)
+            NEW_FORM_FACTOR="${1#*=}"
+            shift
+            ;;
+        --kb-layout)
+            require_arg "$@"
+            NEW_KB_LAYOUT="$2"
+            shift 2
+            ;;
+        --kb-layout=*)
+            NEW_KB_LAYOUT="${1#*=}"
+            shift
+            ;;
+        --kb-variant)
+            require_arg "$@"
+            NEW_KB_VARIANT="$2"
+            NEW_KB_VARIANT_SET=true
+            shift 2
+            ;;
+        --kb-variant=*)
+            NEW_KB_VARIANT="${1#*=}"
+            NEW_KB_VARIANT_SET=true
             shift
             ;;
         -y | --yes)
@@ -682,6 +788,203 @@ parse_check_nix_dir() {
         nix-instantiate --parse "$file" >/dev/null \
             || die "rendered $(basename "$file") does not parse as Nix, see the error above"
     done
+}
+
+# Each check_* prints why its value is unusable and returns 1, or returns 0
+# silently. prompt_validated re-prompts on 1; validate_new_host_flags turns
+# it into a usage error.
+
+# Beyond the spec regex: no trailing -, since NixOS's networking.hostName
+# type rejects it and that would only surface in nixos-install, after the
+# wipe. tariognatha-vm is flake.nix's VM check target, not a hosts/ dir.
+check_new_hostname() {
+    local name="$1" h
+    if ! [[ "$name" =~ ^[a-z][a-z0-9-]{0,62}$ ]]; then
+        echo "hostname '$name' must start with a lowercase letter and use only a-z, 0-9 and -, at most 63 characters"
+        return 1
+    fi
+    if [[ "$name" == *- ]]; then
+        echo "hostname '$name' must not end in -, NixOS's networking.hostName rejects that"
+        return 1
+    fi
+    if [ "$name" = tariognatha-vm ]; then
+        echo "hostname 'tariognatha-vm' is taken by flake.nix's VM check target"
+        return 1
+    fi
+    for h in "${AVAILABLE_HOSTS[@]}"; do
+        if [ "$h" = "$name" ]; then
+            echo "hosts/$name already exists, pick it from the host list instead"
+            return 1
+        fi
+    done
+    if [ -e "$REPO_ROOT/hosts/$name" ]; then
+        echo "hosts/$name already exists"
+        return 1
+    fi
+    return 0
+}
+
+check_new_username() {
+    local name="$1" sys
+    if ! [[ "$name" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]; then
+        echo "username '$name' must start with a-z or _ and use only a-z, 0-9, _ and -, at most 32 characters"
+        return 1
+    fi
+    case "$name" in
+        nixbld* | systemd-*)
+            echo "username '$name' is reserved for a NixOS system account"
+            return 1
+            ;;
+    esac
+    for sys in "${SYSTEM_ACCOUNT_NAMES[@]}"; do
+        if [ "$sys" = "$name" ]; then
+            echo "username '$name' is a system account name"
+            return 1
+        fi
+    done
+    return 0
+}
+
+# No @: no git name needs one, and it keeps render_host_templates'
+# leftover-@TOKEN@ check unambiguous. Nix and sed escaping covers the rest.
+check_git_name() {
+    if [ -z "$1" ]; then
+        echo "git name must not be empty"
+        return 1
+    fi
+    if [[ "$1" == *@* || "$1" == *[[:cntrl:]]* ]]; then
+        echo "git name must not contain @ or control characters"
+        return 1
+    fi
+    return 0
+}
+
+check_git_email() {
+    if ! [[ "$1" =~ ^[^@[:space:][:cntrl:]]+@[^@[:space:][:cntrl:]]+$ ]]; then
+        echo "git email '$1' must look like name@domain, with one @ and no spaces"
+        return 1
+    fi
+    return 0
+}
+
+check_kb_layout() {
+    if ! [[ "$1" =~ ^[a-z0-9_]+(,[a-z0-9_]+)*$ ]]; then
+        echo "keyboard layout '$1' must be an XKB layout such as at or de,us"
+        return 1
+    fi
+    return 0
+}
+
+# Empty is valid: no variant.
+check_kb_variant() {
+    if ! [[ "$1" =~ ^[a-z0-9_,-]*$ ]]; then
+        echo "keyboard variant '$1' must be an XKB variant such as nodeadkeys, or empty"
+        return 1
+    fi
+    return 0
+}
+
+check_profile() {
+    local p
+    for p in "${GPU_PROFILES[@]}"; do
+        [ "$p" != "$1" ] || return 0
+    done
+    echo "unknown GPU profile '$1', expected one of: ${GPU_PROFILES[*]}"
+    return 1
+}
+
+check_form_factor() {
+    local f
+    for f in "${FORM_FACTORS[@]}"; do
+        [ "$f" != "$1" ] || return 0
+    done
+    echo "unknown form factor '$1', expected one of: ${FORM_FACTORS[*]}"
+    return 1
+}
+
+# Prints "<gpu-profile> <form-factor>" from the same dmidecode/lspci probes
+# as suggest_host, separated by exactly one space so callers split with
+# ${s%% *} / ${s#* } and an empty field stays empty. Missing tools or no
+# match mean no pre-selection, never a failure. AMD+NVIDIA PRIME is out of
+# scope, so an NVIDIA GPU without an Intel one suggests nvidia-desktop.
+suggest_profile() {
+    local chassis="" gpu_info="" profile="" form_factor=""
+    if command -v dmidecode >/dev/null 2>&1; then
+        chassis=$(dmidecode -s chassis-type 2>/dev/null || true)
+    fi
+    if command -v lspci >/dev/null 2>&1; then
+        gpu_info=$(lspci 2>/dev/null | grep -iE 'vga|3d controller' || true)
+    fi
+    if printf '%s' "$chassis" | grep -qiE 'laptop|notebook|portable|convertible|detachable'; then
+        form_factor=laptop
+    elif printf '%s' "$chassis" | grep -qiE 'desktop|tower|mini pc|all in one'; then
+        form_factor=desktop
+    fi
+    if printf '%s' "$gpu_info" | grep -qi nvidia; then
+        if printf '%s' "$gpu_info" | grep -qi intel; then
+            profile=intel-nvidia-prime
+        else
+            profile=nvidia-desktop
+        fi
+    elif printf '%s' "$gpu_info" | grep -qiE 'amd|advanced micro devices'; then
+        profile=amd-igpu
+    elif printf '%s' "$gpu_info" | grep -qi intel; then
+        profile=intel-igpu
+    fi
+    printf '%s %s\n' "$profile" "$form_factor"
+}
+
+# Enforces the new-host flag rules before anything runs. The new-host
+# flags need --new-host. --new-host needs install mode and excludes --host.
+# --yes needs --user, --profile and --form-factor. Every value given must
+# pass the same check_* prompt_new_host applies. Any violation is a usage
+# error.
+validate_new_host_flags() {
+    local given=() reason
+    [ -z "$NEW_USER" ] || given+=(--user)
+    [ -z "$NEW_GIT_NAME" ] || given+=(--git-name)
+    [ -z "$NEW_GIT_EMAIL" ] || given+=(--git-email)
+    [ -z "$NEW_PROFILE" ] || given+=(--profile)
+    [ -z "$NEW_FORM_FACTOR" ] || given+=(--form-factor)
+    [ -z "$NEW_KB_LAYOUT" ] || given+=(--kb-layout)
+    if $NEW_KB_VARIANT_SET; then
+        given+=(--kb-variant)
+    fi
+    if ! $NEW_HOST_MODE; then
+        [ "${#given[@]}" -eq 0 ] || usage_die "${given[*]} only apply together with --new-host"
+        return 0
+    fi
+    [ "$MODE" = install ] || usage_die "--new-host only works in install mode, setup mode runs on a host already in hosts/"
+    [ -z "$HOST" ] || usage_die "--host and --new-host are mutually exclusive"
+    reason=$(check_new_hostname "$NEW_HOST") || usage_die "--new-host: $reason"
+    if $YES; then
+        local missing=()
+        [ -n "$NEW_USER" ] || missing+=(--user)
+        [ -n "$NEW_PROFILE" ] || missing+=(--profile)
+        [ -n "$NEW_FORM_FACTOR" ] || missing+=(--form-factor)
+        [ "${#missing[@]}" -eq 0 ] || usage_die "--yes --new-host also requires ${missing[*]}"
+    fi
+    if [ -n "$NEW_USER" ]; then
+        reason=$(check_new_username "$NEW_USER") || usage_die "--user: $reason"
+    fi
+    if [ -n "$NEW_GIT_NAME" ]; then
+        reason=$(check_git_name "$NEW_GIT_NAME") || usage_die "--git-name: $reason"
+    fi
+    if [ -n "$NEW_GIT_EMAIL" ]; then
+        reason=$(check_git_email "$NEW_GIT_EMAIL") || usage_die "--git-email: $reason"
+    fi
+    if [ -n "$NEW_PROFILE" ]; then
+        reason=$(check_profile "$NEW_PROFILE") || usage_die "--profile: $reason"
+    fi
+    if [ -n "$NEW_FORM_FACTOR" ]; then
+        reason=$(check_form_factor "$NEW_FORM_FACTOR") || usage_die "--form-factor: $reason"
+    fi
+    if [ -n "$NEW_KB_LAYOUT" ]; then
+        reason=$(check_kb_layout "$NEW_KB_LAYOUT") || usage_die "--kb-layout: $reason"
+    fi
+    if $NEW_KB_VARIANT_SET; then
+        reason=$(check_kb_variant "$NEW_KB_VARIANT") || usage_die "--kb-variant: $reason"
+    fi
 }
 
 # Excludes zram, device-mapper, MD-RAID and loop devices by name, since
@@ -1432,6 +1735,8 @@ main() {
         *) die "invalid --mode '$MODE', expected install or setup" ;;
     esac
 
+    validate_new_host_flags
+
     if [ -n "$HOST" ]; then
         local known=false h
         for h in "${AVAILABLE_HOSTS[@]}"; do
@@ -1611,6 +1916,22 @@ if $SELF_TEST_CHECK_SCAFFOLD; then
     echo "self-test-check-scaffold: OK"
     exit 0
 fi
+
+# For self_test: runs validator $2 on each remaining argument and prints a
+# FAIL line for each one whose verdict is not $1 (valid or invalid).
+# Returns 1 if any verdict was wrong.
+self_test_validator() {
+    local want="$1" validator="$2" value rc=0
+    shift 2
+    for value in "$@"; do
+        if "$validator" "$value" >/dev/null; then
+            [ "$want" = valid ] || { echo "FAIL: $validator accepted '$value'" >&2; rc=1; }
+        else
+            [ "$want" = invalid ] || { echo "FAIL: $validator rejected '$value'" >&2; rc=1; }
+        fi
+    done
+    return "$rc"
+}
 
 self_test() {
     echo "== self-test: run_sh honours pipefail ==" >&2
@@ -1838,6 +2159,112 @@ self_test() {
     rm -rf "$git_tmp" "$no_head_tmp"
     if $clean_ok; then
         echo "OK: git_path_clean covers committed/modified/untracked/staged/deleted/no-HEAD" >&2
+    else
+        SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
+    fi
+
+    echo "== self-test: new-host input validators ==" >&2
+    local vd_ok=true long63 long64 long32 long33
+    long63=$(printf 'a%.0s' {1..63})
+    long64=$(printf 'a%.0s' {1..64})
+    long32=$(printf 'u%.0s' {1..32})
+    long33=$(printf 'u%.0s' {1..33})
+    self_test_validator valid check_new_hostname newbox a b2 my-box "$long63" || vd_ok=false
+    # box- passes the bare regex but NixOS's networking.hostName rejects it.
+    self_test_validator invalid check_new_hostname "" 9box Box -box box- my_box my.box "my box" \
+        tariognatha-vm "${AVAILABLE_HOSTS[@]}" "$long64" || vd_ok=false
+    self_test_validator valid check_new_username krane alice _svc a-b a_b "$long32" || vd_ok=false
+    self_test_validator invalid check_new_username "" root nobody daemon sshd greeter nixbld nixbld1 \
+        systemd-network Alice 1abc "a b" a.b "$long33" || vd_ok=false
+    # shellcheck disable=SC2016 # the literal ${x} is the point of this value.
+    self_test_validator valid check_git_name krane "Test Er" "Zoë O'Brien" 'A/B & C\D "q" ${x}' || vd_ok=false
+    self_test_validator invalid check_git_name "" "a@b" "$(printf 'a\nb')" || vd_ok=false
+    self_test_validator valid check_git_email chris@krane.dev a+b@x.y root@localhost || vd_ok=false
+    self_test_validator invalid check_git_email "" nodomain a@b@c "a b@c.d" a@ @b || vd_ok=false
+    self_test_validator valid check_kb_layout at us de,us || vd_ok=false
+    self_test_validator invalid check_kb_layout "" AT "at;rm" "at us" || vd_ok=false
+    self_test_validator valid check_kb_variant "" nodeadkeys altgr-intl || vd_ok=false
+    self_test_validator invalid check_kb_variant "no dead" 'x"y' || vd_ok=false
+    self_test_validator valid check_profile "${GPU_PROFILES[@]}" || vd_ok=false
+    self_test_validator invalid check_profile "" amd-nvidia-prime || vd_ok=false
+    self_test_validator valid check_form_factor "${FORM_FACTORS[@]}" || vd_ok=false
+    self_test_validator invalid check_form_factor "" tablet || vd_ok=false
+    if $vd_ok; then
+        echo "OK: hostname, username, git, keyboard, profile and form-factor validators" >&2
+    else
+        SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
+    fi
+
+    echo "== self-test: suggest_profile keeps each field in its slot ==" >&2
+    local sp_ok=true sp_got
+    sp_got=$(
+        lspci() { printf '00:02.0 VGA compatible controller: Intel Corporation Alder Lake-P GT2\n'; }
+        dmidecode() { [ "$2" = chassis-type ] && echo Notebook; }
+        suggest_profile
+    )
+    [ "$sp_got" = "intel-igpu laptop" ] || { echo "FAIL: Intel-only notebook suggested '$sp_got'" >&2; sp_ok=false; }
+    sp_got=$(
+        lspci() { printf '00:02.0 VGA compatible controller: Intel Corporation UHD\n01:00.0 3D controller: NVIDIA Corporation GA107M\n'; }
+        dmidecode() { [ "$2" = chassis-type ] && echo Laptop; }
+        suggest_profile
+    )
+    [ "$sp_got" = "intel-nvidia-prime laptop" ] || { echo "FAIL: Intel+NVIDIA laptop suggested '$sp_got'" >&2; sp_ok=false; }
+    sp_got=$(
+        lspci() { printf '0a:00.0 VGA compatible controller: Advanced Micro Devices, Inc. [AMD/ATI] Raphael\n'; }
+        dmidecode() { [ "$2" = chassis-type ] && echo Desktop; }
+        suggest_profile
+    )
+    [ "$sp_got" = "amd-igpu desktop" ] || { echo "FAIL: AMD desktop suggested '$sp_got'" >&2; sp_ok=false; }
+    sp_got=$(
+        lspci() { printf '01:00.0 VGA compatible controller: NVIDIA Corporation AD104 [GeForce RTX 4070 Ti]\n'; }
+        dmidecode() { [ "$2" = chassis-type ] && echo Tower; }
+        suggest_profile
+    )
+    [ "$sp_got" = "nvidia-desktop desktop" ] || { echo "FAIL: NVIDIA tower suggested '$sp_got'" >&2; sp_ok=false; }
+    # Unknown GPU, known chassis: the profile slot stays empty and laptop
+    # stays in the form-factor slot.
+    sp_got=$(
+        lspci() { :; }
+        dmidecode() { [ "$2" = chassis-type ] && echo Notebook; }
+        suggest_profile
+    )
+    [ "${sp_got%% *}" = "" ] && [ "${sp_got#* }" = laptop ] \
+        || { echo "FAIL: unknown GPU on a notebook split as profile='${sp_got%% *}' form='${sp_got#* }'" >&2; sp_ok=false; }
+    # Both probes fail, as without dmidecode/lspci: no suggestion at all.
+    sp_got=$(
+        lspci() { return 1; }
+        dmidecode() { return 1; }
+        suggest_profile
+    )
+    [ "$sp_got" = " " ] || { echo "FAIL: failed probes suggested '$sp_got'" >&2; sp_ok=false; }
+    if $sp_ok; then
+        echo "OK: suggest_profile maps lspci/dmidecode output and never shifts fields" >&2
+    else
+        SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
+    fi
+
+    echo "== self-test: new-host flag rules are usage errors ==" >&2
+    local fl_ok=true fl_want fl_case fl_out fl_rc
+    while IFS='|' read -r fl_want fl_case; do
+        fl_rc=0
+        # shellcheck disable=SC2086 # fl_case is a flag list, split on purpose.
+        fl_out=$(bash "$REPO_ROOT/install.sh" $fl_case 2>&1) || fl_rc=$?
+        if [ "$fl_rc" -eq 0 ] || ! printf '%s' "$fl_out" | grep -qF -- "$fl_want"; then
+            echo "FAIL: install.sh $fl_case: rc=$fl_rc, expected an error containing '$fl_want'" >&2
+            fl_ok=false
+        fi
+    done <<'EOF'
+only works in install mode|--mode setup --dry-run --new-host newbox --user alice --profile amd-igpu --form-factor laptop
+only apply together with --new-host|--mode install --dry-run --host taractias --disk /dev/null --user alice
+also requires --user --profile --form-factor|--mode install --dry-run --disk /dev/null --new-host newbox
+mutually exclusive|--mode install --dry-run --disk /dev/null --host taractias --new-host newbox --user alice --profile amd-igpu --form-factor laptop
+must start with a lowercase letter|--mode install --dry-run --disk /dev/null --new-host 9box --user alice --profile amd-igpu --form-factor laptop
+already exists|--mode install --dry-run --disk /dev/null --new-host taractias --user alice --profile amd-igpu --form-factor laptop
+system account|--mode install --dry-run --disk /dev/null --new-host newbox --user root --profile amd-igpu --form-factor laptop
+unknown GPU profile|--mode install --dry-run --disk /dev/null --new-host newbox --user alice --profile amd-nvidia-prime --form-factor laptop
+EOF
+    if $fl_ok; then
+        echo "OK: misused new-host flags stop with a usage error" >&2
     else
         SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
     fi
