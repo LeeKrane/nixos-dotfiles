@@ -74,6 +74,10 @@ jobs:
 
   nvim:
     runs-on: ubuntu-latest
+    # paths-filter lists a pull request's files through the REST API.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
