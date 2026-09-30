@@ -14,11 +14,11 @@
       {
         output = "DP-1";
         mode = "2560x1440@144";
-		# If primary scaling is 1
+        # If primary scaling is 1
         #position = "3840x0";
-		# If primary scaling is 1.25
-		#position = "3072x0";
-		# If primary scaling is 1.25
+        # If primary scaling is 1.25
+        #position = "3072x0";
+        # If primary scaling is 1.25
         position = "2560x0";
         scale = 1;
       }

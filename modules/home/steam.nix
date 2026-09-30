@@ -11,7 +11,15 @@
 { lib, pkgs, ... }:
 let
   syncSteamShortcuts = pkgs.writeShellScript "sync-steam-shortcuts" ''
-    PATH=${lib.makeBinPath [ pkgs.coreutils pkgs.findutils pkgs.gnugrep pkgs.gnused pkgs.imagemagick ]}
+    PATH=${
+      lib.makeBinPath [
+        pkgs.coreutils
+        pkgs.findutils
+        pkgs.gnugrep
+        pkgs.gnused
+        pkgs.imagemagick
+      ]
+    }
     desktop="$HOME/Desktop"
     share="''${XDG_DATA_HOME:-$HOME/.local/share}"
     apps="$share/applications"

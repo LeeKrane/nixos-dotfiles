@@ -78,13 +78,9 @@ inputs.nixpkgs.lib.nixosSystem {
                   lib = inputs.nixpkgs.lib;
                   root = ../patches/ii;
                   sortedNames =
-                    pred: dir:
-                    lib.sort lib.lessThan (builtins.attrNames (lib.filterAttrs pred (builtins.readDir dir)));
+                    pred: dir: lib.sort lib.lessThan (builtins.attrNames (lib.filterAttrs pred (builtins.readDir dir)));
                   patchesIn =
-                    dir:
-                    map (n: dir + "/${n}") (
-                      sortedNames (n: t: t == "regular" && lib.hasSuffix ".patch" n) dir
-                    );
+                    dir: map (n: dir + "/${n}") (sortedNames (n: t: t == "regular" && lib.hasSuffix ".patch" n) dir);
                 in
                 lib.concatMap (d: patchesIn (root + "/${d}")) (sortedNames (n: t: t == "directory") root);
               patchedDotfiles = inputs.nixpkgs.legacyPackages.${system}.applyPatches {
@@ -97,7 +93,12 @@ inputs.nixpkgs.lib.nixosSystem {
                 dotfiles = patchedDotfiles;
               };
             in
-            { config, lib, pkgs, ... }:
+            {
+              config,
+              lib,
+              pkgs,
+              ...
+            }:
             (import "${patched}/home-module.nix") {
               inherit config lib pkgs;
               inputs = iiInputs;
