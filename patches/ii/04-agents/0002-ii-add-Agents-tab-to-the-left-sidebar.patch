@@ -1,0 +1,248 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Wed, 30 Sep 2026 04:28:05 +0200
+Subject: [PATCH] ii: add Agents tab to the left sidebar
+
+Problem: a Claude Code session blocked on a permission prompt in a window on another workspace goes unnoticed, and there is no single place to see or jump to all sessions.
+Port: new (no fork origin). Agents.qml and agents/AgentRow.qml list ClaudeAgents.sessions; a click focuses the session's window or runs kitty -e claude attach <id>. SidebarLeftContent.qml adds the tab after Intelligence and turns polling on only while the tab is visible.
+Drop when: the pinned ii ships an equivalent agents tab, or `claude agents --json` is removed.
+---
+ .../ii/modules/ii/sidebarLeft/Agents.qml      | 82 +++++++++++++++++++
+ .../ii/sidebarLeft/SidebarLeftContent.qml     | 22 ++++-
+ .../ii/sidebarLeft/agents/AgentRow.qml        | 76 +++++++++++++++++
+ 3 files changed, 179 insertions(+), 1 deletion(-)
+ create mode 100644 dots/.config/quickshell/ii/modules/ii/sidebarLeft/Agents.qml
+ create mode 100644 dots/.config/quickshell/ii/modules/ii/sidebarLeft/agents/AgentRow.qml
+
+diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Agents.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Agents.qml
+new file mode 100644
+index 00000000..0c60ac9d
+--- /dev/null
++++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Agents.qml
+@@ -0,0 +1,82 @@
++import qs
++import qs.services
++import qs.modules.common
++import qs.modules.common.widgets
++import qs.modules.ii.sidebarLeft.agents
++import QtQuick
++import QtQuick.Layouts
++import Quickshell
++
++/**
++ * Claude Code sessions from services/ClaudeAgents.qml. A click focuses the
++ * session's terminal, or attaches a background session in a new terminal.
++ * SidebarLeftContent.qml turns polling on while this tab is visible.
++ */
++Item {
++    id: root
++    objectName: "claudeAgentsTab"
++    property bool detached: false
++    property bool pinned: false
++    readonly property int needYouCount: ClaudeAgents.sessions.filter(s => ClaudeAgents.statusOf(s) === "waiting").length
++
++    ColumnLayout {
++        anchors.fill: parent
++        anchors.margins: 8
++        spacing: 6
++
++        StyledText {
++            Layout.fillWidth: true
++            visible: ClaudeAgents.available && ClaudeAgents.loaded
++            color: Appearance.colors.colSubtext
++            font.pixelSize: Appearance.font.pixelSize.small
++            elide: Text.ElideRight
++            text: {
++                let t = Translation.tr("%1 sessions · %2 need you").arg(ClaudeAgents.sessions.length).arg(root.needYouCount);
++                if (ClaudeAgents.headlessCount > 0)
++                    t += " · " + Translation.tr("%1 headless hidden").arg(ClaudeAgents.headlessCount);
++                return t;
++            }
++        }
++
++        StyledText {
++            Layout.fillWidth: true
++            visible: ClaudeAgents.available && ClaudeAgents.error.length > 0
++            color: Appearance.colors.colError
++            font.pixelSize: Appearance.font.pixelSize.smaller
++            wrapMode: Text.Wrap
++            text: ClaudeAgents.error
++        }
++
++        StyledListView {
++            id: sessionList
++            Layout.fillWidth: true
++            Layout.fillHeight: true
++            visible: ClaudeAgents.available
++            spacing: 4
++            clip: true
++            popin: false
++            animateAppearance: false
++            model: ScriptModel {
++                values: ClaudeAgents.sessions
++                objectProp: "rowKey"
++            }
++            delegate: AgentRow {
++                required property var modelData
++                width: sessionList.width
++                session: modelData
++                onClicked: {
++                    ClaudeAgents.focus(modelData);
++                    if (!root.detached && !root.pinned)
++                        GlobalStates.sidebarLeftOpen = false;
++                }
++            }
++        }
++    }
++
++    PagePlaceholder {
++        shown: !ClaudeAgents.available || (ClaudeAgents.loaded && ClaudeAgents.sessions.length === 0)
++        icon: "smart_toy"
++        title: ClaudeAgents.available ? Translation.tr("No Claude Code sessions") : Translation.tr("Claude Code not found")
++        description: ClaudeAgents.available ? Translation.tr("Sessions started in a terminal or with claude --bg show up here") : Translation.tr("claude is not on the shell's PATH")
++    }
++}
+diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/SidebarLeftContent.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/SidebarLeftContent.qml
+index 654b46df..381d6673 100644
+--- a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/SidebarLeftContent.qml
++++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/SidebarLeftContent.qml
+@@ -1,3 +1,4 @@
++import qs
+ import qs.services
+ import qs.modules.common
+ import qs.modules.common.widgets
+@@ -13,16 +14,27 @@ Item {
+     property int sidebarPadding: 10
+     anchors.fill: parent
+     property bool aiChatEnabled: Config.options.policies.ai !== 0
++    property bool agentsEnabled: Config.options.sidebar.agents.enable
+     property bool translatorEnabled: Config.options.sidebar.translator.enable
+     property bool animeEnabled: Config.options.policies.weeb !== 0
+     property bool animeCloset: Config.options.policies.weeb === 2
+     property var tabButtonList: [
+         ...(root.aiChatEnabled ? [{"icon": "neurology", "name": Translation.tr("Intelligence")}] : []),
++        ...(root.agentsEnabled ? [{"icon": "smart_toy", "name": Translation.tr("Agents")}] : []),
+         ...(root.translatorEnabled ? [{"icon": "translate", "name": Translation.tr("Translator")}] : []),
+         ...((root.animeEnabled && !root.animeCloset) ? [{"icon": "bookmark_heart", "name": Translation.tr("Anime")}] : [])
+     ]
+     property int tabCount: swipeView.count
+ 
++    // services/ClaudeAgents.qml polls `claude agents --json` only while this is true.
++    Binding {
++        target: ClaudeAgents
++        property: "active"
++        value: root.agentsEnabled
++            && GlobalStates.sidebarLeftOpen
++            && swipeView.currentItem?.objectName === "claudeAgentsTab"
++    }
++
+     function focusActiveItem() {
+         swipeView.currentItem.forceActiveFocus()
+     }
+@@ -85,8 +97,9 @@ Item {
+ 
+                 contentChildren: [
+                     ...(root.aiChatEnabled ? [aiChat.createObject()] : []),
++                    ...(root.agentsEnabled ? [agents.createObject()] : []),
+                     ...(root.translatorEnabled ? [translator.createObject()] : []),
+-                    ...((root.tabButtonList.length === 0 || (!root.aiChatEnabled && !root.translatorEnabled && root.animeCloset)) ? [placeholder.createObject()] : []),
++                    ...((root.tabButtonList.length === 0 || (!root.aiChatEnabled && !root.agentsEnabled && !root.translatorEnabled && root.animeCloset)) ? [placeholder.createObject()] : []),
+                     ...(root.animeEnabled ? [anime.createObject()] : []),
+                 ]
+             }
+@@ -96,6 +109,13 @@ Item {
+             id: aiChat
+             AiChat {}
+         }
++        Component {
++            id: agents
++            Agents {
++                detached: root.scopeRoot?.detach ?? false
++                pinned: root.scopeRoot?.pin ?? false
++            }
++        }
+         Component {
+             id: translator
+             Translator {}
+diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/agents/AgentRow.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/agents/AgentRow.qml
+new file mode 100644
+index 00000000..d7979362
+--- /dev/null
++++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/agents/AgentRow.qml
+@@ -0,0 +1,76 @@
++import qs.services
++import qs.modules.common
++import qs.modules.common.widgets
++import QtQuick
++import QtQuick.Layouts
++
++/**
++ * One Claude Code session: status dot, name, "<cwd> · bg · <activity>", and
++ * whether a click focuses a window (open_in_new) or opens a terminal (terminal).
++ */
++RippleButton {
++    id: root
++    property var session
++    readonly property string status: ClaudeAgents.statusOf(root.session)
++    readonly property bool knownStatus: ["waiting", "busy", "idle", "done"].includes(root.status)
++
++    horizontalPadding: 12
++    verticalPadding: 8
++    buttonRadius: Appearance.rounding.small
++
++    contentItem: RowLayout {
++        spacing: 10
++
++        Rectangle {
++            Layout.alignment: Qt.AlignVCenter
++            implicitWidth: 10
++            implicitHeight: 10
++            radius: 5
++            color: root.status === "waiting" ? Appearance.colors.colError
++                : root.status === "busy" ? Appearance.colors.colPrimary
++                : Appearance.colors.colOutlineVariant
++
++            SequentialAnimation on opacity {
++                running: root.status === "busy"
++                loops: Animation.Infinite
++                alwaysRunToEnd: true
++                NumberAnimation { to: 0.3; duration: 900; easing.type: Easing.InOutQuad }
++                NumberAnimation { to: 1; duration: 900; easing.type: Easing.InOutQuad }
++            }
++        }
++
++        ColumnLayout {
++            Layout.fillWidth: true
++            spacing: 0
++
++            StyledText {
++                Layout.fillWidth: true
++                elide: Text.ElideRight
++                font.pixelSize: Appearance.font.pixelSize.normal
++                color: Appearance.colors.colOnLayer1
++                text: root.session?.name || Translation.tr("Unnamed session")
++            }
++            StyledText {
++                Layout.fillWidth: true
++                elide: Text.ElideRight
++                font.pixelSize: Appearance.font.pixelSize.smaller
++                color: root.status === "waiting" ? Appearance.colors.colError : Appearance.colors.colSubtext
++                text: {
++                    const sub = ClaudeAgents.subtitleOf(root.session);
++                    if (root.status === "waiting")
++                        return `${root.session?.waitingFor ?? Translation.tr("needs you")} · ${sub}`;
++                    if (!root.knownStatus)
++                        return `${root.status} · ${sub}`;
++                    return sub;
++                }
++            }
++        }
++
++        MaterialSymbol {
++            Layout.alignment: Qt.AlignVCenter
++            text: root.session?.window ? "open_in_new" : "terminal"
++            iconSize: Appearance.font.pixelSize.larger
++            color: Appearance.colors.colSubtext
++        }
++    }
++}

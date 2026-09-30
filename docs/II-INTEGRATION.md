@@ -262,7 +262,7 @@ every new terminal after each activation. The backup lives at
 
 `patches/ii/` holds one `git format-patch` series per sub-project:
 `01-fixes` (fixes from [pctrade/end4-pC](https://github.com/pctrade/end4-pC)),
-then `02-translator`, `03-dock`, `04-agents` and `05-settings` as they land.
+then `02-translator`, `04-agents` and `05-settings` as they land.
 `lib/mk-host.nix` applies them with `applyPatches`, after the cheatsheet
 patch, to build the `dots-hyprland-patched` source the soymou module copies:
 directories in lexical order, and the files in each directory in lexical
@@ -357,6 +357,27 @@ bash -c 'f=~/.config/illogical-impulse/config.json; jq --indent 4 ".sidebar.tran
 Not ported: `9f63cce`, which hardcodes `trans -e bing`; Bing rejects the
 default `auto` source and target.
 
+### Agents (`04-agents`)
+
+New work, not from the fork: a left-sidebar Agents tab that lists Claude Code
+sessions (spec: `docs/superpowers/specs/2026-09-27-ii-agent-overview-design.md`;
+usage under "Claude Code" below).
+
+| Patch | Adds | Drop when |
+|---|---|---|
+| `0001` ClaudeAgents service | `services/ClaudeAgents.qml`, `services/claude-agents.js`, `scripts/claude/agents.sh`, config `sidebar.agents.enable` (default `true`) | pinned ii ships an equivalent agents tab, or `claude agents --json` is removed |
+| `0002` Agents tab | `modules/ii/sidebarLeft/Agents.qml`, `agents/AgentRow.qml`, tab and polling switch in `SidebarLeftContent.qml` | same as `0001` |
+
+Tests, runnable against the clone (default) or a built source:
+
+```sh
+bash scripts/ii-agents/test-agents-sh.sh [<ii root>]
+node scripts/ii-agents/test-logic.mjs [<ii root>]
+```
+
+`<ii root>` is `…/dots/.config/quickshell/ii`, for example inside the
+`dots-hyprland-patched` store path.
+
 ### Workflow
 
 The clone at `~/src/dots-hyprland` is a disposable workspace; the patch files
@@ -442,6 +463,83 @@ private fork of dots-hyprland as the flake input if:
   already reach; or
 - upstream ii ships its own rewrite of settings that overlaps the settings
   port.
+
+## Claude Code
+
+### Agents tab
+
+The left sidebar's Agents tab (`patches/ii/04-agents`) lists every Claude
+Code session on the machine that has a window or runs in the background:
+name, project (cwd basename), `bg` for background sessions, last activity,
+and a dot for the state (error colour and the `waitingFor` reason while a
+session waits on you, a pulsing primary colour while busy). Clicking a row
+focuses the session's terminal window on any workspace. For a background
+session that no terminal is attached to, it runs `kitty -e claude attach
+<id>`. The tab never answers, approves, stops or deletes anything.
+
+It runs `scripts/claude/agents.sh` (`claude agents --json`, plus the pid
+chain up to the terminal and the transcript's mtime; transcript content is
+never read) every 3 s, backing off to 15 s when a run is slow. It runs only
+while the tab is visible, so a closed sidebar starts no `claude` process.
+Sessions whose process has no terminal window (SDK sessions such as the
+claude-mem observer, tmux, SSH, TTYs) are hidden and counted as
+"headless hidden".
+
+To turn the tab off, add `"sidebar": {"agents": {"enable": false}}` to
+`~/.config/illogical-impulse/config.json` (ii-owned, not written by Nix).
+
+`claude agents --json` belongs to agent view, a research preview. After
+every `just update-claude`, check its fields:
+
+```sh
+claude agents --json | jq -c '[.[] | keys] | add | unique'
+```
+
+Expected: `cwd`, `id`, `kind`, `name`, `pid`, `sessionId`, `startedAt`,
+`state`, `status` (plus `waitingFor` while a session waits; `id` and
+`state` appear only while a background session exists). A rename shows
+up here before the tab breaks; the tab then shows the raw value or an error
+line instead of failing silently.
+
+### Desktop notifications for blocked sessions
+
+The Agents tab only refreshes while open, so it cannot tell you that a
+session is blocked. Claude Code's own terminal notifications do that
+(checked 2026-09-30 from ii's notification history (`~/.cache/quickshell/notifications/notifications.json`) with `preferredNotifChannel` unset (`auto`) in
+`~/.claude/settings.json`, the claude-dotfiles repo): a permission prompt in
+a kitty window on another workspace produces an ii notification popup. If it
+stops working, add a `Notification` hook that calls `notify-send`; see
+step 0 of `docs/superpowers/specs/2026-09-27-ii-agent-overview-design.md`.
+
+### Claude in the sidebar chat
+
+Optional and billed per token through an Anthropic API key. The Claude Code
+subscription cannot be used here: routing the teamclaude proxy or Claude
+Code's OAuth credentials into ii's requests falls outside Anthropic's terms.
+Anthropic describes its OpenAI-compatible endpoint as meant for testing and
+comparison, not long-term use.
+
+Add to `ai.extraModels` in `~/.config/illogical-impulse/config.json`:
+
+```json
+{
+  "api_format": "openai",
+  "name": "Claude Sonnet 5",
+  "description": "Anthropic API, billed per token",
+  "endpoint": "https://api.anthropic.com/v1/chat/completions",
+  "model": "claude-sonnet-5",
+  "key_id": "anthropic",
+  "key_get_link": "https://platform.claude.com/settings/keys",
+  "requires_key": true,
+  "extraParams": { "tools": [], "max_tokens": 4096 }
+}
+```
+
+Then pick it with `/model` in the Intelligence tab and store the key with
+`/key <key>` (ii keeps it in the keyring, never in this repo). `"tools": []`
+is required: ii's `openai` strategy does not parse tool calls, so a reply
+that calls one of ii's tools would arrive empty. Opus 5.5 works the same
+with `"model": "claude-opus-5-5"`.
 
 ## Verifying on the target
 
