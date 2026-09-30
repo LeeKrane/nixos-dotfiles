@@ -1,0 +1,295 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Wed, 30 Sep 2026 15:37:28 +0200
+Subject: [PATCH] ii: group the Agents tab by directory
+
+Problem: sessions from several projects are interleaved, so it is hard to see which project needs you.
+Port: new (no fork origin). claude-agents.js groups sessions by cwd (group with the most urgent session first) and marks each group's first row; AgentRow draws a ~-relative path header above it.
+Drop when: the pinned ii ships an equivalent agents tab, or `claude agents --json` is removed.
+---
+ .../ii/sidebarLeft/agents/AgentRow.qml        | 133 +++++++++++-------
+ .../quickshell/ii/services/ClaudeAgents.qml   |   2 +-
+ .../quickshell/ii/services/claude-agents.js   |  77 ++++++++--
+ 3 files changed, 150 insertions(+), 62 deletions(-)
+
+diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/agents/AgentRow.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/agents/AgentRow.qml
+index d7979362..2b642148 100644
+--- a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/agents/AgentRow.qml
++++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/agents/AgentRow.qml
+@@ -5,72 +5,101 @@ import QtQuick
+ import QtQuick.Layouts
+ 
+ /**
+- * One Claude Code session: status dot, name, "<cwd> · bg · <activity>", and
+- * whether a click focuses a window (open_in_new) or opens a terminal (terminal).
++ * One Claude Code session: a directory header above the first row of its
++ * group (Agents.qml groups sessions by cwd), then status dot, name,
++ * "bg · <activity>", and whether a click focuses a window (open_in_new) or
++ * opens a terminal (terminal). Click/hover stay on the row; the header above
++ * it is not part of the button.
+  */
+-RippleButton {
++Item {
+     id: root
+     property var session
++    signal clicked()
+     readonly property string status: ClaudeAgents.statusOf(root.session)
+     readonly property bool knownStatus: ["waiting", "busy", "idle", "done"].includes(root.status)
+ 
+-    horizontalPadding: 12
+-    verticalPadding: 8
+-    buttonRadius: Appearance.rounding.small
++    implicitHeight: column.implicitHeight
+ 
+-    contentItem: RowLayout {
+-        spacing: 10
++    ColumnLayout {
++        id: column
++        anchors.left: parent.left
++        anchors.right: parent.right
++        spacing: 2
+ 
+-        Rectangle {
+-            Layout.alignment: Qt.AlignVCenter
+-            implicitWidth: 10
+-            implicitHeight: 10
+-            radius: 5
+-            color: root.status === "waiting" ? Appearance.colors.colError
+-                : root.status === "busy" ? Appearance.colors.colPrimary
+-                : Appearance.colors.colOutlineVariant
+-
+-            SequentialAnimation on opacity {
+-                running: root.status === "busy"
+-                loops: Animation.Infinite
+-                alwaysRunToEnd: true
+-                NumberAnimation { to: 0.3; duration: 900; easing.type: Easing.InOutQuad }
+-                NumberAnimation { to: 1; duration: 900; easing.type: Easing.InOutQuad }
+-            }
++        StyledText {
++            Layout.fillWidth: true
++            visible: !!root.session?.groupStart
++            elide: Text.ElideMiddle
++            font.pixelSize: Appearance.font.pixelSize.smaller
++            color: Appearance.colors.colSubtext
++            text: root.session?.group ?? ""
+         }
+ 
+-        ColumnLayout {
++        RippleButton {
++            id: button
+             Layout.fillWidth: true
+-            spacing: 0
++            horizontalPadding: 12
++            verticalPadding: 8
++            buttonRadius: Appearance.rounding.small
++            onClicked: root.clicked()
+ 
+-            StyledText {
+-                Layout.fillWidth: true
+-                elide: Text.ElideRight
+-                font.pixelSize: Appearance.font.pixelSize.normal
+-                color: Appearance.colors.colOnLayer1
+-                text: root.session?.name || Translation.tr("Unnamed session")
+-            }
+-            StyledText {
+-                Layout.fillWidth: true
+-                elide: Text.ElideRight
+-                font.pixelSize: Appearance.font.pixelSize.smaller
+-                color: root.status === "waiting" ? Appearance.colors.colError : Appearance.colors.colSubtext
+-                text: {
+-                    const sub = ClaudeAgents.subtitleOf(root.session);
+-                    if (root.status === "waiting")
+-                        return `${root.session?.waitingFor ?? Translation.tr("needs you")} · ${sub}`;
+-                    if (!root.knownStatus)
+-                        return `${root.status} · ${sub}`;
+-                    return sub;
++            contentItem: RowLayout {
++                spacing: 10
++
++                Rectangle {
++                    Layout.alignment: Qt.AlignVCenter
++                    implicitWidth: 10
++                    implicitHeight: 10
++                    radius: 5
++                    color: root.status === "waiting" ? Appearance.colors.colError
++                        : root.status === "busy" ? Appearance.colors.colPrimary
++                        : Appearance.colors.colOutlineVariant
++
++                    SequentialAnimation on opacity {
++                        running: root.status === "busy"
++                        loops: Animation.Infinite
++                        alwaysRunToEnd: true
++                        NumberAnimation { to: 0.3; duration: 900; easing.type: Easing.InOutQuad }
++                        NumberAnimation { to: 1; duration: 900; easing.type: Easing.InOutQuad }
++                    }
+                 }
+-            }
+-        }
+ 
+-        MaterialSymbol {
+-            Layout.alignment: Qt.AlignVCenter
+-            text: root.session?.window ? "open_in_new" : "terminal"
+-            iconSize: Appearance.font.pixelSize.larger
+-            color: Appearance.colors.colSubtext
++                ColumnLayout {
++                    Layout.fillWidth: true
++                    spacing: 0
++
++                    StyledText {
++                        Layout.fillWidth: true
++                        elide: Text.ElideRight
++                        font.pixelSize: Appearance.font.pixelSize.normal
++                        color: Appearance.colors.colOnLayer1
++                        text: root.session?.name || Translation.tr("Unnamed session")
++                    }
++                    StyledText {
++                        Layout.fillWidth: true
++                        elide: Text.ElideRight
++                        font.pixelSize: Appearance.font.pixelSize.smaller
++                        color: root.status === "waiting" ? Appearance.colors.colError : Appearance.colors.colSubtext
++                        text: {
++                            const sub = ClaudeAgents.subtitleOf(root.session);
++                            if (root.status === "waiting") {
++                                const reason = root.session?.waitingFor ?? Translation.tr("needs you");
++                                return sub ? `${reason} · ${sub}` : reason;
++                            }
++                            if (!root.knownStatus)
++                                return sub ? `${root.status} · ${sub}` : root.status;
++                            return sub;
++                        }
++                    }
++                }
++
++                MaterialSymbol {
++                    Layout.alignment: Qt.AlignVCenter
++                    text: root.session?.window ? "open_in_new" : "terminal"
++                    iconSize: Appearance.font.pixelSize.larger
++                    color: Appearance.colors.colSubtext
++                }
++            }
+         }
+     }
+ }
+diff --git a/dots/.config/quickshell/ii/services/ClaudeAgents.qml b/dots/.config/quickshell/ii/services/ClaudeAgents.qml
+index b60d46bb..bdc89435 100644
+--- a/dots/.config/quickshell/ii/services/ClaudeAgents.qml
++++ b/dots/.config/quickshell/ii/services/ClaudeAgents.qml
+@@ -40,7 +40,7 @@ Singleton {
+     }
+ 
+     function applyWindows() {
+-        const result = AgentsLogic.annotate(root.lastEntries, HyprlandData.windowList);
++        const result = AgentsLogic.annotate(root.lastEntries, HyprlandData.windowList, Directories.home);
+         root.sessions = result.sessions;
+         root.headlessCount = result.headlessCount;
+     }
+diff --git a/dots/.config/quickshell/ii/services/claude-agents.js b/dots/.config/quickshell/ii/services/claude-agents.js
+index 67c88a1e..935807c3 100644
+--- a/dots/.config/quickshell/ii/services/claude-agents.js
++++ b/dots/.config/quickshell/ii/services/claude-agents.js
+@@ -75,8 +75,55 @@ function computeRowKey(e, index) {
+     return `${e?.kind ?? "?"}:${e?.pid ?? "?"}:${index}`;
+ }
+ 
+-// entries: parsed agents.sh output. Returns { sessions, headlessCount }.
+-function annotate(entries, windows) {
++// Directories.home carries a "file://" prefix; strip it so callers can pass
++// it through unchanged.
++function stripFileProtocol(path) {
++    const s = String(path ?? "");
++    return s.startsWith("file://") ? s.slice(7) : s;
++}
++
++// Drops a trailing slash so "/x/" and "/x" group and label the same way;
++// "/" itself is left alone.
++function dropTrailingSlash(path) {
++    const p = String(path ?? "");
++    return p.length > 1 ? p.replace(/\/+$/, "") : p;
++}
++
++// Replaces a leading home-directory path component with "~". Only matches a
++// whole component ("/home/kranex" is left alone when home is "/home/krane").
++// An empty or missing home leaves the path unchanged. A trailing slash on
++// either path is normalized away first, so "/home/krane/src/x/" and
++// "/home/krane/src/x" both yield "~/src/x".
++function tildePath(path, home) {
++    const p = dropTrailingSlash(path);
++    const h = dropTrailingSlash(stripFileProtocol(home));
++    if (!h) return p;
++    if (p === h) return "~";
++    return p.startsWith(`${h}/`) ? `~${p.slice(h.length)}` : p;
++}
++
++// The Agents tab groups sessions by this label; "?" for a missing cwd sorts
++// like any other label.
++function groupLabel(session, home) {
++    const cwd = session?.cwd;
++    return cwd ? tildePath(cwd, home) : "?";
++}
++
++// A group's rank is the best (lowest) rank() among its sessions; ties break
++// on the most recent activityMs of any member, then alphabetically by label.
++function compareGroups(a, b) {
++    const rankDiff = Math.min(...a.sessions.map(rank)) - Math.min(...b.sessions.map(rank));
++    if (rankDiff !== 0) return rankDiff;
++    const activityDiff = Math.max(...b.sessions.map(activityMs)) - Math.max(...a.sessions.map(activityMs));
++    if (activityDiff !== 0) return activityDiff;
++    return a.label < b.label ? -1 : a.label > b.label ? 1 : 0;
++}
++
++// entries: parsed agents.sh output. home: the user's home directory (may
++// carry a "file://" prefix), used to shorten group headers. Returns
++// { sessions, headlessCount }; each session gets `group` (its header label)
++// and `groupStart` (true on the first session of its group).
++function annotate(entries, windows, home) {
+     let headlessCount = 0;
+     const sessions = [];
+     const nameCounts = {};
+@@ -93,7 +140,23 @@ function annotate(entries, windows) {
+         sessions.push(s);
+     });
+     sessions.sort((a, b) => rank(a) - rank(b) || activityMs(b) - activityMs(a));
+-    return { sessions: sessions, headlessCount: headlessCount };
++
++    const groups = new Map();
++    for (const s of sessions) {
++        const label = groupLabel(s, home);
++        if (!groups.has(label)) groups.set(label, []);
++        groups.get(label).push(s);
++    }
++    const ordered = Array.from(groups, ([label, members]) => ({ label: label, sessions: members })).sort(compareGroups);
++    const grouped = [];
++    for (const g of ordered) {
++        g.sessions.forEach((s, i) => {
++            s.group = g.label;
++            s.groupStart = i === 0;
++            grouped.push(s);
++        });
++    }
++    return { sessions: grouped, headlessCount: headlessCount };
+ }
+ 
+ // Returns { kind: "ok", entries } | { kind: "missing", message }
+@@ -119,11 +182,6 @@ function nextInterval(current, elapsedMs) {
+     return BASE_INTERVAL;
+ }
+ 
+-function basename(path) {
+-    const parts = String(path ?? "").split("/").filter(p => p.length > 0);
+-    return parts.length ? parts[parts.length - 1] : "/";
+-}
+-
+ function relativeTime(ms, nowMs) {
+     const sec = Math.max(0, Math.floor((nowMs - ms) / 1000));
+     if (sec < 60) return "just now";
+@@ -132,8 +190,9 @@ function relativeTime(ms, nowMs) {
+     return `${Math.floor(sec / 86400)} d ago`;
+ }
+ 
++// The group header carries the directory, so the subtitle only has the rest.
+ function subtitle(session, nowMs) {
+-    const parts = [basename(session?.cwd)];
++    const parts = [];
+     if (session?.kind === "background") parts.push("bg");
+     if (typeof session?.lastActivity === "number") parts.push(relativeTime(session.lastActivity * 1000, nowMs));
+     else if (typeof session?.startedAt === "number") parts.push(`started ${relativeTime(session.startedAt, nowMs)}`);

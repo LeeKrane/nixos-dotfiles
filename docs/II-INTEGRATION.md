@@ -367,6 +367,8 @@ usage under "Claude Code" below).
 |---|---|---|
 | `0001` ClaudeAgents service | `services/ClaudeAgents.qml`, `services/claude-agents.js`, `scripts/claude/agents.sh`, config `sidebar.agents.enable` (default `true`) | pinned ii ships an equivalent agents tab, or `claude agents --json` is removed |
 | `0002` Agents tab | `modules/ii/sidebarLeft/Agents.qml`, `agents/AgentRow.qml`, tab and polling switch in `SidebarLeftContent.qml` | same as `0001` |
+| `0003` group by directory | grouping in `claude-agents.js` (`annotate`'s `group`/`groupStart`, `tildePath`), header rendering in `agents/AgentRow.qml` | same as `0001` |
+| `0004` normalize group paths | `normalizePath` in `claude-agents.js`, used by `tildePath`/`groupLabel` so `annotate` groups on one normalized cwd per session and normalizes home once | same as `0001` |
 
 Tests, runnable against the clone (default) or a built source:
 
@@ -470,12 +472,15 @@ private fork of dots-hyprland as the flake input if:
 
 The left sidebar's Agents tab (`patches/ii/04-agents`) lists every Claude
 Code session on the machine that has a window or runs in the background:
-name, project (cwd basename), `bg` for background sessions, last activity,
-and a dot for the state (error colour and the `waitingFor` reason while a
-session waits on you, a pulsing primary colour while busy). Clicking a row
-focuses the session's terminal window on any workspace. For a background
-session that no terminal is attached to, it runs `kitty -e claude attach
-<id>`. The tab never answers, approves, stops or deletes anything.
+name, `bg` for background sessions, last activity, and a dot for the state
+(error colour and the `waitingFor` reason while a session waits on you, a
+pulsing primary colour while busy). Rows are grouped by working directory,
+each group under a `~`-relative path header, with the group holding the
+most urgent session (waiting, then busy, then idle) listed first. Clicking
+a row focuses the session's terminal window on any workspace. For a
+background session that no terminal is attached to, it runs `kitty -e
+claude attach <id>`. The tab never answers, approves, stops or deletes
+anything.
 
 It runs `scripts/claude/agents.sh` (`claude agents --json`, plus the pid
 chain up to the terminal and the transcript's mtime; transcript content is

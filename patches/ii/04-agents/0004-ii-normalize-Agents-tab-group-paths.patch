@@ -1,0 +1,88 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Wed, 30 Sep 2026 16:34:11 +0200
+Subject: [PATCH] ii: normalize Agents tab group paths
+
+Problem: cwd spellings like `//`, `a//b`, `./` or a trailing `/` split one directory into several groups, and a home of `/` labelled only the root as `~`.
+Port: new (no fork origin). claude-agents.js normalizes each cwd once (collapse `/`, drop `.` segments and trailing `/`, keep `..`) and groups on it; home is normalized once per annotate and never shortens paths when it is `/`.
+Drop when: the pinned ii ships an equivalent agents tab, or `claude agents --json` is removed.
+---
+ .../quickshell/ii/services/claude-agents.js   | 41 +++++++++++--------
+ 1 file changed, 25 insertions(+), 16 deletions(-)
+
+diff --git a/dots/.config/quickshell/ii/services/claude-agents.js b/dots/.config/quickshell/ii/services/claude-agents.js
+index 935807c3..6cddbc8f 100644
+--- a/dots/.config/quickshell/ii/services/claude-agents.js
++++ b/dots/.config/quickshell/ii/services/claude-agents.js
+@@ -82,31 +82,38 @@ function stripFileProtocol(path) {
+     return s.startsWith("file://") ? s.slice(7) : s;
+ }
+ 
+-// Drops a trailing slash so "/x/" and "/x" group and label the same way;
+-// "/" itself is left alone.
+-function dropTrailingSlash(path) {
+-    const p = String(path ?? "");
+-    return p.length > 1 ? p.replace(/\/+$/, "") : p;
++// Normalizes a path for grouping/display: collapses repeated "/", drops "."
++// segments, and drops a trailing "/". An input made up only of slashes ("/",
++// "//", "///", ...) collapses to "/". Never resolves ".." (no filesystem
++// access here) - those segments are left exactly as written. Empty/undefined
++// normalizes to "", which callers treat as a missing cwd.
++function normalizePath(path) {
++    const s = String(path ?? "");
++    if (!s) return "";
++    if (/^\/+$/.test(s)) return "/";
++    const segments = s.split("/").filter(seg => seg !== "" && seg !== ".");
++    return s.startsWith("/") ? `/${segments.join("/")}` : segments.join("/");
+ }
+ 
+ // Replaces a leading home-directory path component with "~". Only matches a
+ // whole component ("/home/kranex" is left alone when home is "/home/krane").
+-// An empty or missing home leaves the path unchanged. A trailing slash on
+-// either path is normalized away first, so "/home/krane/src/x/" and
+-// "/home/krane/src/x" both yield "~/src/x".
++// An empty/missing home, or a home that normalizes to "/", leaves the path
++// unchanged - there's nothing meaningful to shorten against the root. Both
++// arguments are run through normalizePath first, so direct callers may pass
++// raw paths.
+ function tildePath(path, home) {
+-    const p = dropTrailingSlash(path);
+-    const h = dropTrailingSlash(stripFileProtocol(home));
+-    if (!h) return p;
++    const p = normalizePath(path);
++    const h = normalizePath(stripFileProtocol(home));
++    if (!h || h === "/") return p;
+     if (p === h) return "~";
+     return p.startsWith(`${h}/`) ? `~${p.slice(h.length)}` : p;
+ }
+ 
+ // The Agents tab groups sessions by this label; "?" for a missing cwd sorts
+-// like any other label.
+-function groupLabel(session, home) {
+-    const cwd = session?.cwd;
+-    return cwd ? tildePath(cwd, home) : "?";
++// like any other label. Expects normalizedCwd/normalizedHome already run
++// through normalizePath (annotate does that once, not per session).
++function groupLabel(normalizedCwd, normalizedHome) {
++    return normalizedCwd ? tildePath(normalizedCwd, normalizedHome) : "?";
+ }
+ 
+ // A group's rank is the best (lowest) rank() among its sessions; ties break
+@@ -128,6 +135,8 @@ function annotate(entries, windows, home) {
+     const sessions = [];
+     const nameCounts = {};
+     for (const e of entries ?? []) nameCounts[e.name] = (nameCounts[e.name] ?? 0) + 1;
++    // Normalized once here, not re-derived per session below.
++    const normalizedHome = normalizePath(stripFileProtocol(home));
+     (entries ?? []).forEach((e, index) => {
+         const s = Object.assign({}, e, {
+             window: matchWindow(e, windows, nameCounts[e.name] === 1),
+@@ -143,7 +152,7 @@ function annotate(entries, windows, home) {
+ 
+     const groups = new Map();
+     for (const s of sessions) {
+-        const label = groupLabel(s, home);
++        const label = groupLabel(normalizePath(s.cwd), normalizedHome);
+         if (!groups.has(label)) groups.set(label, []);
+         groups.get(label).push(s);
+     }
