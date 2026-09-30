@@ -648,7 +648,17 @@ render_host_templates() {
     replace_block_token "$dest/default.nix" FORM_FACTOR_IMPORTS "$(template_section "$ff_file" imports)"
     replace_block_token "$dest/default.nix" PROFILE "$(template_section "$profile_file" body)"
     replace_block_token "$dest/display.nix" TOUCHPAD "$(template_section "$ff_file" touchpad)"
-    # GIT_NAME and GIT_EMAIL go last so a value can never feed a later token.
+    # GIT_EMAIL's -e expression runs last of the eight so a rendered GIT_NAME is never
+    # mistaken for a later token's placeholder by that expression. It cannot protect
+    # GIT_NAME itself: all -e expressions run in one pass over each line, so a git name
+    # containing the literal text "@GIT_EMAIL@" would be rewritten again when GIT_EMAIL's
+    # expression runs right after it, leaving no unrendered @TOKEN@ for the leftover-token
+    # grep below to catch. So a git name containing @ is refused outright. Task 6's
+    # validator forbids @ in a new host's git name too; this is defence in depth for any
+    # other caller of render_host_templates.
+    case "$git_name" in
+        *@*) die "git name '$git_name' contains '@', refusing to render: it could be rewritten by a later sed expression" ;;
+    esac
     local sed_args=() pair key value
     for pair in "HOST=$host" "USERNAME=$user" "PROFILE_NAME=$profile" "FORM_FACTOR=$form_factor" \
         "KB_LAYOUT=$kb_layout" "KB_VARIANT=$kb_variant" "GIT_NAME=$git_name" "GIT_EMAIL=$git_email"; do
@@ -1497,6 +1507,18 @@ if $SELF_TEST_CHECK_SCAFFOLD; then
             fi
         done
     done
+    # A git name containing @ could be rewritten again by GIT_EMAIL's later sed
+    # expression (see render_host_templates), so it must be refused outright. Captured
+    # through $(...), a subshell, so render_host_templates's own die exits only that
+    # subshell and not this whole self-test.
+    st_dir="$self_test_tmpdir/refuse-at-in-git-name"
+    st_out8=$(render_host_templates "$st_dir" testhost tester 'Bad@Name' tester@example.invalid \
+        amd-igpu laptop at nodeadkeys 2>&1) && st_rc8=0 || st_rc8=$?
+    if [ "$st_rc8" -eq 0 ]; then
+        die "render_host_templates accepted a git name containing '@', expected it to refuse"
+    fi
+    printf '%s' "$st_out8" | grep -qF "contains '@'" \
+        || die "render_host_templates refused the @ git name for the wrong reason: $st_out8"
     # sed's / & \ and Nix's " \ ${ must land as the same string, not break
     # the sed expression or the Nix string.
     st_dir="$self_test_tmpdir/escaping"
