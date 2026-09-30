@@ -124,10 +124,115 @@ test("nextInterval doubles slow runs up to 15 s and resets after a fast one", ()
     assert.equal(L.nextInterval(15000, 200), 3000);
 });
 
-test("subtitle: cwd basename, bg marker, activity or start time", () => {
+test("subtitle: bg marker, activity or start time (no cwd basename; the group header carries it)", () => {
     const now = 1_000_000_000;
-    assert.equal(L.subtitle({ cwd: "/home/krane/.dotfiles", kind: "interactive", lastActivity: (now - 120_000) / 1000 }, now), ".dotfiles · 2 min ago");
-    assert.equal(L.subtitle({ cwd: "/home/krane/src/x/", kind: "background", lastActivity: null, startedAt: now - 7_200_000 }, now), "x · bg · started 2 h ago");
+    assert.equal(L.subtitle({ cwd: "/home/krane/.dotfiles", kind: "interactive", lastActivity: (now - 120_000) / 1000 }, now), "2 min ago");
+    assert.equal(L.subtitle({ cwd: "/home/krane/src/x/", kind: "background", lastActivity: null, startedAt: now - 7_200_000 }, now), "bg · started 2 h ago");
+});
+
+test("subtitle is empty for an interactive session with no lastActivity and no startedAt", () => {
+    const now = 1_000_000_000;
+    assert.equal(L.subtitle({ cwd: "/home/krane/proj", kind: "interactive" }, now), "");
+});
+
+test("tildePath replaces only a whole leading home path component", () => {
+    assert.equal(L.tildePath("/home/krane", "/home/krane"), "~");
+    assert.equal(L.tildePath("/home/krane/.dotfiles", "/home/krane"), "~/.dotfiles");
+    // Prefix lookalike: "/home/kranex" is not "/home/krane" plus more.
+    assert.equal(L.tildePath("/home/kranex/foo", "/home/krane"), "/home/kranex/foo");
+    assert.equal(L.tildePath("/home/krane/foo", ""), "/home/krane/foo");
+    assert.equal(L.tildePath("/home/krane/foo", undefined), "/home/krane/foo");
+    // Directories.home carries a "file://" prefix and may have a trailing slash.
+    assert.equal(L.tildePath("/home/krane/foo", "file:///home/krane"), "~/foo");
+    assert.equal(L.tildePath("/home/krane/foo", "/home/krane/"), "~/foo");
+});
+
+test("tildePath normalizes a trailing slash on the path itself", () => {
+    assert.equal(L.tildePath("/home/krane/src/x/", "/home/krane"), "~/src/x");
+    assert.equal(L.tildePath("/home/krane/src/x", "/home/krane"), "~/src/x");
+    assert.equal(L.tildePath("/home/krane/", "/home/krane"), "~");
+    // "/" itself is left alone, not turned into "".
+    assert.equal(L.tildePath("/", "/home/krane"), "/");
+});
+
+test("a cwd with or without a trailing slash lands in the same group", () => {
+    const home = "/home/krane";
+    const entries = [
+        { kind: "background", name: "with-slash", status: "idle", cwd: "/home/krane/src/x/", ancestors: [], lastActivity: 1 },
+        { kind: "background", name: "without-slash", status: "idle", cwd: "/home/krane/src/x", ancestors: [], lastActivity: 2 },
+    ];
+    const r = plain(L.annotate(entries, [], home));
+    assert.deepEqual(r.sessions.map(s => s.group), ["~/src/x", "~/src/x"]);
+    assert.deepEqual(r.sessions.map(s => s.groupStart), [true, false]);
+});
+
+test("sessions without a cwd land in the \"?\" group, sorted like any other label", () => {
+    const home = "/home/krane";
+    const entries = [
+        { kind: "background", name: "no-cwd", status: "idle", ancestors: [], lastActivity: 1 },
+        { kind: "background", name: "aardvark-proj", status: "idle", cwd: "/home/krane/aardvark", ancestors: [], lastActivity: 1 },
+    ];
+    const r = plain(L.annotate(entries, [], home));
+    assert.deepEqual(r.sessions.map(s => s.group), ["?", "~/aardvark"]);
+});
+
+test("groups sort waiting before busy before idle, ties by most recent activity then path", () => {
+    const home = "/home/krane";
+    const entries = [
+        { kind: "background", name: "idle-old", status: "idle", cwd: "/home/krane/zzz", ancestors: [], lastActivity: 100 },
+        { kind: "background", name: "busy-one", status: "busy", cwd: "/home/krane/busy-proj", ancestors: [], lastActivity: 200 },
+        { kind: "background", name: "wait-one", status: "waiting", cwd: "/home/krane/wait-proj", ancestors: [], lastActivity: 50 },
+        { kind: "background", name: "idle-new", status: "idle", cwd: "/home/krane/aaa", ancestors: [], lastActivity: 500 },
+    ];
+    const r = plain(L.annotate(entries, [], home));
+    assert.deepEqual(r.sessions.map(s => s.group), ["~/wait-proj", "~/busy-proj", "~/aaa", "~/zzz"]);
+});
+
+test("groups tied on rank and peak activity break the tie alphabetically by path", () => {
+    const home = "/home/krane";
+    const entries = [
+        { kind: "background", name: "z-sess", status: "idle", cwd: "/home/krane/zeta", ancestors: [], lastActivity: 100 },
+        { kind: "background", name: "a-sess", status: "idle", cwd: "/home/krane/alpha", ancestors: [], lastActivity: 100 },
+    ];
+    const r = plain(L.annotate(entries, [], home));
+    assert.deepEqual(r.sessions.map(s => s.group), ["~/alpha", "~/zeta"]);
+});
+
+test("a group's rank is the best rank among its sessions, not its peak activity", () => {
+    const home = "/home/krane";
+    const entries = [
+        { kind: "background", name: "idle-in-mixed", status: "idle", cwd: "/home/krane/mixed", ancestors: [], lastActivity: 10 },
+        { kind: "background", name: "busy-in-mixed", status: "busy", cwd: "/home/krane/mixed", ancestors: [], lastActivity: 20 },
+        { kind: "background", name: "idle-alone", status: "idle", cwd: "/home/krane/alone", ancestors: [], lastActivity: 999 },
+    ];
+    const r = plain(L.annotate(entries, [], home));
+    // "alone" has far more recent activity, but "mixed" holds a busy session, so it leads.
+    assert.deepEqual([...new Set(r.sessions.map(s => s.group))], ["~/mixed", "~/alone"]);
+});
+
+test("within a group, sessions keep the existing rank-asc, activity-desc order", () => {
+    const home = "/home/krane";
+    const entries = [
+        { kind: "background", name: "idle-old", status: "idle", cwd: "/home/krane/proj", ancestors: [], lastActivity: 10 },
+        { kind: "background", name: "busy", status: "busy", cwd: "/home/krane/proj", ancestors: [], lastActivity: 20 },
+        { kind: "background", name: "idle-new", status: "idle", cwd: "/home/krane/proj", ancestors: [], lastActivity: 30 },
+        { kind: "background", name: "waiting", status: "waiting", cwd: "/home/krane/proj", ancestors: [], lastActivity: 5 },
+    ];
+    const r = plain(L.annotate(entries, [], home));
+    assert.deepEqual(r.sessions.map(s => s.name), ["waiting", "busy", "idle-new", "idle-old"]);
+});
+
+test("groupStart is set exactly once per group, on its first session", () => {
+    const home = "/home/krane";
+    const entries = [
+        { kind: "background", name: "a1", status: "idle", cwd: "/home/krane/p1", ancestors: [], lastActivity: 1 },
+        { kind: "background", name: "a2", status: "busy", cwd: "/home/krane/p1", ancestors: [], lastActivity: 2 },
+        { kind: "background", name: "b1", status: "idle", cwd: "/home/krane/p2", ancestors: [], lastActivity: 3 },
+    ];
+    const r = plain(L.annotate(entries, [], home));
+    assert.deepEqual(r.sessions.map(s => s.name), ["a2", "a1", "b1"]);
+    assert.deepEqual(r.sessions.map(s => s.groupStart), [true, false, true]);
+    assert.equal(r.sessions.filter(s => s.groupStart).length, 2);
 });
 
 test("attachCommand opens a new kitty on the short id", () => {
