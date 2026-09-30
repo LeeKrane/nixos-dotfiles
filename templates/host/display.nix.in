@@ -3,7 +3,7 @@
 # one catch-all monitor rule because the live ISO runs no Hyprland to detect outputs: after
 # first login, check `hyprctl monitors -j` and name the real outputs here (see
 # hosts/tariognatha/display.nix for a multi-monitor layout).
-{ ... }:
+{ osConfig, ... }:
 {
   krane.hypr = {
     monitors = [
@@ -16,9 +16,12 @@
       }
     ];
 
+    # Layout/variant come from krane.keyboard (modules/nixos/keyboard.nix), set
+    # in default.nix, so locale.nix's xkb/TTY keymap and this Hyprland setting
+    # never drift apart.
     settings.input = {
-      kb_layout = "@KB_LAYOUT@";
-      kb_variant = "@KB_VARIANT@";
+      kb_layout = osConfig.krane.keyboard.layout;
+      kb_variant = osConfig.krane.keyboard.variant;
 @TOUCHPAD@
     };
 

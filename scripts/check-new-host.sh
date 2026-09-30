@@ -10,9 +10,19 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# Mirrors install.sh's GPU_PROFILES and FORM_FACTORS.
-PROFILES=(amd-igpu intel-igpu nvidia-desktop intel-nvidia-prime)
-FORM_FACTORS=(laptop desktop)
+# Derived the same way install.sh derives GPU_PROFILES and FORM_FACTORS: the
+# file names under templates/host/profiles/ and templates/host/form-factors/.
+PROFILES=()
+for _f in "$REPO_ROOT"/templates/host/profiles/*.nix.in; do
+    PROFILES+=("$(basename "$_f" .nix.in)")
+done
+mapfile -t PROFILES < <(printf '%s\n' "${PROFILES[@]}" | sort)
+FORM_FACTORS=()
+for _f in "$REPO_ROOT"/templates/host/form-factors/*.nix.in; do
+    FORM_FACTORS+=("$(basename "$_f" .nix.in)")
+done
+mapfile -t FORM_FACTORS < <(printf '%s\n' "${FORM_FACTORS[@]}" | sort)
+unset _f
 HOST=testhost
 USER_NAME=tester
 GIT_NAME="Test Er"

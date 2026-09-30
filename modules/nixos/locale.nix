@@ -1,5 +1,5 @@
 # Time zone, locale and keyboard layout.
-{ ... }:
+{ config, ... }:
 {
   time.timeZone = "Europe/Vienna";
 
@@ -21,9 +21,10 @@
   console.useXkbConfig = true;
   console.font = "eurlatgr";
 
-  # Hyprland reads this even without an X server.
+  # Hyprland reads this even without an X server. Per-host layout/variant:
+  # modules/nixos/keyboard.nix.
   services.xserver.xkb = {
-    layout = "at";
-    variant = "nodeadkeys";
+    layout = config.krane.keyboard.layout;
+    variant = config.krane.keyboard.variant;
   };
 }

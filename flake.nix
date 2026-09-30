@@ -161,6 +161,10 @@
                       gitName = "Test Er";
                       gitEmail = "tester@example.invalid";
                     };
+                    krane.keyboard = {
+                      layout = "de";
+                      variant = "";
+                    };
                   }
                 ];
               }).config;
@@ -213,6 +217,14 @@
               {
                 ok = moved.services.greetd.settings.initial_session.user == "tester";
                 what = "greetd autologin does not follow krane.user.name";
+              }
+              {
+                ok = base.krane.keyboard.layout == "at" && base.krane.keyboard.variant == "nodeadkeys";
+                what = "default krane.keyboard is not at/nodeadkeys";
+              }
+              {
+                ok = moved.services.xserver.xkb.layout == "de" && moved.services.xserver.xkb.variant == "";
+                what = "services.xserver.xkb does not follow krane.keyboard";
               }
             ];
             failed = map (e: e.what) (builtins.filter (e: !e.ok) expectations);

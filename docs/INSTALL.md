@@ -89,7 +89,7 @@ For a machine that has no `hosts/<name>/` yet. This is install mode only: setup 
         | `intel-nvidia-prime` | Intel iGPU plus NVIDIA dGPU, PRIME offload (like `tarmantria`) |
 
         `laptop` adds nixos-hardware's laptop profiles and a touchpad block. `desktop` adds the SSD profile only. AMD CPU plus NVIDIA dGPU PRIME is not offered.
-    - Keyboard layout and variant, default `at` / `nodeadkeys`.
+    - Keyboard layout and variant, default `at` / `nodeadkeys` (the variant default is empty for any other layout).
 3. Disk selection and the typed wipe confirmation work as usual. Nothing is written to the repo before that confirmation, so aborting earlier leaves the checkout untouched.
 4. `install.sh` renders `templates/host/` into `hosts/<name>/` (`default.nix`, `disko.nix`, `display.nix`, and a placeholder `hardware-configuration.nix`) and parse-checks every file. It then adds `age1PLACEHOLDER_*` recipients for the host to `.sops.yaml`. If rendering or parsing fails, it removes `hosts/<name>/` again and restores `.sops.yaml`. After that the normal flow runs: disko, hardware config, PRIME bus IDs (`intel-nvidia-prime` only), one local commit `Add <name> host`, and `nixos-install`.
 5. The new host exists only as that local commit in `~/.dotfiles` on the new machine. After first boot, run setup mode as usual (it bootstraps the host's sops recipients), then push the branch from there.
@@ -102,7 +102,7 @@ Non-interactively:
     --disk /dev/disk/by-id/<disk> --yes --confirm-wipe
 ```
 
-`--yes --new-host` requires `--user`, `--profile` and `--form-factor`. `--git-name`, `--git-email`, `--kb-layout` and `--kb-variant` take the defaults above. All of these flags are usage errors without `--new-host` or outside install mode.
+`--yes --new-host` requires `--user`, `--profile` and `--form-factor`. `--git-name`, `--git-email`, `--kb-layout` and `--kb-variant` take the defaults above (`--kb-variant` defaults to empty unless `--kb-layout` is `at`). All of these flags are usage errors without `--new-host` or outside install mode.
 
 To check the templates without a machine, commit your change and run `just check-new-host`. It needs local Nix. It scaffolds a throwaway `testhost` for each GPU profile × form factor in a temporary git worktree, and checks that each one is nixfmt-clean and evaluates.
 
@@ -119,7 +119,7 @@ To check the templates without a machine, commit your change and run `just check
 | `--profile PROFILE` | New host's GPU profile: `amd-igpu`, `intel-igpu`, `nvidia-desktop`, `intel-nvidia-prime`. |
 | `--form-factor FF` | New host's form factor: `laptop` or `desktop`. |
 | `--kb-layout LAYOUT` | New host's keyboard layout, default `at`. |
-| `--kb-variant VARIANT` | New host's keyboard variant, default `nodeadkeys`. |
+| `--kb-variant VARIANT` | New host's keyboard variant, default `nodeadkeys` for `--kb-layout at`, otherwise empty. |
 | `--disk DISK` | Target block device, install mode only. |
 | `-y`, `--yes` | Auto-confirm every prompt. Never skips setting the login user's password. |
 | `-n`, `--dry-run` | Print every mutating command instead of running it. Implies `--yes`. |

@@ -17,6 +17,13 @@
     gitEmail = "@GIT_EMAIL@";
   };
 
+  # Keyboard layout/variant (modules/nixos/keyboard.nix), read by locale.nix
+  # and, via osConfig, by display.nix's Hyprland settings.
+  krane.keyboard = {
+    layout = "@KB_LAYOUT@";
+    variant = "@KB_VARIANT@";
+  };
+
   system.stateVersion = "26.05";
 
   # display.nix sets krane.hypr.*, a home-manager module, imported at the user level.

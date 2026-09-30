@@ -66,10 +66,19 @@ unset _d
 
 # templates/host/ is what the new-host flow renders hosts/<name>/ from.
 # Profile and form-factor names are the file names under its profiles/ and
-# form-factors/ (and scripts/check-new-host.sh mirrors both lists).
+# form-factors/ (scripts/check-new-host.sh derives the same lists the same way).
 TEMPLATE_DIR="$REPO_ROOT/templates/host"
-GPU_PROFILES=(amd-igpu intel-igpu nvidia-desktop intel-nvidia-prime)
-FORM_FACTORS=(laptop desktop)
+GPU_PROFILES=()
+for _f in "$TEMPLATE_DIR"/profiles/*.nix.in; do
+    GPU_PROFILES+=("$(basename "$_f" .nix.in)")
+done
+mapfile -t GPU_PROFILES < <(printf '%s\n' "${GPU_PROFILES[@]}" | sort)
+FORM_FACTORS=()
+for _f in "$TEMPLATE_DIR"/form-factors/*.nix.in; do
+    FORM_FACTORS+=("$(basename "$_f" .nix.in)")
+done
+mapfile -t FORM_FACTORS < <(printf '%s\n' "${FORM_FACTORS[@]}" | sort)
+unset _f
 # Defaults for a new host's answers, the values the original hosts use.
 DEFAULT_INSTALL_USER=krane
 DEFAULT_GIT_EMAIL=chris@krane.dev
@@ -419,8 +428,9 @@ Usage: install.sh [options]
   --form-factor FF        New host's form factor: ${FORM_FACTORS[*]}
   --kb-layout LAYOUT      New host's keyboard layout (default $DEFAULT_KB_LAYOUT).
   --kb-variant VARIANT    New host's keyboard variant (default
-                            $DEFAULT_KB_VARIANT). --yes --new-host also
-                            requires --user, --profile and --form-factor.
+                            $DEFAULT_KB_VARIANT for --kb-layout $DEFAULT_KB_LAYOUT,
+                            otherwise empty). --yes --new-host also requires
+                            --user, --profile and --form-factor.
   --disk DISK              Target block device, install mode only.
   -y, --yes               Assume yes and auto-confirm every prompt. Live
                             install also requires --confirm-wipe unless
@@ -868,6 +878,15 @@ parse_check_nix_dir() {
     done
 }
 
+# True if $1 is already a hosts/ directory name (AVAILABLE_HOSTS).
+host_known() {
+    local h
+    for h in "${AVAILABLE_HOSTS[@]}"; do
+        [ "$h" = "$1" ] && return 0
+    done
+    return 1
+}
+
 # Each check_* prints why its value is unusable and returns 1, or returns 0
 # silently. prompt_validated re-prompts on 1; validate_new_host_flags turns
 # it into a usage error.
@@ -876,7 +895,7 @@ parse_check_nix_dir() {
 # type rejects it and that would only surface in nixos-install, after the
 # wipe. tariognatha-vm is flake.nix's VM check target, not a hosts/ dir.
 check_new_hostname() {
-    local name="$1" h
+    local name="$1"
     if ! [[ "$name" =~ ^[a-z][a-z0-9-]{0,62}$ ]]; then
         echo "hostname '$name' must start with a lowercase letter and use only a-z, 0-9 and -, at most 63 characters"
         return 1
@@ -889,12 +908,10 @@ check_new_hostname() {
         echo "hostname 'tariognatha-vm' is taken by flake.nix's VM check target"
         return 1
     fi
-    for h in "${AVAILABLE_HOSTS[@]}"; do
-        if [ "$h" = "$name" ]; then
-            echo "hosts/$name already exists, pick it from the host list instead"
-            return 1
-        fi
-    done
+    if host_known "$name"; then
+        echo "hosts/$name already exists, pick it from the host list instead"
+        return 1
+    fi
     if [ -e "$REPO_ROOT/hosts/$name" ] || [ -L "$REPO_ROOT/hosts/$name" ]; then
         echo "hosts/$name already exists"
         return 1
@@ -1000,7 +1017,14 @@ suggest_profile() {
     fi
     if printf '%s' "$gpu_info" | grep -qi nvidia; then
         if printf '%s' "$gpu_info" | grep -qi intel; then
-            profile=intel-nvidia-prime
+            # intel-nvidia-prime's whole point is switching between the
+            # iGPU and the NVIDIA GPU to save battery, which only matters
+            # on a laptop. A desktop with both keeps the NVIDIA GPU on.
+            if [ "$form_factor" = desktop ]; then
+                profile=nvidia-desktop
+            else
+                profile=intel-nvidia-prime
+            fi
         else
             profile=nvidia-desktop
         fi
@@ -1125,10 +1149,17 @@ prompt_new_host() {
         fi
     fi
     if ! $NEW_KB_VARIANT_SET; then
+        # DEFAULT_KB_VARIANT (nodeadkeys) only makes sense for
+        # DEFAULT_KB_LAYOUT (at): "us(nodeadkeys)" etc. is not a valid xkb
+        # variant, so any other layout defaults to no variant.
+        local default_kb_variant=""
+        if [ "$NEW_KB_LAYOUT" = "$DEFAULT_KB_LAYOUT" ]; then
+            default_kb_variant="$DEFAULT_KB_VARIANT"
+        fi
         if $YES; then
-            NEW_KB_VARIANT="$DEFAULT_KB_VARIANT"
+            NEW_KB_VARIANT="$default_kb_variant"
         else
-            NEW_KB_VARIANT=$(prompt_validated "Keyboard variant (may be empty)" "$DEFAULT_KB_VARIANT" check_kb_variant)
+            NEW_KB_VARIANT=$(prompt_validated "Keyboard variant (may be empty)" "$default_kb_variant" check_kb_variant)
         fi
         NEW_KB_VARIANT_SET=true
     fi
@@ -1275,16 +1306,23 @@ scaffold_host() {
         # nothing for rollback_scaffold to ever restore.
         SCAFFOLD_PREVIEW_DIR="$SCAFFOLD_STAGING"
     else
-        SCAFFOLD_PENDING=true
+        # .sops.yaml must exist and be readable before anything else below
+        # is written: SCAFFOLD_PENDING only flips to true once the snapshot
+        # is safely on disk, so a missing/unreadable .sops.yaml dies here,
+        # rollback_scaffold sees SCAFFOLD_PENDING still false, and never
+        # fabricates an empty .sops.yaml where none existed.
+        [ -f "$REPO_ROOT/.sops.yaml" ] || die "$REPO_ROOT/.sops.yaml not found, cannot register sops placeholders for $HOST"
         # Snapshot .sops.yaml's exact current content, uncommitted edits
         # included, before register_sops_host mutates it. Lives in TMPDIR,
         # never inside the repo or SCAFFOLD_STAGING (which lands in
         # hosts/$HOST/ below, and must not carry this file along).
         SCAFFOLD_SOPS_SNAPSHOT=$(mktemp "${TMPDIR:-/tmp}/krane-install-sops-snapshot.XXXXXX")
         cp -p "$REPO_ROOT/.sops.yaml" "$SCAFFOLD_SOPS_SNAPSHOT"
+        SCAFFOLD_PENDING=true
     fi
     run mkdir -p "$dest"
     run cp -a "$SCAFFOLD_STAGING/." "$dest/"
+    run chmod -R u+rwX,go+rX,go-w "$dest"
     run register_sops_host "$REPO_ROOT/.sops.yaml" "$HOST"
     SCAFFOLD_PENDING=false
     if [ -n "$SCAFFOLD_SOPS_SNAPSHOT" ]; then
@@ -1647,11 +1685,7 @@ preflight_setup() {
     # A die, not soft_fail: setup mode on a machine this flake never
     # installed has no host config to bootstrap or switch to, and a new host
     # can only be created from install mode.
-    local known=false h
-    for h in "${AVAILABLE_HOSTS[@]}"; do
-        [ "$h" != "$HOST" ] || known=true
-    done
-    $known || die "host '$HOST' not in hosts/ — install it via install mode, or pass --host"
+    host_known "$HOST" || die "host '$HOST' not in hosts/ — install it via install mode, or pass --host"
     if [ "$REPO_ROOT" != "$HOME/.dotfiles" ]; then
         log_warn "checked out at $REPO_ROOT, not \$HOME/.dotfiles. The docs assume the latter"
     fi
@@ -1715,8 +1749,11 @@ register_sops_host() {
             printf "    key_groups:\n      - age:\n          - *admin_%s\n          - *host_%s\n", host, host
         }
     ' "$sops_yaml" >"$tmp"
-    grep -qF "&host_${host} age1PLACEHOLDER_HOST_${host_upper}_REPLACE_VIA_BOOTSTRAP_SOPS_SH" "$tmp" \
-        || die "post-awk verification failed for $host in $sops_yaml"
+    if ! grep -qF "&admin_${host} age1PLACEHOLDER_ADMIN_${host_upper}_REPLACE_VIA_BOOTSTRAP_SOPS_SH" "$tmp" \
+        || ! grep -qF "&host_${host} age1PLACEHOLDER_HOST_${host_upper}_REPLACE_VIA_BOOTSTRAP_SOPS_SH" "$tmp"; then
+        rm -f "$tmp"
+        die "post-awk verification failed for $host in $sops_yaml"
+    fi
     # cat into the original, not mv, so the file keeps its mode and owner.
     cat "$tmp" >"$sops_yaml"
     rm -f "$tmp"
@@ -1986,11 +2023,7 @@ main() {
     validate_new_host_flags
 
     if [ -n "$HOST" ]; then
-        local known=false h
-        for h in "${AVAILABLE_HOSTS[@]}"; do
-            [ "$h" = "$HOST" ] && known=true
-        done
-        $known || die "unknown host '$HOST', expected one of: ${AVAILABLE_HOSTS[*]}"
+        host_known "$HOST" || die "unknown host '$HOST', expected one of: ${AVAILABLE_HOSTS[*]}"
     fi
 
     if [ "$MODE" = install ] && $YES && ! $DRY_RUN && ! $CONFIRM_WIPE; then
@@ -2075,8 +2108,10 @@ if $SELF_TEST_CHECK_SCAFFOLD; then
                 || die "$st_profile/$st_ff: default.nix has no stateVersion 26.05"
             grep -qF 'device = "/dev/CHANGE-ME";' "$st_dir/disko.nix" \
                 || die "$st_profile/$st_ff: disko.nix lost the CHANGE-ME placeholder patch_disko needs"
-            grep -qF 'kb_layout = "at";' "$st_dir/display.nix" \
-                || die "$st_profile/$st_ff: display.nix has no kb_layout line"
+            grep -qF 'layout = "at";' "$st_dir/default.nix" \
+                || die "$st_profile/$st_ff: default.nix has no krane.keyboard layout line"
+            grep -qF 'kb_layout = osConfig.krane.keyboard.layout;' "$st_dir/display.nix" \
+                || die "$st_profile/$st_ff: display.nix does not read osConfig.krane.keyboard.layout"
             if [ "$st_ff" = laptop ]; then
                 grep -qF 'tap_to_click = true;' "$st_dir/display.nix" \
                     || die "$st_profile/$st_ff: laptop display.nix has no touchpad block"
@@ -2131,6 +2166,17 @@ if $SELF_TEST_CHECK_SCAFFOLD; then
         || die "git name with / & \\ \" \${ was not escaped for Nix and sed"
     grep -qF 'gitEmail = "a&b/c\\d@example.invalid";' "$st_dir/default.nix" \
         || die "git email with & / \\ was not escaped for Nix and sed"
+    # A non-"at" layout with an empty variant (prompt_new_host's default for
+    # e.g. "us") must still render a valid, empty Nix string, not a stray
+    # "()" or unterminated quote.
+    st_dir="$self_test_tmpdir/empty-kb-variant"
+    render_host_templates "$st_dir" testhost tester "Test Er" tester@example.invalid \
+        amd-igpu laptop us ""
+    parse_check_nix_dir "$st_dir"
+    grep -qF 'layout = "us";' "$st_dir/default.nix" \
+        || die "non-at keyboard layout did not render into krane.keyboard.layout"
+    grep -qF 'variant = "";' "$st_dir/default.nix" \
+        || die "empty keyboard variant did not render as variant = \"\";"
     # .sops.yaml: the new anchors land as the last keys: entries, a second
     # run is a no-op, and a host whose name prefixes an existing one (tar vs
     # taractias) is still added.
@@ -2463,6 +2509,51 @@ self_test() {
         SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
     fi
 
+    echo "== self-test: prompt_new_host defaults kb-variant off DEFAULT_KB_LAYOUT only ==" >&2
+    local kv_ok=true
+    local saved_yes="$YES" saved_new_host_mode="$NEW_HOST_MODE" saved_new_host="$NEW_HOST" \
+        saved_new_user="$NEW_USER" saved_new_git_name="$NEW_GIT_NAME" saved_new_git_email="$NEW_GIT_EMAIL" \
+        saved_new_profile="$NEW_PROFILE" saved_new_form_factor="$NEW_FORM_FACTOR" \
+        saved_new_kb_layout="$NEW_KB_LAYOUT" saved_new_kb_variant="$NEW_KB_VARIANT" \
+        saved_new_kb_variant_set="$NEW_KB_VARIANT_SET" saved_host3="$HOST"
+    YES=true
+    NEW_HOST_MODE=true
+    NEW_HOST=kvtest
+    NEW_USER=tester
+    NEW_GIT_NAME="Test Er"
+    NEW_GIT_EMAIL=tester@example.invalid
+    NEW_PROFILE=amd-igpu
+    NEW_FORM_FACTOR=laptop
+    NEW_KB_LAYOUT="$DEFAULT_KB_LAYOUT"
+    NEW_KB_VARIANT=""
+    NEW_KB_VARIANT_SET=false
+    prompt_new_host >/dev/null
+    [ "$NEW_KB_VARIANT" = "$DEFAULT_KB_VARIANT" ] \
+        || { echo "FAIL: --kb-layout $DEFAULT_KB_LAYOUT defaulted kb-variant to '$NEW_KB_VARIANT', expected '$DEFAULT_KB_VARIANT'" >&2; kv_ok=false; }
+    NEW_KB_LAYOUT=us
+    NEW_KB_VARIANT=""
+    NEW_KB_VARIANT_SET=false
+    prompt_new_host >/dev/null
+    [ "$NEW_KB_VARIANT" = "" ] \
+        || { echo "FAIL: --kb-layout us defaulted kb-variant to '$NEW_KB_VARIANT', expected empty" >&2; kv_ok=false; }
+    YES="$saved_yes"
+    NEW_HOST_MODE="$saved_new_host_mode"
+    NEW_HOST="$saved_new_host"
+    NEW_USER="$saved_new_user"
+    NEW_GIT_NAME="$saved_new_git_name"
+    NEW_GIT_EMAIL="$saved_new_git_email"
+    NEW_PROFILE="$saved_new_profile"
+    NEW_FORM_FACTOR="$saved_new_form_factor"
+    NEW_KB_LAYOUT="$saved_new_kb_layout"
+    NEW_KB_VARIANT="$saved_new_kb_variant"
+    NEW_KB_VARIANT_SET="$saved_new_kb_variant_set"
+    HOST="$saved_host3"
+    if $kv_ok; then
+        echo "OK: kb-variant defaults to nodeadkeys only for layout at, else empty" >&2
+    else
+        SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
+    fi
+
     echo "== self-test: suggest_profile keeps each field in its slot ==" >&2
     local sp_ok=true sp_got
     sp_got=$(
@@ -2477,6 +2568,14 @@ self_test() {
         suggest_profile
     )
     [ "$sp_got" = "intel-nvidia-prime laptop" ] || { echo "FAIL: Intel+NVIDIA laptop suggested '$sp_got'" >&2; sp_ok=false; }
+    # Desktop chassis with both GPUs: no battery to save by prime-switching,
+    # so this should suggest nvidia-desktop, not intel-nvidia-prime.
+    sp_got=$(
+        lspci() { printf '00:02.0 VGA compatible controller: Intel Corporation UHD\n01:00.0 3D controller: NVIDIA Corporation GA104\n'; }
+        dmidecode() { [ "$2" = chassis-type ] && echo Desktop; }
+        suggest_profile
+    )
+    [ "$sp_got" = "nvidia-desktop desktop" ] || { echo "FAIL: Intel+NVIDIA desktop suggested '$sp_got'" >&2; sp_ok=false; }
     sp_got=$(
         lspci() { printf '0a:00.0 VGA compatible controller: Advanced Micro Devices, Inc. [AMD/ATI] Raphael\n'; }
         dmidecode() { [ "$2" = chassis-type ] && echo Desktop; }
@@ -2578,6 +2677,28 @@ EOF
         echo "  captured output: $sb_out" >&2
         sb_ok=false
     fi
+    # cp -a preserves mktemp -d's 0700/0600 modes; scaffold_host must widen
+    # them back to the repo's normal 0755 dirs / 0644 files.
+    [ "$(stat -c%a "$sb_tmp/hosts/goodhost")" = 755 ] \
+        || { echo "FAIL: hosts/goodhost is $(stat -c%a "$sb_tmp/hosts/goodhost"), expected 755" >&2; sb_ok=false; }
+    [ "$(stat -c%a "$sb_tmp/hosts/goodhost/default.nix")" = 644 ] \
+        || { echo "FAIL: hosts/goodhost/default.nix is $(stat -c%a "$sb_tmp/hosts/goodhost/default.nix"), expected 644" >&2; sb_ok=false; }
+    # A .sops.yaml missing entirely (not just missing creation_rules:) must
+    # die before SCAFFOLD_PENDING is ever set, so rollback never fabricates
+    # an empty .sops.yaml where none existed.
+    rm -f "$sb_tmp/.sops.yaml"
+    sb_rc=0
+    sb_out=$(KRANE_ALLOW_SCAFFOLD_HOOK=1 bash "$sb_tmp/install.sh" --self-test-scaffold \
+        --new-host nosopshost --user tester --profile amd-igpu --form-factor laptop 2>&1) || sb_rc=$?
+    if [ "$sb_rc" -eq 0 ] || ! printf '%s' "$sb_out" | grep -qF '.sops.yaml not found'; then
+        echo "FAIL: scaffolding with no .sops.yaml at all did not die with the expected message (rc=$sb_rc)" >&2
+        echo "  captured output: $sb_out" >&2
+        sb_ok=false
+    fi
+    [ ! -e "$sb_tmp/hosts/nosopshost" ] || { echo "FAIL: hosts/nosopshost survived a scaffold with no .sops.yaml" >&2; sb_ok=false; }
+    [ ! -e "$sb_tmp/.sops.yaml" ] \
+        || { echo "FAIL: rollback fabricated a .sops.yaml where none existed before scaffolding" >&2; sb_ok=false; }
+    git -C "$sb_tmp" checkout -q -- .sops.yaml
     sb_rc=0
     sb_out=$(KRANE_ALLOW_SCAFFOLD_HOOK=1 bash "$sb_tmp/install.sh" --self-test-scaffold \
         --new-host goodhost --user tester --profile amd-igpu --form-factor laptop 2>&1) || sb_rc=$?
@@ -2670,6 +2791,29 @@ EOF
     rm -rf "$dl_tmp"
     if $dl_ok; then
         echo "OK: check_new_hostname refuses a dangling symlink" >&2
+    else
+        SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
+    fi
+
+    # Distinct from check_new_hostname's own guard above: scaffold_host has
+    # its own separate "$dest already exists" check ($dest -e or -L), which
+    # is what actually protects a real scaffold. Exercised directly, with
+    # REPO_ROOT/HOST overridden only for this one command (so the die's
+    # exit 1 does not abort self_test, and neither global leaks outside it).
+    echo "== self-test: scaffold_host refuses a dangling symlink at hosts/<name> ==" >&2
+    local dg_ok=true dg_tmp dg_out dg_rc=0
+    dg_tmp=$(mktemp -d "${TMPDIR:-/tmp}/krane-install-selftest-scaffold-symlink.XXXXXX")
+    mkdir -p "$dg_tmp/hosts"
+    ln -s "$dg_tmp/hosts/nonexistent-target" "$dg_tmp/hosts/deadlink"
+    dg_out=$(REPO_ROOT="$dg_tmp" HOST=deadlink scaffold_host 2>&1) || dg_rc=$?
+    if [ "$dg_rc" -eq 0 ] || ! printf '%s' "$dg_out" | grep -qF 'already exists'; then
+        echo "FAIL: scaffold_host accepted a dangling symlink at hosts/deadlink (rc=$dg_rc)" >&2
+        echo "  captured output: $dg_out" >&2
+        dg_ok=false
+    fi
+    rm -rf "$dg_tmp"
+    if $dg_ok; then
+        echo "OK: scaffold_host's own dest guard refuses a dangling symlink" >&2
     else
         SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
     fi
