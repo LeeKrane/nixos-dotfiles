@@ -1,0 +1,7 @@
+# Both lints flag idiomatic NixOS module style: dotted keys repeated across a
+# module (`programs.a = ...; programs.b = ...;`) and `{ ... }:` headers on
+# modules that take no arguments. Rewriting ~30 modules would be churn.
+disabled = [
+  "repeated_keys",
+  "empty_pattern",
+]

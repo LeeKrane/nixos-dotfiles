@@ -275,11 +275,11 @@ while true; do
 			else
 				log_verbose "Showing retry/cancel dialog to user"
 				log_command "yad --center --title=\"$RCLONE_REMOTE Mount Failed\" --text=\"<b>$local_message</b>\\n\\n$local_detail\\n\\nWould you like to retry the mount?\" --button=\"Retry!gtk-refresh:0\" --button=\"Cancel!gtk-cancel:1\" --undecorated --width=450 --height=150"
-				yad_response=$(yad --center --title="$RCLONE_REMOTE Mount Failed" \
+				yad --center --title="$RCLONE_REMOTE Mount Failed" \
 					--text="<b>$local_message</b>\n\n$local_detail\n\nWould you like to retry the mount?" \
 					--button="Retry!gtk-refresh:0" \
 					--button="Cancel!gtk-cancel:1" \
-					--undecorated --width=450 --height=150)
+					--undecorated --width=450 --height=150 >/dev/null
 
 				yad_exit_code=$? # Capture yad's exit code for button pressed
 				log_verbose "User dialog response: exit code $yad_exit_code"

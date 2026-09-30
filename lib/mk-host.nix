@@ -82,7 +82,7 @@ inputs.nixpkgs.lib.nixosSystem {
                   patchesIn =
                     dir: map (n: dir + "/${n}") (sortedNames (n: t: t == "regular" && lib.hasSuffix ".patch" n) dir);
                 in
-                lib.concatMap (d: patchesIn (root + "/${d}")) (sortedNames (n: t: t == "directory") root);
+                lib.concatMap (d: patchesIn (root + "/${d}")) (sortedNames (_n: t: t == "directory") root);
               patchedDotfiles = inputs.nixpkgs.legacyPackages.${system}.applyPatches {
                 name = "dots-hyprland-patched";
                 src = inputs.illogical-flake.inputs.dotfiles;

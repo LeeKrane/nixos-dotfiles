@@ -23,7 +23,7 @@ let
   # matching LazyVim; otherwise run the window-nav wincmd.
   termWinMap = key: dir: desc: {
     mode = "t";
-    key = key;
+    inherit key;
     action = lua ''
       function()
         if vim.api.nvim_win_get_config(0).relative ~= "" then

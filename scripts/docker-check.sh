@@ -84,6 +84,7 @@ case "$mode" in
         ;;
     check)
         # Only the host list is spliced in here, $h expands in the container's sh.
+        # shellcheck disable=SC2016 # expands inside the container's sh, not here
         run_in_container '
             set -eu
             nix flake check --no-build --show-trace
@@ -118,11 +119,12 @@ case "$mode" in
         ;;
     lint)
         # Report-only, each check falls through to status=1 instead of aborting.
+        # shellcheck disable=SC2016 # expands inside the container's sh, not here
         run_in_container '
             set -eu
             status=0
             nix run nixpkgs#statix -- check . || status=1
-            nix run nixpkgs#deadnix -- . || status=1
+            nix run nixpkgs#deadnix -- --exclude hosts/*/hardware-configuration.nix -- . || status=1
             exit "$status"
         '
         ;;
