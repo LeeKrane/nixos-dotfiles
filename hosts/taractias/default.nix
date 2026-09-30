@@ -43,6 +43,9 @@
   # common-cpu-amd's mkDefault above.
   hardware.cpu.intel.updateMicrocode = false;
 
+  # zram at twice the RAM size instead of boot.nix's 1:1 default.
+  zramSwap.memoryPercent = 200;
+
   # QCA9377 Wi-Fi on ath10k_pci floods AMD-Vi IO_PAGE_FAULT events and stalls under the
   # default IOMMU mode.
   boot.kernelParams = [ "iommu=pt" ];

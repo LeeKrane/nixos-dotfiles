@@ -52,9 +52,10 @@
   # Weekly TRIM for the btrfs-on-SSD/NVMe layout disko.nix sets up.
   services.fstrim.enable = true;
 
+  # zram device sized to match RAM; hosts can override memoryPercent.
   zramSwap = {
     enable = true;
-    memoryPercent = 25;
+    memoryPercent = lib.mkDefault 100;
     algorithm = "zstd";
   };
 }
