@@ -123,6 +123,16 @@ SYSTEM_ACCOUNT_NAMES=(root nobody daemon bin sys sync games man lp mail news uuc
     sshd messagebus polkituser rtkit avahi geoclue nscd dhcpcd greeter flatpak ollama pipewire colord
     cups usbmux qemu-libvirtd nm-openvpn nm-iodine fwupd-refresh)
 
+SELF_TEST_SCAFFOLD=false
+NEW_HOST_MENU_ENTRY="+ new host"
+# scaffold_host state. SCAFFOLD_STAGING is its render dir, removed on exit.
+# SCAFFOLD_PREVIEW_DIR points host_dir at it under --dry-run, which never
+# writes hosts/<name>/. SCAFFOLD_PENDING is true only while hosts/$HOST/ and
+# .sops.yaml may be half-written, which is when on_exit rolls them back.
+SCAFFOLD_STAGING=""
+SCAFFOLD_PREVIEW_DIR=""
+SCAFFOLD_PENDING=false
+
 # Runs from run_install_mode after a successful install and from on_exit, so
 # an aborted run never leaves the swapfile inside the new root. Warns
 # instead of dying on failure, so cleanup never trips the ERR trap. Defined
@@ -138,6 +148,22 @@ teardown_install_swap() {
     fi
     run_soft rm -f /mnt/swapfile || log_warn "could not remove /mnt/swapfile"
     INSTALL_SWAP_ACTIVE=false
+}
+
+# Undoes a scaffold_host that did not finish: removes the new hosts/$HOST/
+# and restores .sops.yaml from the index. SCAFFOLD_PENDING is only true
+# between scaffold_host's "does not exist yet" check and its last step, and
+# never under --dry-run, so this can never touch an existing host. Warns
+# instead of dying, like teardown_install_swap.
+rollback_scaffold() {
+    if ! $SCAFFOLD_PENDING || [ -z "$HOST" ]; then
+        return 0
+    fi
+    SCAFFOLD_PENDING=false
+    log_warn "rolling back the partial hosts/$HOST scaffold"
+    rm -rf "${REPO_ROOT:?}/hosts/$HOST" || log_warn "could not remove hosts/$HOST, delete it by hand"
+    git -C "$REPO_ROOT" checkout -- .sops.yaml \
+        || log_warn "could not restore .sops.yaml, run git checkout -- .sops.yaml"
 }
 
 banner() {
@@ -229,6 +255,10 @@ on_exit() {
         fi
     fi
     teardown_install_swap
+    rollback_scaffold
+    if [ -n "$SCAFFOLD_STAGING" ]; then
+        rm -rf "$SCAFFOLD_STAGING"
+    fi
 }
 trap on_exit EXIT
 
@@ -538,6 +568,10 @@ while [ "$#" -gt 0 ]; do
             SELF_TEST_CHECK_SCAFFOLD=true
             shift
             ;;
+        --self-test-scaffold)
+            SELF_TEST_SCAFFOLD=true
+            shift
+            ;;
         -h | --help)
             usage
             exit 0
@@ -566,9 +600,25 @@ detect_mode() {
 
 # True only when $HOST's own default.nix imports the NVIDIA desktop GPU
 # module, confirmed with `git grep -n nvidia-desktop hosts/`: tariognatha
-# only. Empty $HOST (interactive host choice not made yet) reads as false.
+# only, among the committed hosts. A new host is not written until after
+# check_dns runs, so it answers from its chosen GPU profile instead. Empty
+# $HOST (interactive host choice not made yet) reads as false.
 host_uses_cuda() {
+    if $NEW_HOST_MODE && [ -n "$NEW_PROFILE" ]; then
+        [ "$NEW_PROFILE" = nvidia-desktop ]
+        return
+    fi
     grep -q 'gpu/nvidia-desktop' "$REPO_ROOT/hosts/$HOST/default.nix" 2>/dev/null
+}
+
+# hosts/$HOST, or under --dry-run for a new host the staging copy
+# scaffold_host rendered, since --dry-run never writes hosts/<name>/.
+host_dir() {
+    if [ -n "$SCAFFOLD_PREVIEW_DIR" ]; then
+        printf '%s\n' "$SCAFFOLD_PREVIEW_DIR"
+    else
+        printf '%s\n' "$REPO_ROOT/hosts/$HOST"
+    fi
 }
 
 # Prints the --option flags that add the CUDA cache substituter, so the
@@ -685,15 +735,24 @@ suggest_host() {
 }
 
 choose_host() {
+    if $NEW_HOST_MODE; then
+        prompt_new_host
+        return
+    fi
     if [ -n "$HOST" ]; then
         return
     fi
     if $YES; then
-        die "--host is required together with --yes or --dry-run, no interactive prompts under --yes"
+        die "--host or --new-host is required together with --yes or --dry-run, no interactive prompts under --yes"
     fi
     local suggestion
     suggestion=$(suggest_host)
-    HOST=$(choose_one "Select the target host" "$suggestion" "${AVAILABLE_HOSTS[@]}")
+    HOST=$(choose_one "Select the target host" "$suggestion" "${AVAILABLE_HOSTS[@]}" "$NEW_HOST_MENU_ENTRY")
+    if [ "$HOST" = "$NEW_HOST_MENU_ENTRY" ]; then
+        HOST=""
+        NEW_HOST_MODE=true
+        prompt_new_host
+    fi
 }
 
 # Escapes $1 for a Nix double-quoted string: \ first, then " and ${, so
@@ -987,6 +1046,77 @@ validate_new_host_flags() {
     fi
 }
 
+# Prompts until $3 accepts the answer, printing the validator's reason and
+# asking again otherwise. $2 is pre-filled. Never reached under --yes:
+# validate_new_host_flags requires or defaults every answer there.
+prompt_validated() {
+    local prompt="$1" default="$2" validator="$3" answer reason
+    while true; do
+        answer=$(gum_tty input --prompt "$prompt: " --value "$default" --placeholder "$default")
+        if reason=$("$validator" "$answer"); then
+            log_info "$prompt: $answer"
+            printf '%s\n' "$answer"
+            return 0
+        fi
+        log_warn "$reason"
+    done
+}
+
+# Collects every new-host answer before anything is written: flags win,
+# then --yes takes the DEFAULT_*s (validate_new_host_flags already required
+# --user/--profile/--form-factor), else a prompt pre-filled with the
+# default or suggest_profile's guess. Sets HOST last.
+prompt_new_host() {
+    log_step "New host"
+    if [ -z "$NEW_HOST" ]; then
+        NEW_HOST=$(prompt_validated "Hostname" "" check_new_hostname)
+    fi
+    if [ -z "$NEW_USER" ]; then
+        NEW_USER=$(prompt_validated "Login username" "$DEFAULT_INSTALL_USER" check_new_username)
+    fi
+    if [ -z "$NEW_GIT_NAME" ]; then
+        if $YES; then
+            NEW_GIT_NAME="$NEW_USER"
+        else
+            NEW_GIT_NAME=$(prompt_validated "git user.name" "$NEW_USER" check_git_name)
+        fi
+    fi
+    if [ -z "$NEW_GIT_EMAIL" ]; then
+        if $YES; then
+            NEW_GIT_EMAIL="$DEFAULT_GIT_EMAIL"
+        else
+            NEW_GIT_EMAIL=$(prompt_validated "git user.email" "$DEFAULT_GIT_EMAIL" check_git_email)
+        fi
+    fi
+    if [ -z "$NEW_PROFILE" ] || [ -z "$NEW_FORM_FACTOR" ]; then
+        local suggestion
+        suggestion=$(suggest_profile)
+        if [ -z "$NEW_PROFILE" ]; then
+            NEW_PROFILE=$(choose_one "GPU profile for $NEW_HOST" "${suggestion%% *}" "${GPU_PROFILES[@]}")
+        fi
+        if [ -z "$NEW_FORM_FACTOR" ]; then
+            NEW_FORM_FACTOR=$(choose_one "Form factor for $NEW_HOST" "${suggestion#* }" "${FORM_FACTORS[@]}")
+        fi
+    fi
+    if [ -z "$NEW_KB_LAYOUT" ]; then
+        if $YES; then
+            NEW_KB_LAYOUT="$DEFAULT_KB_LAYOUT"
+        else
+            NEW_KB_LAYOUT=$(prompt_validated "Keyboard layout" "$DEFAULT_KB_LAYOUT" check_kb_layout)
+        fi
+    fi
+    if ! $NEW_KB_VARIANT_SET; then
+        if $YES; then
+            NEW_KB_VARIANT="$DEFAULT_KB_VARIANT"
+        else
+            NEW_KB_VARIANT=$(prompt_validated "Keyboard variant (may be empty)" "$DEFAULT_KB_VARIANT" check_kb_variant)
+        fi
+        NEW_KB_VARIANT_SET=true
+    fi
+    HOST="$NEW_HOST"
+    log_info "new host $HOST: user $NEW_USER, git $NEW_GIT_NAME <$NEW_GIT_EMAIL>, $NEW_PROFILE, $NEW_FORM_FACTOR, keyboard $NEW_KB_LAYOUT/${NEW_KB_VARIANT:-<none>}"
+}
+
 # Excludes zram, device-mapper, MD-RAID and loop devices by name, since
 # lsblk's own TYPE==disk filter below does not catch zram.
 is_excluded_disk_name() {
@@ -1084,10 +1214,14 @@ confirm_wipe_target() {
     kernel=$(basename "$(readlink -f "$DISK")")
     local kernel_hl
     kernel_hl=$(gum style --foreground 226 --bold "$kernel")
+    local host_label="$HOST"
+    if $NEW_HOST_MODE; then
+        host_label="$HOST (new: hosts/$HOST is written after this confirmation)"
+    fi
     gum style \
         --border double --border-foreground 196 --foreground 196 --bold \
         --padding "1 3" --margin "1 0" \
-        "This will ERASE ALL DATA on:" "" "  $DISK" "  resolves to /dev/$kernel_hl" "" "Host: $HOST" >&2
+        "This will ERASE ALL DATA on:" "" "  $DISK" "  resolves to /dev/$kernel_hl" "" "Host: $host_label" >&2
     if $YES; then
         log_warn "auto-confirmed wipe of $DISK via --yes"
         return
@@ -1096,6 +1230,35 @@ confirm_wipe_target() {
     typed=$(gum_tty input --placeholder "$kernel" --prompt "Type $kernel_hl to confirm: ")
     [ "$typed" = "$kernel" ] || die "typed name did not match $kernel (device $DISK), aborting"
     log_info "wipe confirmed for /dev/$kernel"
+}
+
+# Renders templates/host/ for $HOST into a staging dir, parse-checks every
+# file, then copies it into hosts/$HOST/ and registers $HOST's sops
+# placeholders. Runs only after the wipe is confirmed, so an abort before
+# then leaves the repo untouched. Until it finishes, on_exit's
+# rollback_scaffold removes hosts/$HOST/ and restores .sops.yaml. A later
+# failure leaves the host in place, and a rerun picks it from the menu.
+scaffold_host() {
+    log_step "Scaffolding hosts/$HOST ($NEW_PROFILE, $NEW_FORM_FACTOR, user $NEW_USER)"
+    require nix-instantiate awk
+    local dest="$REPO_ROOT/hosts/$HOST"
+    [ ! -e "$dest" ] || die "$dest already exists, rerun and pick $HOST from the host list instead"
+    SCAFFOLD_STAGING=$(mktemp -d "${TMPDIR:-/tmp}/krane-install-scaffold.XXXXXX")
+    render_host_templates "$SCAFFOLD_STAGING" "$HOST" "$NEW_USER" "$NEW_GIT_NAME" "$NEW_GIT_EMAIL" \
+        "$NEW_PROFILE" "$NEW_FORM_FACTOR" "$NEW_KB_LAYOUT" "$NEW_KB_VARIANT"
+    parse_check_nix_dir "$SCAFFOLD_STAGING"
+    log_ok "rendered and parse-checked hosts/$HOST in $SCAFFOLD_STAGING"
+    if $DRY_RUN; then
+        # Nothing below writes under --dry-run, so later steps read the
+        # staging copy instead (host_dir).
+        SCAFFOLD_PREVIEW_DIR="$SCAFFOLD_STAGING"
+    else
+        SCAFFOLD_PENDING=true
+    fi
+    run mkdir -p "$dest"
+    run cp -a "$SCAFFOLD_STAGING/." "$dest/"
+    run register_sops_host "$REPO_ROOT/.sops.yaml" "$HOST"
+    SCAFFOLD_PENDING=false
 }
 
 # grep -qF verifies the sed actually landed, factored out so --self-test
@@ -1118,7 +1281,7 @@ patch_disko_file() {
 patch_disko() {
     log_step "Patching hosts/$HOST/disko.nix for $DISK"
     validate_disk_charset
-    patch_disko_file "$REPO_ROOT/hosts/$HOST/disko.nix" "$DISK"
+    patch_disko_file "$(host_dir)/disko.nix" "$DISK"
 }
 
 run_disko() {
@@ -1208,7 +1371,8 @@ patch_prime_line() {
 }
 
 patch_prime() {
-    local default_nix="$REPO_ROOT/hosts/$HOST/default.nix"
+    local default_nix
+    default_nix="$(host_dir)/default.nix"
     if ! grep -qE '^[[:space:]]*krane\.prime\.(intelBusId|nvidiaBusId)[[:space:]]*=[[:space:]]*"' "$default_nix"; then
         return 0
     fi
@@ -1382,6 +1546,9 @@ run_install_mode() {
     validate_disk_is_physical
 
     confirm_wipe_target
+    if $NEW_HOST_MODE; then
+        scaffold_host
+    fi
     patch_disko
     run git -C "$REPO_ROOT" add -A
     run_disko
@@ -1917,6 +2084,26 @@ if $SELF_TEST_CHECK_SCAFFOLD; then
     exit 0
 fi
 
+# Scaffolds the --new-host flags' host for real (DRY_RUN=false) into this
+# checkout's hosts/ and .sops.yaml, patches its disko.nix with a fake disk,
+# then exits. For scripts/check-new-host.sh and self_test's rollback check,
+# which both run it from a throwaway copy of the repo. The env guard keeps
+# it from writing into a real checkout by accident.
+if $SELF_TEST_SCAFFOLD; then
+    [ "${KRANE_ALLOW_SCAFFOLD_HOOK:-}" = 1 ] \
+        || die "--self-test-scaffold writes hosts/ and .sops.yaml for real, it only runs with KRANE_ALLOW_SCAFFOLD_HOOK=1 from a throwaway copy of the repo"
+    YES=true
+    DRY_RUN=false
+    MODE=install
+    validate_new_host_flags
+    $NEW_HOST_MODE || usage_die "--self-test-scaffold needs --new-host"
+    prompt_new_host
+    scaffold_host
+    patch_disko_file "$REPO_ROOT/hosts/$HOST/disko.nix" /dev/disk/by-id/check-new-host-fake-disk
+    echo "self-test-scaffold: OK $HOST"
+    exit 0
+fi
+
 # For self_test: runs validator $2 on each remaining argument and prints a
 # FAIL line for each one whose verdict is not $1 (valid or invalid).
 # Returns 1 if any verdict was wrong.
@@ -2265,6 +2452,77 @@ unknown GPU profile|--mode install --dry-run --disk /dev/null --new-host newbox 
 EOF
     if $fl_ok; then
         echo "OK: misused new-host flags stop with a usage error" >&2
+    else
+        SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
+    fi
+
+    echo "== self-test: a failed scaffold rolls back, a good one lands, a repeat is refused ==" >&2
+    local sb_tmp sb_out sb_rc sb_ok=true
+    sb_tmp=$(mktemp -d "${TMPDIR:-/tmp}/krane-install-selftest-scaffold.XXXXXX")
+    cp "$REPO_ROOT/install.sh" "$sb_tmp/install.sh"
+    cp -r "$REPO_ROOT/templates" "$sb_tmp/templates"
+    mkdir -p "$sb_tmp/hosts/taractias"
+    cp "$REPO_ROOT/hosts/taractias/default.nix" "$sb_tmp/hosts/taractias/default.nix"
+    # No creation_rules: line, so register_sops_host dies after hosts/rbhost/
+    # has already been copied in: on_exit's rollback_scaffold must remove it.
+    printf 'keys:\n  - &admin_taractias age1PLACEHOLDER_ADMIN_TARACTIAS_REPLACE_VIA_BOOTSTRAP_SOPS_SH\n' >"$sb_tmp/.sops.yaml"
+    (
+        cd "$sb_tmp"
+        git init -q
+        git add -A
+        git -c user.email=t@t -c user.name=t -c commit.gpgsign=false commit -q -m init
+    )
+    sb_rc=0
+    sb_out=$(KRANE_ALLOW_SCAFFOLD_HOOK=1 bash "$sb_tmp/install.sh" --self-test-scaffold \
+        --new-host rbhost --user tester --profile amd-igpu --form-factor laptop 2>&1) || sb_rc=$?
+    if [ "$sb_rc" -eq 0 ] || ! printf '%s' "$sb_out" | grep -q 'no top-level creation_rules'; then
+        echo "FAIL: scaffolding into a .sops.yaml without creation_rules: did not die in register_sops_host (rc=$sb_rc)" >&2
+        echo "  captured output: $sb_out" >&2
+        sb_ok=false
+    fi
+    [ ! -e "$sb_tmp/hosts/rbhost" ] || { echo "FAIL: hosts/rbhost survived the failed scaffold" >&2; sb_ok=false; }
+    [ -f "$sb_tmp/hosts/taractias/default.nix" ] || { echo "FAIL: the rollback touched hosts/taractias" >&2; sb_ok=false; }
+    git -C "$sb_tmp" diff --quiet -- .sops.yaml || { echo "FAIL: .sops.yaml was not restored" >&2; sb_ok=false; }
+    printf 'keys:\n  - &admin_taractias age1PLACEHOLDER_ADMIN_TARACTIAS_REPLACE_VIA_BOOTSTRAP_SOPS_SH\n\ncreation_rules:\n  - path_regex: secrets/taractias\\.yaml$\n    key_groups:\n      - age:\n          - *admin_taractias\n' >"$sb_tmp/.sops.yaml"
+    git -C "$sb_tmp" -c user.email=t@t -c user.name=t -c commit.gpgsign=false commit -q -am sops
+    sb_rc=0
+    sb_out=$(KRANE_ALLOW_SCAFFOLD_HOOK=1 bash "$sb_tmp/install.sh" --self-test-scaffold \
+        --new-host goodhost --user tester --profile intel-nvidia-prime --form-factor desktop 2>&1) || sb_rc=$?
+    if [ "$sb_rc" -ne 0 ] || [ ! -f "$sb_tmp/hosts/goodhost/default.nix" ] \
+        || ! grep -qF '&host_goodhost age1PLACEHOLDER_HOST_GOODHOST_REPLACE_VIA_BOOTSTRAP_SOPS_SH' "$sb_tmp/.sops.yaml" \
+        || ! grep -qF 'device = "/dev/disk/by-id/check-new-host-fake-disk";' "$sb_tmp/hosts/goodhost/disko.nix"; then
+        echo "FAIL: a valid scaffold of goodhost did not land (rc=$sb_rc)" >&2
+        echo "  captured output: $sb_out" >&2
+        sb_ok=false
+    fi
+    sb_rc=0
+    sb_out=$(KRANE_ALLOW_SCAFFOLD_HOOK=1 bash "$sb_tmp/install.sh" --self-test-scaffold \
+        --new-host goodhost --user tester --profile amd-igpu --form-factor laptop 2>&1) || sb_rc=$?
+    if [ "$sb_rc" -eq 0 ] || ! printf '%s' "$sb_out" | grep -q 'already exists'; then
+        echo "FAIL: a second scaffold of goodhost was not refused (rc=$sb_rc)" >&2
+        sb_ok=false
+    fi
+    [ -f "$sb_tmp/hosts/goodhost/default.nix" ] || { echo "FAIL: the refused repeat deleted hosts/goodhost" >&2; sb_ok=false; }
+    rm -rf "$sb_tmp"
+    if $sb_ok; then
+        echo "OK: scaffold rolls back on failure, lands on success, refuses an existing host" >&2
+    else
+        SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
+    fi
+
+    echo "== self-test: host_uses_cuda follows a new host's GPU profile ==" >&2
+    local nc_ok=true saved_new_mode="$NEW_HOST_MODE" saved_new_profile="$NEW_PROFILE" saved_host2="$HOST"
+    NEW_HOST_MODE=true
+    HOST=newbox
+    NEW_PROFILE=nvidia-desktop
+    host_uses_cuda || { echo "FAIL: host_uses_cuda false for a new nvidia-desktop host" >&2; nc_ok=false; }
+    NEW_PROFILE=intel-nvidia-prime
+    ! host_uses_cuda || { echo "FAIL: host_uses_cuda true for a new intel-nvidia-prime host" >&2; nc_ok=false; }
+    NEW_HOST_MODE="$saved_new_mode"
+    NEW_PROFILE="$saved_new_profile"
+    HOST="$saved_host2"
+    if $nc_ok; then
+        echo "OK: host_uses_cuda true only for a new nvidia-desktop host" >&2
     else
         SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
     fi
