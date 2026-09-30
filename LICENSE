@@ -39,3 +39,19 @@ repository for the full Apache-2.0 text and its attribution notices.
 romkatv/powerlevel10k (https://github.com/romkatv/powerlevel10k), licensed
 under the MIT license. Copyright (c) 2019 Roman Perepelitsa and
 contributors; see the upstream repository for its full licence text.
+
+The patches under `patches/ii/` modify end-4's dots-hyprland
+(https://github.com/end-4/dots-hyprland), the illogical-impulse (ii) shell,
+which is licensed under the GNU General Public License v3.0. Every file under
+`patches/ii/` is licensed under the same GPL-3.0 terms as upstream, not under
+the MIT license above; see `patches/ii/LICENSE` for the full text. The code
+being modified is copyright end-4 and the dots-hyprland contributors. The
+patches in `patches/ii/01-fixes/` that say "Backport of pctrade/end4-pC" are
+backported from pctrade's end4-pC (https://github.com/pctrade/end4-pC), also
+GPL-3.0, and remain copyright their original authors. Each patch's `From:`
+and `Date:` headers record who modified it and when.
+
+`patches/illogical-flake-*.patch` modify soymou's illogical-flake
+(https://github.com/soymou/illogical-flake). That repository carries no
+license, so the upstream lines quoted in those patches remain copyright their
+authors, all rights reserved, and are not covered by the MIT license above.

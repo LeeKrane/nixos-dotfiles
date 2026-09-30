@@ -12,6 +12,8 @@
 
 **end-4's illogical-impulse Hyprland shell, made fully declarative on NixOS, across three machines.**
 
+<sub>Built on [end-4's dots-hyprland](https://github.com/end-4/dots-hyprland), wrapped by [soymou's illogical-flake](https://github.com/soymou/illogical-flake), with fixes from [pctrade's end4-pC](https://github.com/pctrade/end4-pC).</sub>
+
 [![check](https://github.com/LeeKrane/nixos-dotfiles/actions/workflows/check.yml/badge.svg?branch=main)](https://github.com/LeeKrane/nixos-dotfiles/actions/workflows/check.yml?query=branch%3Amain)
 [![update](https://github.com/LeeKrane/nixos-dotfiles/actions/workflows/update.yml/badge.svg)](https://github.com/LeeKrane/nixos-dotfiles/actions/workflows/update.yml)
 [![NixOS unstable](https://img.shields.io/badge/NixOS-unstable-5277C3?logo=nixos&logoColor=white)](https://nixos.org)
@@ -113,9 +115,11 @@ This repo is published as a single initial commit. The development history that 
 
 ## Licence
 
-[MIT](LICENSE), copyright krane, 2026.
+[MIT](LICENSE), copyright krane, 2026, except the third-party material below.
 
 The Plymouth boot theme under `pkgs/plymouth-lone/theme/` is a derivative of adi1090x's Plymouth themes and stays under its original GPLv3 licence: see `pkgs/plymouth-lone/theme/LICENSE`.
+
+The ii patches under `patches/ii/` modify [end-4/dots-hyprland](https://github.com/end-4/dots-hyprland) and are GPL-3.0 like upstream: see `patches/ii/LICENSE`. The `01-fixes` backports come from [pctrade/end4-pC](https://github.com/pctrade/end4-pC). The `patches/illogical-flake-*.patch` files quote [soymou/illogical-flake](https://github.com/soymou/illogical-flake), which has no licence. [LICENSE](LICENSE) has the full breakdown, including the LazyVim and powerlevel10k material.
 
 ## Docs
 
