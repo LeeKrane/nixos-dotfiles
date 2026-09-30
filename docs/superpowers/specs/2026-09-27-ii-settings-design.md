@@ -1,12 +1,12 @@
 # Port the end4-pC settings pages into the pinned illogical-impulse
 
-Sub-project 5 of 5 in bringing pctrade/end4-pC work into this repo's ii setup.
-The order is: fixes, translator, dock, AI/agent overview, settings pages (this
+Sub-project 5 in bringing pctrade/end4-pC work into this repo's ii setup. The
+order is: fixes, translator, dock, AI/agent overview, settings pages (this
 spec). Sub-project 3, the dock, was dropped; 1, 2 and 4 have landed. The
 fixes spec (`2026-09-27-ii-fork-fixes-design.md`) defines the patch
 mechanism and the `patches/ii/NN-<name>/` layout this spec builds on. The
-patches-versus-fork decision for all five sub-projects, and the triggers for
-revisiting it, are made below.
+patches-versus-fork decision for all four remaining sub-projects, and the
+triggers for revisiting it, are made below.
 
 ## Background
 
@@ -107,8 +107,8 @@ The GUI never commits and never pushes. Committing stays manual.
 
 ## Delivery mechanism: stay with patch series (decision)
 
-The five sub-projects together carry well over 20 patches: this one alone adds
-about 15, on top of the fixes' 9 and whatever sub-projects 2 and 4 add.
+The four sub-projects together carry well over 20 patches: this one alone
+adds about 15, on top of the fixes' 9 and whatever sub-projects 2 and 4 add.
 **Decision: keep `git format-patch` series applied by `applyPatches`, in the
 layout described below. Do not switch the flake input to a private fork.**
 

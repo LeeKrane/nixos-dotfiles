@@ -368,6 +368,7 @@ usage under "Claude Code" below).
 | `0001` ClaudeAgents service | `services/ClaudeAgents.qml`, `services/claude-agents.js`, `scripts/claude/agents.sh`, config `sidebar.agents.enable` (default `true`) | pinned ii ships an equivalent agents tab, or `claude agents --json` is removed |
 | `0002` Agents tab | `modules/ii/sidebarLeft/Agents.qml`, `agents/AgentRow.qml`, tab and polling switch in `SidebarLeftContent.qml` | same as `0001` |
 | `0003` group by directory | grouping in `claude-agents.js` (`annotate`'s `group`/`groupStart`, `tildePath`), header rendering in `agents/AgentRow.qml` | same as `0001` |
+| `0004` normalize group paths | `normalizePath` in `claude-agents.js`, used by `tildePath`/`groupLabel` so `annotate` groups on one normalized cwd per session and normalizes home once | same as `0001` |
 
 Tests, runnable against the clone (default) or a built source:
 

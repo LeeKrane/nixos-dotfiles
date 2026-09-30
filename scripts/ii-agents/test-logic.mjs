@@ -147,23 +147,58 @@ test("tildePath replaces only a whole leading home path component", () => {
     assert.equal(L.tildePath("/home/krane/foo", "/home/krane/"), "~/foo");
 });
 
-test("tildePath normalizes a trailing slash on the path itself", () => {
+test("tildePath normalizes repeated slashes, \".\" segments, and a trailing slash on the path", () => {
     assert.equal(L.tildePath("/home/krane/src/x/", "/home/krane"), "~/src/x");
     assert.equal(L.tildePath("/home/krane/src/x", "/home/krane"), "~/src/x");
+    assert.equal(L.tildePath("/home/krane/src//x", "/home/krane"), "~/src/x");
+    assert.equal(L.tildePath("/home/krane/./src/x", "/home/krane"), "~/src/x");
     assert.equal(L.tildePath("/home/krane/", "/home/krane"), "~");
     // "/" itself is left alone, not turned into "".
     assert.equal(L.tildePath("/", "/home/krane"), "/");
 });
 
-test("a cwd with or without a trailing slash lands in the same group", () => {
+test("normalizePath collapses all-slash input to \"/\" and never resolves \"..\"", () => {
+    assert.equal(L.normalizePath("/"), "/");
+    assert.equal(L.normalizePath("//"), "/");
+    assert.equal(L.normalizePath("///"), "/");
+    assert.equal(L.normalizePath(""), "");
+    assert.equal(L.normalizePath(undefined), "");
+    // No filesystem access here, so ".." is left exactly as written, even
+    // when a repeated slash next to it still gets collapsed.
+    assert.equal(L.normalizePath("/home/krane/../etc"), "/home/krane/../etc");
+    assert.equal(L.normalizePath("/home/krane//../etc"), "/home/krane/../etc");
+});
+
+test("tildePath does not shorten anything when home normalizes to \"/\"", () => {
+    assert.equal(L.tildePath("/", "/"), "/");
+    assert.equal(L.tildePath("/x", "/"), "/x");
+    // Normal homes still shorten as before.
+    assert.equal(L.tildePath("/home/krane", "/home/krane"), "~");
+});
+
+test("a cwd with repeated slashes, a \".\" segment, or a trailing slash all land in the same group", () => {
     const home = "/home/krane";
     const entries = [
-        { kind: "background", name: "with-slash", status: "idle", cwd: "/home/krane/src/x/", ancestors: [], lastActivity: 1 },
-        { kind: "background", name: "without-slash", status: "idle", cwd: "/home/krane/src/x", ancestors: [], lastActivity: 2 },
+        { kind: "background", name: "double-slash", status: "idle", cwd: "/home/krane/src//x", ancestors: [], lastActivity: 1 },
+        { kind: "background", name: "dot-segment", status: "idle", cwd: "/home/krane/./src/x", ancestors: [], lastActivity: 2 },
+        { kind: "background", name: "trailing-slash", status: "idle", cwd: "/home/krane/src/x/", ancestors: [], lastActivity: 3 },
+        { kind: "background", name: "clean", status: "idle", cwd: "/home/krane/src/x", ancestors: [], lastActivity: 4 },
     ];
     const r = plain(L.annotate(entries, [], home));
-    assert.deepEqual(r.sessions.map(s => s.group), ["~/src/x", "~/src/x"]);
-    assert.deepEqual(r.sessions.map(s => s.groupStart), [true, false]);
+    assert.deepEqual(r.sessions.map(s => s.group), ["~/src/x", "~/src/x", "~/src/x", "~/src/x"]);
+    assert.deepEqual(r.sessions.map(s => s.groupStart), [true, false, false, false]);
+});
+
+test("cwds of \"/\", \"//\" and \"///\" all group together, labelled \"/\"", () => {
+    const home = "/home/krane";
+    const entries = [
+        { kind: "background", name: "single", status: "idle", cwd: "/", ancestors: [], lastActivity: 1 },
+        { kind: "background", name: "double", status: "idle", cwd: "//", ancestors: [], lastActivity: 2 },
+        { kind: "background", name: "triple", status: "idle", cwd: "///", ancestors: [], lastActivity: 3 },
+    ];
+    const r = plain(L.annotate(entries, [], home));
+    assert.deepEqual(r.sessions.map(s => s.group), ["/", "/", "/"]);
+    assert.deepEqual(r.sessions.map(s => s.groupStart), [true, false, false]);
 });
 
 test("sessions without a cwd land in the \"?\" group, sorted like any other label", () => {
