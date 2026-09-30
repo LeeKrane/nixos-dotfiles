@@ -84,9 +84,11 @@ let
     ) cfg.monitors
   );
 
-  # idleTimeouts = false is shorthand for all zeros. null: not set by Nix.
+  # krane.hypr.idle, or idleTimeouts = false as shorthand for all zeros. null: not set by Nix.
   nixIdle =
-    if !cfg.idleTimeouts then
+    if cfg.idle != null then
+      { inherit (cfg.idle) lock screenOff suspend; }
+    else if !cfg.idleTimeouts then
       {
         lock = 0;
         screenOff = 0;
@@ -100,6 +102,16 @@ let
     screenOff = 600;
     suspend = 900;
   };
+
+  # What activation writes into hypridle.conf: Nix's values, else the GUI file's over ii's
+  # defaults, else nothing (ii's copied hypridle.conf stays as it is).
+  idleValues =
+    if nixIdle != null then
+      nixIdle
+    else if gui ? idle then
+      iiIdle // gui.idle
+    else
+      null;
 
   manifest = {
     host = hostName;
@@ -191,6 +203,23 @@ in
     krane.iiSettings.manifestFile = manifestFile;
     home.packages = [ wrapped ];
 
+    # Replaces the old hypridle.conf sed in illogical-impulse.nix. Runs ii's own
+    # hypridleconfigurator.py (patches/ii/05-settings) with a pinned interpreter; the script is
+    # standard-library only. hypridle reads its config at start: the change applies from the
+    # next login, or at once when the GUI's writer restarts hypridle.
+    home.activation.kraneIiIdle = lib.mkIf (idleValues != null) (
+      lib.hm.dag.entryAfter [ "copyIllogicalImpulseConfigs" ] ''
+        conf=${lib.escapeShellArg manifest.hypridleFile}
+        script=${lib.escapeShellArg manifest.idleConfigurator}
+        if [ -f "$conf" ] && [ -f "$script" ]; then
+          $DRY_RUN_CMD ${pkgs.python3}/bin/python3 "$script" --file "$conf" \
+            --lock ${toString idleValues.lock} \
+            --screen-off ${toString idleValues.screenOff} \
+            --suspend ${toString idleValues.suspend} >/dev/null
+        fi
+      ''
+    );
+
     assertions = [
       {
         assertion = unknownKeys == [ ];
@@ -207,6 +236,13 @@ in
           (krane.hypr.settings, krane.hypr.guiLocked, krane.hypr.monitors or idle, in
           hosts/${hostName}/display.nix or modules/home). Every key has one owner: delete it
           from one of the two.
+        '';
+      }
+      {
+        assertion = cfg.idle == null || cfg.idleTimeouts;
+        message = ''
+          krane.hypr.idle and krane.hypr.idleTimeouts = false are both set; idleTimeouts = false
+          is shorthand for idle = { lock = 0; screenOff = 0; suspend = 0; }. Keep one.
         '';
       }
       {

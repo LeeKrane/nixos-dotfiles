@@ -497,10 +497,35 @@ in
       type = lib.types.bool;
       default = true;
       description = ''
-        Keep ii's hypridle idle listeners (lock, DPMS off, suspend). false strips
-        every `listener` block from ~/.config/hypr/hypridle.conf, so the session
-        never locks, blanks or suspends on its own; manual lock and lock-before-sleep
-        stay. Applied by modules/home/desktop/illogical-impulse.nix, not rendered to Lua.
+        false is shorthand for `idle = { lock = 0; screenOff = 0; suspend = 0; }`: the session
+        never locks, blanks or suspends on its own; manual lock and lock-before-sleep stay. Kept
+        for compatibility; do not combine with `idle`.
+      '';
+    };
+
+    idle = lib.mkOption {
+      type = lib.types.nullOr (
+        lib.types.submodule {
+          options = lib.genAttrs [ "lock" "screenOff" "suspend" ] (
+            _:
+            lib.mkOption {
+              type = lib.types.ints.between 0 86400;
+              description = "Seconds idle before this hypridle listener fires; 0 removes it.";
+            }
+          );
+        }
+      );
+      default = null;
+      example = {
+        lock = 600;
+        screenOff = 900;
+        suspend = 0;
+      };
+      description = ''
+        hypridle timeouts. null (the default) leaves them to the ii settings window
+        (hosts/<host>/ii-settings.json) or ii's own 300/600/900. Setting this makes idle
+        Nix-owned: the settings window shows it disabled. Written into
+        ~/.config/hypr/hypridle.conf at activation by modules/home/desktop/ii-settings.nix.
       '';
     };
 

@@ -76,15 +76,7 @@ let
       sed = "s#gsettings \\(set\\|get\\) org.gnome.desktop.interface#GSETTINGS_SCHEMA_DIR=${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}/glib-2.0/schemas ${pkgs.glib.bin}/bin/gsettings \\1 org.gnome.desktop.interface#g";
       why = "gsettings finds no schemas in the ii session, so the dark/light toggle never reaches the portal";
     }
-  ]
-  ++ lib.optional (!config.krane.hypr.idleTimeouts) {
-    # ii's hypridle.conf locks at 5 min, turns DPMS off at 10 and suspends at 15. Dropping
-    # the listener blocks leaves the general block, so loginctl lock-session and
-    # lock-before-sleep still work.
-    file = "${hyprDir}/hypridle.conf";
-    sed = "/^listener {/,/^}/d";
-    why = "krane.hypr.idleTimeouts = false: never lock, blank or suspend on idle";
-  };
+  ];
 
   patchFile = entry: ''
     if [ -f "${entry.file}" ]; then
