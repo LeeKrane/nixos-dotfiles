@@ -165,6 +165,12 @@ roleInputs.nixpkgs.lib.nixosSystem {
                     name = "dots-hyprland-patched";
                     src = roleInputs.illogical-flake.inputs.dotfiles;
                     patches = [ ../patches/illogical-flake-cheatsheet-fkeys.patch ] ++ iiSeries;
+                    # Read by the settings window's About page (patches/ii/05-settings).
+                    postPatch = ''
+                      printf '{"rev":"%s","patches":%d}\n' \
+                        ${roleInputs.dots-hyprland.rev} ${toString (builtins.length iiSeries)} \
+                        > dots/.config/quickshell/ii/krane-build.json
+                    '';
                   };
                   iiInputs = {
                     inherit (roleInputs.illogical-flake.inputs) quickshell nur;

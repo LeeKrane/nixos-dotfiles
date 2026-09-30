@@ -1,0 +1,57 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Wed, 30 Sep 2026 19:38:20 +0200
+Subject: [PATCH] feat(shell): keep hyprlock's clock in step with the time
+ format
+
+Port of pctrade/end4-pC dc2ca2600ee6: none (krane-only)
+https://github.com/pctrade/end4-pC/tree/dc2ca2600ee6d7852bf0ac91361db8e510f90a74
+Problem: the settings page sed-edited hyprlock.conf once, but every switch copies a fresh hyprlock.conf, so the 12h clock reverted.
+Port: krane-only
+Drop when: hyprlock.conf is generated from config.json upstream.
+---
+ dots/.config/quickshell/ii/shell.qml | 24 ++++++++++++++++++++++++
+ 1 file changed, 24 insertions(+)
+
+diff --git a/dots/.config/quickshell/ii/shell.qml b/dots/.config/quickshell/ii/shell.qml
+index 13cf7af4..b9fe54f3 100644
+--- a/dots/.config/quickshell/ii/shell.qml
++++ b/dots/.config/quickshell/ii/shell.qml
+@@ -7,6 +7,7 @@
+ ////@ pragma Env QT_SCALE_FACTOR=1
+ 
+ import "modules/common"
++import "modules/common/functions"
+ import "services"
+ import "panelFamilies"
+ 
+@@ -22,6 +23,29 @@ ShellRoot {
+     // Stuff for every panel family
+     ReloadPopup {}
+ 
++    // Keep hyprlock's clock in step with the 12h/24h setting. The settings page
++    // used to sed hyprlock.conf once, but every switch copies a fresh one, so
++    // derive it here: when Config is ready, when the format changes, and on
++    // every Hyprland config reload (a switch ends with one).
++    function syncHyprlockClock() {
++        if (!Config.ready)
++            return;
++        const expr = Config.options.time.format === "hh:mm" ? "s/\\$TIME12\\b/$TIME/" : "s/\\$TIME\\b/$TIME12/";
++        Quickshell.execDetached(["sed", "-i", expr, FileUtils.trimFileProtocol(`${Directories.config}/hypr/hyprlock.conf`)]);
++    }
++    Connections {
++        target: Config
++        function onReadyChanged() { root.syncHyprlockClock() }
++    }
++    Connections {
++        target: Config.ready ? Config.options.time : null
++        function onFormatChanged() { root.syncHyprlockClock() }
++    }
++    Connections {
++        target: HyprlandConfig
++        function onReloaded() { root.syncHyprlockClock() }
++    }
++
+     Component.onCompleted: {
+         MaterialThemeLoader.reapplyTheme()
+         Hyprsunset.load()

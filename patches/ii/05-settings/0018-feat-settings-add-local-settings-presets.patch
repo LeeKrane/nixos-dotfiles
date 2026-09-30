@@ -1,0 +1,828 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Wed, 30 Sep 2026 22:15:12 +0200
+Subject: [PATCH] feat(settings): add local settings presets
+
+Port of pctrade/end4-pC dc2ca2600ee6: scripts/presets.sh, services/Presets.qml, modules/common/widgets/{PresetsCard,PresetPopup}.qml
+https://github.com/pctrade/end4-pC/tree/dc2ca2600ee6d7852bf0ac91361db8e510f90a74
+Problem: the ported Profile page needs a way to save, apply, remove, overwrite
+and export local config.json presets. Also wires Directories.userPresetsPath
+and Directories.presetsScriptPath (krane-only) that these files read.
+Port: hand-ported (online presets removed; imported presets cannot set
+command keys)
+Drop when: the Profile page is dropped.
+---
+ .../ii/modules/common/Directories.qml         |   3 +
+ .../ii/modules/common/widgets/PresetPopup.qml |  63 +++
+ .../ii/modules/common/widgets/PresetsCard.qml | 203 ++++++++++
+ dots/.config/quickshell/ii/scripts/presets.sh | 369 ++++++++++++++++++
+ .../quickshell/ii/services/Presets.qml        | 129 ++++++
+ 5 files changed, 767 insertions(+)
+ create mode 100644 dots/.config/quickshell/ii/modules/common/widgets/PresetPopup.qml
+ create mode 100644 dots/.config/quickshell/ii/modules/common/widgets/PresetsCard.qml
+ create mode 100755 dots/.config/quickshell/ii/scripts/presets.sh
+ create mode 100644 dots/.config/quickshell/ii/services/Presets.qml
+
+diff --git a/dots/.config/quickshell/ii/modules/common/Directories.qml b/dots/.config/quickshell/ii/modules/common/Directories.qml
+index 78b0a9ed..fbab5dff 100644
+--- a/dots/.config/quickshell/ii/modules/common/Directories.qml
++++ b/dots/.config/quickshell/ii/modules/common/Directories.qml
+@@ -45,6 +45,9 @@ Singleton {
+     property string defaultAiPrompts: Quickshell.shellPath("defaults/ai/prompts")
+     property string userAiPrompts: FileUtils.trimFileProtocol(`${Directories.shellConfig}/ai/prompts`)
+     property string userActions: FileUtils.trimFileProtocol(`${Directories.shellConfig}/actions`)
++    // Profile page presets (patches/ii/05-settings). Inside the config dir, so in the repo.
++    property string userPresetsPath: FileUtils.trimFileProtocol(`${Directories.shellConfig}/presets`)
++    property string presetsScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/presets.sh`)
+     property string aiChats: FileUtils.trimFileProtocol(`${Directories.state}/user/ai/chats`)
+     property string aiTranslationScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/ai/gemini-translate.sh`)
+     property string recordScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/videos/record.sh`)
+diff --git a/dots/.config/quickshell/ii/modules/common/widgets/PresetPopup.qml b/dots/.config/quickshell/ii/modules/common/widgets/PresetPopup.qml
+new file mode 100644
+index 00000000..56f5ee9e
+--- /dev/null
++++ b/dots/.config/quickshell/ii/modules/common/widgets/PresetPopup.qml
+@@ -0,0 +1,63 @@
++import QtQuick
++import QtQuick.Controls
++import QtQuick.Layouts
++import qs.services
++import qs.modules.common
++import qs.modules.common.widgets
++
++Popup {
++    id: root
++    property var onOverwrite: () => {}
++    property var onExportZip: () => {}
++
++    width: 190
++    padding: 8
++    modal: false
++    closePolicy: Popup.CloseOnPressOutside | Popup.CloseOnEscape
++
++    background: Item {
++        StyledRectangularShadow { target: popupBg }
++        Rectangle {
++            id: popupBg
++            anchors.fill: parent
++            radius: Appearance.rounding.small
++            color: Appearance.m3colors.m3surfaceContainerHigh
++            border.width: 1
++            border.color: Appearance.colors.colLayer0Border
++        }
++    }
++
++    contentItem: ColumnLayout {
++        spacing: 2
++        RippleButton {
++            Layout.fillWidth: true
++            implicitHeight: 40
++            buttonRadius: Appearance.rounding.small
++            colBackground: "transparent"
++            colBackgroundHover: Appearance.colors.colLayer2Hover
++            colRipple: Appearance.colors.colLayer2Active
++            horizontalPadding: 12
++            onClicked: { root.close(); root.onOverwrite() }
++            contentItem: RowLayout {
++                spacing: 10
++                MaterialSymbol { text: "save_as"; iconSize: Appearance.font.pixelSize.normal; color: Appearance.colors.colOnLayer0 }
++                StyledText { text: Translation.tr("Overwrite"); color: Appearance.colors.colOnLayer0; Layout.fillWidth: true; font.pixelSize: Appearance.font.pixelSize.small }
++            }
++        }
++        RippleButton {
++            Layout.fillWidth: true
++            implicitHeight: 40
++            buttonRadius: Appearance.rounding.small
++            colBackground: "transparent"
++            colBackgroundHover: Appearance.colors.colLayer2Hover
++            colRipple: Appearance.colors.colLayer2Active
++            horizontalPadding: 12
++            onClicked: { root.close(); root.onExportZip() }
++            contentItem: RowLayout {
++                spacing: 10
++                MaterialSymbol { text: "folder_zip"; iconSize: Appearance.font.pixelSize.normal; color: Appearance.colors.colOnLayer0 }
++                StyledText { text: Translation.tr("Export ZIP"); color: Appearance.colors.colOnLayer0; Layout.fillWidth: true; font.pixelSize: Appearance.font.pixelSize.small }
++            }
++        }
++    }
++}
+diff --git a/dots/.config/quickshell/ii/modules/common/widgets/PresetsCard.qml b/dots/.config/quickshell/ii/modules/common/widgets/PresetsCard.qml
+new file mode 100644
+index 00000000..f31149cd
+--- /dev/null
++++ b/dots/.config/quickshell/ii/modules/common/widgets/PresetsCard.qml
+@@ -0,0 +1,203 @@
++import QtQuick
++import QtQuick.Controls
++import QtQuick.Layouts
++import Qt5Compat.GraphicalEffects
++import qs
++import qs.services
++import qs.modules.common
++import qs.modules.common.widgets
++import qs.modules.common.functions
++
++Rectangle {
++    id: root
++
++    property string imageSource: ""
++    property string title: ""
++    property string description: ""
++    property var onApply: () => {}
++    property var onRemove: () => {}
++    property var onOverwrite: () => {}
++    property var onExportZip: () => {}
++
++    implicitWidth: 293 
++    implicitHeight: contentColumn.implicitHeight + 14
++    radius: Appearance.rounding.normal
++    color: Appearance.colors.colLayer1
++    border.width: 1
++    border.color: "transparent"
++
++    ColumnLayout {
++        id: contentColumn
++        anchors {
++            top: parent.top
++            left: parent.left
++            right: parent.right
++            margins: 0
++        }
++        spacing: 6
++
++        // Header
++        RowLayout{
++            Layout.leftMargin: 10
++            Layout.topMargin: 6
++            spacing: 10
++            MaterialShapeWrappedMaterialSymbol {
++                id: avatarShape
++                shape: MaterialShape.Shape.Circle 
++                text: root.title.length > 0 ? root.title.charAt(0).toUpperCase() : "?"
++                iconSize: Appearance.font.pixelSize.normal
++                implicitSize: 36
++                font: Appearance.font.family.main
++                color: Appearance.colors.colPrimaryContainer
++                colSymbol: Appearance.colors.colOnPrimaryContainer
++                Layout.alignment: Qt.AlignVCenter
++            }
++            ColumnLayout{
++                spacing: -4
++                StyledText {
++                    Layout.fillWidth: true
++                    text: root.title
++                    font.pixelSize: Appearance.font.pixelSize.large
++                    font.weight: Font.DemiBold
++                    color: Appearance.colors.colOnLayer1
++                    elide: Text.ElideRight
++                    wrapMode: Text.NoWrap
++                }
++
++                // Description
++                StyledText {
++                    Layout.fillWidth: true
++                    visible: root.description.length > 0
++                    text: root.description
++                    font.pixelSize: Appearance.font.pixelSize.small
++                    color: Appearance.colors.colSubtext
++                    elide: Text.ElideRight
++                }
++            }
++            Item {
++                Layout.alignment: Qt.AlignRight
++                Layout.rightMargin: 8
++                implicitWidth: 32
++                implicitHeight: 32
++                RippleButton {
++                    id: menuBtn
++                    anchors.centerIn: parent
++                    implicitWidth: 32
++                    implicitHeight: 32
++                    buttonRadius: Appearance.rounding.full
++                    colBackground: "transparent"
++                    colBackgroundHover: Appearance.colors.colLayer2Hover
++                    colRipple: Appearance.colors.colLayer2Active
++                    onClicked: menuPopup.visible = !menuPopup.visible
++                    contentItem: MaterialSymbol {
++                        anchors.centerIn: parent
++                        text: "more_vert"
++                        iconSize: Appearance.font.pixelSize.large
++                        color: Appearance.colors.colOnLayer1
++                    }
++                }
++                PresetPopup {
++                    id: menuPopup
++                    y: menuBtn.height + 4
++                    x: menuBtn.width - width + 8
++                    onOverwrite: root.onOverwrite
++                    onExportZip: root.onExportZip
++                }
++            }
++        }
++
++        // Wall
++        Rectangle {
++            id: imageRect
++            Layout.fillWidth: true
++            Layout.bottomMargin: 4
++            implicitHeight: 130
++            radius: 0
++            color: Appearance.colors.colLayer2
++            clip: true
++
++            StyledImage {
++                anchors.fill: parent
++                fillMode: Image.PreserveAspectCrop
++                source: root.imageSource
++                cache: false
++                antialiasing: true
++                sourceSize.width: imageRect.width * 2
++                sourceSize.height: imageRect.height * 2
++                visible: root.imageSource !== ""
++                layer.enabled: true
++                layer.effect: OpacityMask {
++                    maskSource: Rectangle {
++                        width: imageRect.width
++                        height: imageRect.height
++                        radius: imageRect.radius
++                    }
++                }
++            }
++
++            MaterialSymbol {
++                anchors.centerIn: parent
++                visible: root.imageSource === ""
++                text: "wallpaper"
++                iconSize: Appearance.font.pixelSize.huge
++                color: Appearance.colors.colSubtext
++            }
++        }
++
++        // Buttons
++        RowLayout {
++            Layout.fillWidth: true
++            Layout.rightMargin: 8
++            Layout.bottomMargin: -4
++            spacing: 8
++
++            Item { Layout.fillWidth: true }
++
++            GroupButton {
++                id: removeBtn
++                bounce: false
++                toggled: false
++                leftRadius: height / 2
++                rightRadius: height / 2
++                Layout.fillWidth: false
++                Layout.fillHeight: false
++                implicitHeight: 36
++                horizontalPadding: 14
++                verticalPadding: 8
++                colBackground: "transparent"
++                colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colPrimaryContainerHover, 0.8)
++                colBackgroundActive: Appearance.colors.colPrimaryContainerActive
++                contentItem: StyledText {
++                    text: "Remove"
++                    color: Appearance.colors.colPrimary
++                    horizontalAlignment: Text.AlignHCenter
++                    verticalAlignment: Text.AlignVCenter
++                }
++                onClicked: root.onRemove()
++            }
++
++            GroupButton {
++                id: applyBtn
++                bounce: false
++                toggled: false
++                leftRadius: height / 2
++                rightRadius: height / 2
++                Layout.fillWidth: false
++                Layout.fillHeight: false
++                implicitHeight: 36
++                horizontalPadding: 14
++                verticalPadding: 8
++                colBackground: Appearance.colors.colPrimaryContainer
++                colBackgroundHover: Appearance.colors.colPrimaryContainerHover
++                colBackgroundActive: Appearance.colors.colPrimaryContainerActive
++                contentItem: StyledText {
++                    text: "Apply"
++                    color: Appearance.colors.colOnPrimaryContainer
++                    horizontalAlignment: Text.AlignHCenter
++                    verticalAlignment: Text.AlignVCenter
++                }
++                onClicked: root.onApply()
++            }
++        }
++    }
++}
+\ No newline at end of file
+diff --git a/dots/.config/quickshell/ii/scripts/presets.sh b/dots/.config/quickshell/ii/scripts/presets.sh
+new file mode 100755
+index 00000000..0a2e7a90
+--- /dev/null
++++ b/dots/.config/quickshell/ii/scripts/presets.sh
+@@ -0,0 +1,369 @@
++#!/usr/bin/env bash
++# presets.sh - manage shell config presets | just for fun I could have done it from quickshell directly =P
++# Usage:
++#   presets.sh --save <name> [description]
++#   presets.sh --remove <name> [--online]
++#   presets.sh --apply <name> [--online]
++#   presets.sh --export-zip <name>
++#   presets.sh --import-zip <zip_path>
++
++CONFIG_DIR="$HOME/.config/illogical-impulse"
++CONFIG_FILE="$CONFIG_DIR/config.json"
++LOCAL_PRESETS_DIR="$CONFIG_DIR/presets"
++ONLINE_PRESETS_DIR="$HOME/.cache/quickshell/presets"
++IMPORTED_PRESETS_DIR="$HOME/.cache/quickshell/presets_imported"
++SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
++SWITCHWALL="$SCRIPT_DIR/colors/switchwall.sh"
++
++mkdir -p "$LOCAL_PRESETS_DIR" "$ONLINE_PRESETS_DIR" "$IMPORTED_PRESETS_DIR"
++
++# Blacklist: General (time/battery/audio/sounds/language/workSafety) + Services (ai/networking/musicRecognition/search/screenRecord/screenSnip/updates/bar.weather) + Hyprland non-styling
++# Keep: appearance/background/bar(non-weather)/dock/lock/overview/panelFamily etc. + hyprland.decoration/gaps/animations
++# Note: apps/profile/wallpaperSelector are NOT blacklisted here (would make preset look empty) - only General+Services per Settings tabs
++BLACKLIST_FILTER='del(._presetMeta)
++  | del(.time, .battery, .audio, .sounds, .language, .workSafety)
++  | del(.ai, .networking, .musicRecognition, .search, .screenRecord, .screenSnip, .updates)
++  | del(.bar.weather)
++  | del(.hyprland.input, .hyprland.autostartApps, .hyprland.general.layout)'
++
++# Imported presets are untrusted (they come from a ZIP someone else built).
++# .apps.* (bluetooth/network/taskManager/volumeMixer/terminal/...) are read by
++# the shell and run via `bash -c` on the next toggle/button click, so an
++# imported/applied preset must never be allowed to set any of them.
++IMPORTED_COMMAND_STRIP_FILTER='del(.apps)'
++
++# A preset's own file name, and any asset name it bundles, end up spliced into
++# paths (asset cache dir) and, via switchwall.sh, into a script Hyprland runs
++# unattended on every start (the video-wallpaper restore script). Anything
++# that isn't a plain file-name character must never reach either.
++SAFE_NAME_RE='^[A-Za-z0-9._ -]+$'
++
++# Imported presets are untrusted JSON. A blacklist of known-dangerous keys
++# keeps missing the next one (background.thumbnailPath, found after
++# wallpaperPath/apps were already blacklisted), so imported presets are
++# filtered by an ALLOWLIST instead: every boolean/number survives anywhere in
++# the tree, the six image keys below are handled by the rewrite step, and any
++# other string (or array) survives only if its own full dotted key path is
++# listed here. Every path below was checked against its consumers in
++# modules/common: it never reaches bash -c/sh -c/execDetached/Process
++# command/a generated script/Hyprland exec, either directly or only after
++# validation against a small fixed set with a safe fallback (see
++# task-10-report.md's audit table for the per-key trace). When in doubt, a
++# key is left off this list and its value is dropped on import.
++IMPORTED_ALLOWED_STRING_PATHS='[
++  "panelFamily",
++  "profile.displayName",
++  "profile.descriptionText",
++  "appearance.fonts.main",
++  "appearance.fonts.numbers",
++  "appearance.fonts.title",
++  "appearance.fonts.iconNerd",
++  "appearance.fonts.monospace",
++  "appearance.fonts.reading",
++  "appearance.fonts.expressive",
++  "appearance.palette.type",
++  "appearance.palette.accentColor",
++  "background.widgets.clock.placementStrategy",
++  "background.widgets.clock.style",
++  "background.widgets.clock.styleLocked",
++  "background.widgets.clock.cookie.dialNumberStyle",
++  "background.widgets.clock.cookie.hourHandStyle",
++  "background.widgets.clock.cookie.minuteHandStyle",
++  "background.widgets.clock.cookie.secondHandStyle",
++  "background.widgets.clock.cookie.dateStyle",
++  "background.widgets.clock.digital.font.family",
++  "background.widgets.clock.quote.text",
++  "background.widgets.weather.placementStrategy",
++  "calendar.locale",
++  "cheatsheet.superKey",
++  "crosshair.code",
++  "light.night.from",
++  "light.night.to",
++  "osk.layout",
++  "sidebar.quickToggles.style"
++]'
++
++# The six keys the import/apply rewrite step above already resolves to a
++# verified, safely-named path under our own asset cache (or deletes). Their
++# rewritten value must survive the allowlist walk below even though it is
++# not itself on IMPORTED_ALLOWED_STRING_PATHS.
++IMPORTED_KEPT_IMAGE_PATHS='[
++  "background.wallpaperPath",
++  "background.lockWall",
++  "sidebar.bannerImage",
++  "background.widgets.customImage.path",
++  "profile.avatarPicture",
++  "profile.avatarPath"
++]'
++
++# Walks the whole tree: booleans/numbers always survive; the rewritten image
++# paths always survive; any other string, or array, survives only if its own
++# full dotted key path is on the allowlist (an array of only booleans/numbers
++# always survives). Everything else - including any string or array this
++# list doesn't name - is dropped rather than passed through unexamined.
++IMPORTED_ALLOWLIST_FILTER='
++def prune($allow; $keep; $path; $val):
++  ($val) as $v
++  | ($v|type) as $t
++  | if $t == "object" then
++      $v
++      | to_entries
++      | map(
++          ($path + [.key]) as $p
++          | .value = prune($allow; $keep; $p; .value)
++        )
++      | map(select(.value != null))
++      | from_entries
++    elif $t == "array" then
++      ($path | join(".")) as $pathstr
++      | if ($v | all(.[]?; (type=="boolean") or (type=="number"))) then $v
++        elif ($v | all(.[]?; type=="string")) and (($allow + $keep) | index($pathstr)) then $v
++        else null
++        end
++    elif $t == "boolean" or $t == "number" then $v
++    elif $t == "string" then
++      ($path | join(".")) as $pathstr
++      | if (($allow + $keep) | index($pathstr)) then $v else null end
++    else null
++    end;
++. as $root | prune($allow; $keep; []; $root)'
++
++# A literal "." or ".." is accepted by SAFE_NAME_RE (every one of its
++# characters is in the allowed set) but must never be used as a preset name:
++# it is joined into "$PRESETS_DIR/${name}.json" and "$PRESETS_DIR/assets/$name"
++# below, so "." or ".." there would point the assets dir straight at
++# $PRESETS_DIR or its parent.
++is_unsafe_name() {
++    local n="$1"
++    [ "$n" = "." ] || [ "$n" = ".." ] || ! [[ "$n" =~ $SAFE_NAME_RE ]]
++}
++
++action="$1"
++shift
++
++online=false
++args=()
++imported=false
++for arg in "$@"; do
++    if [ "$arg" = "--online" ]; then
++        online=true
++    elif [ "$arg" = "--imported" ]; then
++        imported=true
++    else
++        args+=("$arg")
++    fi
++done
++
++name="${args[0]}"
++description="${args[1]}"
++
++if [ "$action" = "--import-zip" ]; then
++    if [ -z "$name" ]; then
++        echo "Error: missing zip path" >&2
++        exit 1
++    fi
++    zip_path="$name"
++    if [ ! -f "$zip_path" ]; then
++        echo "Error: zip not found: $zip_path" >&2
++        exit 1
++    fi
++    tmpdir=$(mktemp -d)
++    trap 'rm -rf "$tmpdir"' EXIT
++    if command -v unzip >/dev/null 2>&1; then
++        unzip -q "$zip_path" -d "$tmpdir"
++    else
++        python3 -c "import zipfile, sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$zip_path" "$tmpdir"
++    fi
++    # Refuse zips containing symlinks before reading anything else out of the
++    # extracted tree - a symlink could point outside $tmpdir (or at an
++    # arbitrary file on the importing machine) and get treated as if it were
++    # the zip's own content.
++    if find "$tmpdir" -type l | grep -q .; then
++        echo "Error: zip contains symlinks, refusing to import" >&2
++        trap - EXIT
++        rm -rf "$tmpdir"
++        exit 1
++    fi
++    # Find json (first *.json not meta.json)
++    json_file=$(find "$tmpdir" -maxdepth 4 -name "*.json" ! -name "meta.json" | head -n1)
++    if [ -z "$json_file" ]; then
++        echo "Error: no preset json in zip" >&2
++        exit 1
++    fi
++    base=$(basename "$json_file" .json)
++    # The preset's own file name becomes part of cache paths below
++    # ($IMPORTED_PRESETS_DIR/${base}.json, .../assets/$base) - refuse names
++    # that could escape those directories or inject shell metacharacters
++    # into a path built from them.
++    if is_unsafe_name "$base"; then
++        echo "Error: unsafe preset file name in zip: $base" >&2
++        trap - EXIT
++        rm -rf "$tmpdir"
++        exit 1
++    fi
++    # Collect assets from the same folder as the json (images etc, exclude json/meta).
++    # Anchoring to the json dir (instead of the zip root) supports flat zips as well
++    # as folder-wrapped ones (e.g. Blapples' assets/ layout).
++    json_dir=$(dirname "$json_file")
++    asset_files=$(find "$json_dir" -maxdepth 1 -type f ! -name "*.json" ! -name "meta.json" -exec basename {} \; | jq -R . | jq -s .)
++    # Only asset names safe enough to end up in the restore script Hyprland
++    # runs unattended (see switchwall.sh create_restore_script) are eligible
++    # for the json-path rewrite below - anything else is dropped from the
++    # candidate list, not merely left un-rewritten.
++    safe_asset_files=$(echo "$asset_files" | jq --arg re "$SAFE_NAME_RE" '[.[] | select(test($re))]')
++    asset_cache="$IMPORTED_PRESETS_DIR/assets/$base"
++    mkdir -p "$asset_cache"
++    # Copy assets to cache (plug-and-play like online presets)
++    find "$json_dir" -maxdepth 1 -type f ! -name "*.json" ! -name "meta.json" -exec cp -L {} "$asset_cache/" \; 2>/dev/null || true
++    # Rewrite json paths to point to cached assets (reuse online jqFilter Profile.qml:250).
++    # Only touch the known image-path keys (same keys --export-zip collects
++    # assets from, below) - NOT a generic walk() over every string - so a
++    # preset can't redirect a bare command name (e.g. apps.terminal) at an
++    # executable shipped inside the ZIP. A key is kept only if it resolves to
++    # a safely-named asset that actually exists in $asset_cache; otherwise
++    # the key is dropped entirely rather than left pointing at an unverified
++    # (and possibly unsafely-named) path.
++    jq --arg dir "$asset_cache" --argjson files "$safe_asset_files" '
++      def rewritten: if type == "string" then ((split("/") | last) as $b | if ($b != "." and $b != ".." and ($files | index($b))) then ($dir + "/" + $b) else null end) else null end;
++      (if .background.wallpaperPath != null then (.background.wallpaperPath |= rewritten | if .background.wallpaperPath == null then del(.background.wallpaperPath) else . end) else . end)
++      | (if .background.lockWall != null then (.background.lockWall |= rewritten | if .background.lockWall == null then del(.background.lockWall) else . end) else . end)
++      | (if .sidebar.bannerImage != null then (.sidebar.bannerImage |= rewritten | if .sidebar.bannerImage == null then del(.sidebar.bannerImage) else . end) else . end)
++      | (if .background.widgets.customImage.path != null then (.background.widgets.customImage.path |= rewritten | if .background.widgets.customImage.path == null then del(.background.widgets.customImage.path) else . end) else . end)
++      | (if .profile.avatarPicture != null then (.profile.avatarPicture |= rewritten | if .profile.avatarPicture == null then del(.profile.avatarPicture) else . end) else . end)
++      | (if .profile.avatarPath != null then (.profile.avatarPath |= rewritten | if .profile.avatarPath == null then del(.profile.avatarPath) else . end) else . end)
++      | del(._presetMeta) | ._presetMeta.source = "imported"
++    ' "$json_file" | jq "$BLACKLIST_FILTER | $IMPORTED_COMMAND_STRIP_FILTER" \
++      | jq --argjson allow "$IMPORTED_ALLOWED_STRING_PATHS" --argjson keep "$IMPORTED_KEPT_IMAGE_PATHS" \
++           "$IMPORTED_ALLOWLIST_FILTER" > "$IMPORTED_PRESETS_DIR/${base}.json"
++    echo "Imported $base to $IMPORTED_PRESETS_DIR/${base}.json with assets in $asset_cache"
++    trap - EXIT
++    rm -rf "$tmpdir"
++    exit 0
++fi
++
++if [ -z "$name" ]; then
++    echo "Error: missing preset name" >&2
++    exit 1
++fi
++
++if $imported; then
++    PRESETS_DIR="$IMPORTED_PRESETS_DIR"
++elif $online; then
++    PRESETS_DIR="$ONLINE_PRESETS_DIR"
++else
++    PRESETS_DIR="$LOCAL_PRESETS_DIR"
++fi
++
++case "$action" in
++    --remove|--apply)
++        # $name is joined into "$PRESETS_DIR/${name}.json" and (for --remove)
++        # "*_imported/assets/${name}" below; "." or ".." there would target
++        # the presets/assets directory itself or its parent.
++        if is_unsafe_name "$name"; then
++            echo "Error: unsafe preset name: $name" >&2
++            exit 1
++        fi
++        ;;
++esac
++
++case "$action" in
++    --save)
++        jq "$BLACKLIST_FILTER" "$CONFIG_FILE" > "$PRESETS_DIR/${name}.json"
++        if [ -n "$description" ]; then
++            jq --arg desc "$description" '._presetMeta = {"description": $desc}' \
++                "$PRESETS_DIR/${name}.json" > "$PRESETS_DIR/${name}.json.tmp" \
++                && mv "$PRESETS_DIR/${name}.json.tmp" "$PRESETS_DIR/${name}.json"
++        fi
++        ;;
++    --remove)
++        rm -f "$PRESETS_DIR/${name}.json"
++        if $online; then
++            rm -rf "$ONLINE_PRESETS_DIR/assets/${name}"
++        elif $imported; then
++            rm -rf "$IMPORTED_PRESETS_DIR/assets/${name}"
++        fi
++        ;;
++    --apply)
++        preset_file="$PRESETS_DIR/${name}.json"
++        if [ ! -f "$preset_file" ]; then
++            echo "Error: preset not found: $name" >&2
++            exit 1
++        fi
++        # Filter preset input before merge so blacklisted keys never overwrite local config.
++        # Imported presets additionally get .apps stripped here too (defense in
++        # depth - the import step above already strips it, but this path is what
++        # actually merges into config.json, so it must not trust the cache file alone).
++        tmp=$(mktemp)
++        apply_filter="$BLACKLIST_FILTER"
++        if $imported; then
++            apply_filter="$apply_filter | $IMPORTED_COMMAND_STRIP_FILTER"
++            jq "$apply_filter" "$preset_file" \
++                | jq --argjson allow "$IMPORTED_ALLOWED_STRING_PATHS" --argjson keep "$IMPORTED_KEPT_IMAGE_PATHS" \
++                     "$IMPORTED_ALLOWLIST_FILTER" > "$tmp"
++        else
++            jq "$apply_filter" "$preset_file" > "$tmp"
++        fi
++        jq -s '.[0] * .[1] | del(._presetMeta)' "$CONFIG_FILE" "$tmp" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
++        rm -f "$tmp"
++        "$SWITCHWALL" --noswitch
++        ;;
++    --export-zip)
++        preset_file="$PRESETS_DIR/${name}.json"
++        if [ ! -f "$preset_file" ]; then
++            echo "Error: preset not found: $name" >&2
++            exit 1
++        fi
++        tmpdir=$(mktemp -d)
++        trap 'rm -rf "$tmpdir"' EXIT
++        # Use filtered preset for export
++        filtered="$tmpdir/${name}.json"
++        jq "$BLACKLIST_FILTER" "$preset_file" > "$filtered"
++        # Build meta.json + collect all image assets like online presets (ahri/meta.json)
++        collect_asset() {
++            local src="$1"; local key="$2"
++            if [ -n "$src" ] && [ -f "$src" ]; then
++                cp -L "$src" "$tmpdir/" 2>/dev/null || true
++                echo "$(basename "$src")"
++            fi
++        }
++        wallpaper=$(jq -r '.background.wallpaperPath // empty' "$filtered")
++        lockwall=$(jq -r '.background.lockWall // empty' "$filtered")
++        banner=$(jq -r '.sidebar.bannerImage // empty' "$filtered")
++        customImg=$(jq -r '.background.widgets.customImage.path // empty' "$filtered")
++        avatar=$(jq -r '.profile.avatarPicture // .profile.avatarPath // empty' "$filtered")
++        # avatar path may be empty or not a file
++        wallpapers="[]"
++        if [ -n "$wallpaper" ] && [ -f "$wallpaper" ]; then wallpapers=$(jq -n --arg b "$(basename "$wallpaper")" '[$b]'); fi
++
++        # copy assets and build meta fields
++        meta_avatar=""; meta_banner=""; meta_custom=""; meta_lock=""
++        [ -n "$wallpaper" ] && collect_asset "$wallpaper" >/dev/null
++        if [ -n "$lockwall" ] && [ -f "$lockwall" ]; then meta_lock=$(collect_asset "$lockwall"); fi
++        if [ -n "$banner" ] && [ -f "$banner" ]; then meta_banner=$(collect_asset "$banner"); fi
++        if [ -n "$customImg" ] && [ -f "$customImg" ]; then meta_custom=$(collect_asset "$customImg"); fi
++        if [ -n "$avatar" ] && [ -f "$avatar" ]; then meta_avatar=$(collect_asset "$avatar"); fi
++
++        jq -n --argjson w "$wallpapers" \
++              --arg avatar "$meta_avatar" --arg banner "$meta_banner" \
++              --arg custom "$meta_custom" --arg lock "$meta_lock" \
++              '{preview: "", screenshots: [], wallpapers: $w} + (if $avatar != "" then {avatar: $avatar} else {} end)
++               + (if $banner != "" then {banner: $banner} else {} end)
++               + (if $custom != "" then {customImage: $custom} else {} end)
++               + (if $lock != "" then {lockWall: $lock} else {} end)' > "$tmpdir/meta.json"
++        # preview: try to generate or copy existing preview if exists in assets
++        # Just include filtered json + meta + wallpaper basename
++        zip_name="${name}.zip"
++        if command -v zip >/dev/null 2>&1; then
++            (cd "$tmpdir" && zip -r "$LOCAL_PRESETS_DIR/$zip_name" . >/dev/null)
++        else
++            python3 -c "import zipfile, pathlib, sys; z=zipfile.ZipFile(sys.argv[1],'w',zipfile.ZIP_DEFLATED); [z.write(str(p), arcname=p.name) for p in pathlib.Path(sys.argv[2]).iterdir()]; z.close()" "$LOCAL_PRESETS_DIR/$zip_name" "$tmpdir"
++        fi
++        echo "Exported $LOCAL_PRESETS_DIR/$zip_name"
++        trap - EXIT
++        rm -rf "$tmpdir"
++        ;;
++    *)
++        echo "Error: unknown action: $action" >&2
++        exit 1
++        ;;
++esac
+diff --git a/dots/.config/quickshell/ii/services/Presets.qml b/dots/.config/quickshell/ii/services/Presets.qml
+new file mode 100644
+index 00000000..ce292b46
+--- /dev/null
++++ b/dots/.config/quickshell/ii/services/Presets.qml
+@@ -0,0 +1,129 @@
++pragma Singleton
++pragma ComponentBehavior: Bound
++
++import QtQuick
++import Qt.labs.folderlistmodel
++import Quickshell
++import Quickshell.Io
++import qs
++import qs.modules.common
++import qs.modules.common.functions
++
++Singleton {
++    id: root
++
++    property alias folderModel: presetsFolderModel
++    property alias importedFolderModel: importedPresetsFolderModel
++
++    FolderListModel {
++        id: presetsFolderModel
++        folder: Qt.resolvedUrl(Directories.userPresetsPath)
++        showDirs: false
++        nameFilters: ["*.json"]
++    }
++
++    FolderListModel {
++        id: importedPresetsFolderModel
++        folder: Qt.resolvedUrl(`${Quickshell.env("HOME")}/.cache/quickshell/presets_imported`)
++        showDirs: false
++        nameFilters: ["*.json"]
++    }
++
++    function refresh() {
++        const current = presetsFolderModel.folder
++        presetsFolderModel.folder = ""
++        presetsFolderModel.folder = current
++    }
++
++    function refreshImported() {
++        const current = importedPresetsFolderModel.folder
++        importedPresetsFolderModel.folder = ""
++        importedPresetsFolderModel.folder = current
++    }
++
++    Process {
++        id: saveProc
++        onExited: root.refresh()
++    }
++
++    Process {
++        id: deleteProc
++        onExited: root.refresh()
++    }
++
++    Process {
++        id: deleteImportedProc
++        onExited: root.refreshImported()
++    }
++
++    Process {
++        id: overwriteProc
++        onExited: root.refresh()
++    }
++
++    Process {
++        id: exportZipProc
++    }
++
++    Process {
++        id: importZipProc
++        onExited: root.refreshImported()
++    }
++
++    function save(rawInput) {
++        const raw = rawInput.trim()
++        if (raw.length === 0) return
++
++        const commaIndex = raw.indexOf(",")
++        let name = raw
++        let description = ""
++
++        if (commaIndex !== -1) {
++            name = raw.substring(0, commaIndex).trim()
++            description = raw.substring(commaIndex + 1).trim()
++        }
++
++        name = name.replace(/\s/g, "_")
++        if (name.length === 0) return
++
++        saveProc.command = ["bash", Directories.presetsScriptPath, "--save", name, description]
++        saveProc.running = true
++    }
++
++    function apply(name) {
++        Quickshell.execDetached(["bash", Directories.presetsScriptPath, "--apply", name])
++        Qt.callLater(Qt.quit)
++    }
++
++    function remove(name) {
++        deleteProc.command = ["bash", Directories.presetsScriptPath, "--remove", name]
++        deleteProc.running = true
++    }
++
++    function removeImported(name) {
++        deleteImportedProc.command = ["bash", Directories.presetsScriptPath, "--remove", name, "--imported"]
++        deleteImportedProc.running = true
++    }
++
++    function applyImported(name) {
++        Quickshell.execDetached(["bash", Directories.presetsScriptPath, "--apply", name, "--imported"])
++        Qt.callLater(Qt.quit)
++    }
++
++    function overwrite(name) {
++        // Overwrite with same name (presets.sh --save filters General+Services)
++        overwriteProc.command = ["bash", Directories.presetsScriptPath, "--save", name]
++        overwriteProc.running = true
++    }
++
++    function exportZip(name) {
++        exportZipProc.command = ["bash", Directories.presetsScriptPath, "--export-zip", name]
++        exportZipProc.running = true
++    }
++
++    function importZip(path) {
++        const clean = String(path).replace(/^file:\/\//, "")
++        importZipProc.command = ["bash", Directories.presetsScriptPath, "--import-zip", clean]
++        importZipProc.running = true
++    }
++}

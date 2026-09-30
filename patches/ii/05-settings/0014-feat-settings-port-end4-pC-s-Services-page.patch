@@ -1,0 +1,620 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Wed, 30 Sep 2026 21:36:51 +0200
+Subject: [PATCH] feat(settings): port end4-pC's Services page
+
+Port of pctrade/end4-pC dc2ca2600ee6: modules/ii/settings/pages/ServicesConfig.qml
+https://github.com/pctrade/end4-pC/tree/dc2ca2600ee6d7852bf0ac91361db8e510f90a74
+Problem: the ii settings app has no Services configuration page; the fork has
+one but replaces two of the pin's search prefix fields (math expressions,
+weather enable) with fork-only ones (icon lookup, keybind search).
+Port: hand-ported (fork-only search prefix Icons and Keybinds fields dropped);
+pin controls with no fork equivalent carried over: a Math prefix field for
+search.prefix.math next to Emojis, and an Enable switch for bar.weather.enable
+at the top of the Weather section
+Drop when: upstream ships an equivalent page, or the settings port is abandoned.
+---
+ .../ii/modules/settings/ServicesConfig.qml    | 539 +++++++++++-------
+ 1 file changed, 322 insertions(+), 217 deletions(-)
+
+diff --git a/dots/.config/quickshell/ii/modules/settings/ServicesConfig.qml b/dots/.config/quickshell/ii/modules/settings/ServicesConfig.qml
+index aec8dc98..7e779b0e 100644
+--- a/dots/.config/quickshell/ii/modules/settings/ServicesConfig.qml
++++ b/dots/.config/quickshell/ii/modules/settings/ServicesConfig.qml
+@@ -5,274 +5,379 @@ import qs.modules.common
+ import qs.modules.common.widgets
+ 
+ ContentPage {
++    id: page
+     forceWidth: true
++    bottomContentPadding: 15
+ 
+-    ContentSection {
+-        icon: "neurology"
+-        title: Translation.tr("AI")
++    //This was intended to go into the results more deeply but in the end I didn't like it but I left it just in case lol
++    function goTo(term) {
++        const t = term.toLowerCase().trim()
+ 
+-        MaterialTextArea {
+-            Layout.fillWidth: true
+-            placeholderText: Translation.tr("System prompt")
+-            text: Config.options.ai.systemPrompt
+-            wrapMode: TextEdit.Wrap
+-            onTextChanged: {
+-                Qt.callLater(() => {
+-                    Config.options.ai.systemPrompt = text;
+-                });
++        function findTarget(rootItem) {
++            for (let i = 0; i < rootItem.children.length; i++) {
++                let child = rootItem.children[i]
++                if (child.title && child.title.toLowerCase().includes(t)) {
++                    return child
++                }
+             }
+-        }
+-    }
+-
+-    ContentSection {
+-        icon: "music_cast"
+-        title: Translation.tr("Music Recognition")
+ 
+-        ConfigSpinBox {
+-            icon: "timer_off"
+-            text: Translation.tr("Total duration timeout (s)")
+-            value: Config.options.musicRecognition.timeout
+-            from: 10
+-            to: 100
+-            stepSize: 2
+-            onValueChanged: {
+-                Config.options.musicRecognition.timeout = value;
++            for (let i = 0; i < rootItem.children.length; i++) {
++                let found = findTarget(rootItem.children[i])
++                if (found) return found
+             }
++            return null
+         }
+-        ConfigSpinBox {
+-            icon: "av_timer"
+-            text: Translation.tr("Polling interval (s)")
+-            value: Config.options.musicRecognition.interval
+-            from: 2
+-            to: 10
+-            stepSize: 1
+-            onValueChanged: {
+-                Config.options.musicRecognition.interval = value;
+-            }
+-        }
+-    }
+-
+-    ContentSection {
+-        icon: "cell_tower"
+-        title: Translation.tr("Networking")
+ 
+-        MaterialTextArea {
+-            Layout.fillWidth: true
+-            placeholderText: Translation.tr("User agent (for services that require it)")
+-            text: Config.options.networking.userAgent
+-            wrapMode: TextEdit.Wrap
+-            onTextChanged: {
+-                Config.options.networking.userAgent = text;
+-            }
++        let target = findTarget(mainLayout)
++        if (target) {
++            let pos = target.mapToItem(mainLayout, 0, 0)
++            page.contentY = Math.max(0, pos.y - 0)
+         }
+     }
+ 
+-    ContentSection {
+-        icon: "memory"
+-        title: Translation.tr("Resources")
++    ColumnLayout {
++        id: mainLayout 
++        Layout.fillWidth: true   
++        Layout.fillHeight: true
++        spacing: 20
+ 
+-        ConfigSpinBox {
+-            icon: "av_timer"
+-            text: Translation.tr("Polling interval (ms)")
+-            value: Config.options.resources.updateInterval
+-            from: 100
+-            to: 10000
+-            stepSize: 100
+-            onValueChanged: {
+-                Config.options.resources.updateInterval = value;
++        ContentSection {
++            icon: "neurology"
++            shape: MaterialShape.Shape.Ghostish
++            title: Translation.tr("AI")
++
++            MaterialTextArea {
++                Layout.fillWidth: true
++                placeholderText: Translation.tr("System prompt")
++                text: Config.options.ai.systemPrompt
++                wrapMode: TextEdit.Wrap
++                onTextChanged: {
++                    Qt.callLater(() => {
++                        Config.options.ai.systemPrompt = text;
++                    });
++                }
+             }
+         }
+-        
+-    }
+ 
+-    ContentSection {
+-        icon: "file_open"
+-        title: Translation.tr("Save paths")
++        ContentSection {
++            icon: "cell_tower"
++            shape: MaterialShape.Shape.PixelCircle
++            title: Translation.tr("Networking")
+ 
+-        MaterialTextArea {
+-            Layout.fillWidth: true
+-            placeholderText: Translation.tr("Video Recording Path")
+-            text: Config.options.screenRecord.savePath
+-            wrapMode: TextEdit.Wrap
+-            onTextChanged: {
+-                Config.options.screenRecord.savePath = text;
+-            }
+-        }
+-        
+-        MaterialTextArea {
+-            Layout.fillWidth: true
+-            placeholderText: Translation.tr("Screenshot Path (leave empty to just copy)")
+-            text: Config.options.screenSnip.savePath
+-            wrapMode: TextEdit.Wrap
+-            onTextChanged: {
+-                Config.options.screenSnip.savePath = text;
++            MaterialTextArea {
++                Layout.fillWidth: true
++                placeholderText: Translation.tr("User agent (for services that require it)")
++                text: Config.options.networking.userAgent
++                wrapMode: TextEdit.Wrap
++                onTextChanged: {
++                    Config.options.networking.userAgent = text;
++                }
+             }
+         }
+-    }
+ 
+-    ContentSection {
+-        icon: "search"
+-        title: Translation.tr("Search")
++        ContentSection {
++            icon: "music_cast"
++            shape: MaterialShape.Shape.Oval
++            title: Translation.tr("Music Recognition")
+ 
+-        ConfigSwitch {
+-            text: Translation.tr("Use Levenshtein distance-based algorithm instead of fuzzy")
+-            checked: Config.options.search.sloppy
+-            onCheckedChanged: {
+-                Config.options.search.sloppy = checked;
+-            }
+-            StyledToolTip {
+-                text: Translation.tr("Could be better if you make a ton of typos,\nbut results can be weird and might not work with acronyms\n(e.g. \"GIMP\" might not give you the paint program)")
++            GroupedList {
++                ConfigSpinBox {
++                    icon: "timer_off"
++                    text: Translation.tr("Total duration timeout (s)")
++                    value: Config.options.musicRecognition.timeout
++                    from: 10
++                    to: 100
++                    stepSize: 2
++                    onValueChanged: {
++                        Config.options.musicRecognition.timeout = value;
++                    }
++                }
++                ConfigSpinBox {
++                    icon: "av_timer"
++                    text: Translation.tr("Polling interval (s)")
++                    value: Config.options.musicRecognition.interval
++                    from: 2
++                    to: 10
++                    stepSize: 1
++                    onValueChanged: {
++                        Config.options.musicRecognition.interval = value;
++                    }
++                }
+             }
+         }
+ 
+-        ContentSubsection {
+-            title: Translation.tr("Prefixes")
+-            ConfigRow {
+-                uniform: true
+-                MaterialTextArea {
++        ContentSection {
++            icon: "file_open"
++            shape: MaterialShape.Shape.Slanted
++            title: Translation.tr("Save paths")
++
++            GroupedList {
++                ConfigTextArea {
++                    id: videoRecordPathField
+                     Layout.fillWidth: true
+-                    placeholderText: Translation.tr("Action")
+-                    text: Config.options.search.prefix.action
+-                    wrapMode: TextEdit.Wrap
+-                    onTextChanged: {
+-                        Config.options.search.prefix.action = text;
++                    fieldWidth: 250
++                    buttonIcon: "video_file"
++                    text: Translation.tr("Video Recording Path")
++                    value: Config.options.screenRecord.savePath
++                    onValueChanged: {
++                        videoRecordPathDebounceTimer.restart();
+                     }
+-                }
+-                MaterialTextArea {
+-                    Layout.fillWidth: true
+-                    placeholderText: Translation.tr("Clipboard")
+-                    text: Config.options.search.prefix.clipboard
+-                    wrapMode: TextEdit.Wrap
+-                    onTextChanged: {
+-                        Config.options.search.prefix.clipboard = text;
++
++                    Timer {
++                        id: videoRecordPathDebounceTimer
++                        interval: 600
++                        repeat: false
++                        onTriggered: {
++                            Config.options.screenRecord.savePath = videoRecordPathField.value;
++                        }
+                     }
+                 }
+-                MaterialTextArea {
++
++                ConfigTextArea {
++                    id: screenshotPathField
+                     Layout.fillWidth: true
+-                    placeholderText: Translation.tr("Emojis")
+-                    text: Config.options.search.prefix.emojis
+-                    wrapMode: TextEdit.Wrap
+-                    onTextChanged: {
+-                        Config.options.search.prefix.emojis = text;
++                    fieldWidth: 250
++                    buttonIcon: "screenshot_monitor"
++                    text: Translation.tr("Screenshot Path (leave empty to just copy)")
++                    value: Config.options.screenSnip.savePath
++                    onValueChanged: {
++                        screenshotPathDebounceTimer.restart();
++                    }
++
++                    Timer {
++                        id: screenshotPathDebounceTimer
++                        interval: 600
++                        repeat: false
++                        onTriggered: {
++                            Config.options.screenSnip.savePath = screenshotPathField.value;
++                        }
+                     }
+                 }
+             }
++        }
+ 
+-            ConfigRow {
+-                uniform: true
+-                MaterialTextArea {
+-                    Layout.fillWidth: true
+-                    placeholderText: Translation.tr("Math")
+-                    text: Config.options.search.prefix.math
+-                    wrapMode: TextEdit.Wrap
+-                    onTextChanged: {
+-                        Config.options.search.prefix.math = text;
++        ContentSection {
++            icon: "search"
++            shape: MaterialShape.Shape.Cookie6Sided
++            title: Translation.tr("Search")
++
++            GroupedList {
++                ConfigSwitch {
++                    text: Translation.tr("Use Levenshtein distance-based algorithm instead of fuzzy")
++                    checked: Config.options.search.sloppy
++                    onCheckedChanged: {
++                        Config.options.search.sloppy = checked;
+                     }
+                 }
+-                MaterialTextArea {
+-                    Layout.fillWidth: true
+-                    placeholderText: Translation.tr("Shell command")
+-                    text: Config.options.search.prefix.shellCommand
+-                    wrapMode: TextEdit.Wrap
+-                    onTextChanged: {
+-                        Config.options.search.prefix.shellCommand = text;
++            }
++
++            ContentSubsection {
++                title: Translation.tr("Prefixes")
++
++                GroupedList {
++                    ConfigRow {
++                        uniform: true
++                        ConfigTextArea {
++                            Layout.fillWidth: true
++                            buttonIcon: "bolt"
++                            fieldWidth: 100
++                            text: Translation.tr("Action")
++                            value: Config.options.search.prefix.action
++                            onValueChanged: {
++                                Config.options.search.prefix.action = value;
++                            }
++                        }
++                        ConfigTextArea {
++                            Layout.fillWidth: true
++                            buttonIcon: "content_paste"
++                            fieldWidth: 100
++                            text: Translation.tr("Clipboard")
++                            value: Config.options.search.prefix.clipboard
++                            onValueChanged: {
++                                Config.options.search.prefix.clipboard = value;
++                            }
++                        }
+                     }
+-                }
+-                MaterialTextArea {
+-                    Layout.fillWidth: true
+-                    placeholderText: Translation.tr("Web search")
+-                    text: Config.options.search.prefix.webSearch
+-                    wrapMode: TextEdit.Wrap
+-                    onTextChanged: {
+-                        Config.options.search.prefix.webSearch = text;
++
++                    ConfigRow {
++                        uniform: true
++                        ConfigTextArea {
++                            Layout.fillWidth: true
++                            buttonIcon: "mood"
++                            fieldWidth: 100
++                            text: Translation.tr("Emojis")
++                            value: Config.options.search.prefix.emojis
++                            onValueChanged: {
++                                Config.options.search.prefix.emojis = value;
++                            }
++                        }
++                        ConfigTextArea {
++                            Layout.fillWidth: true
++                            buttonIcon: "function"
++                            fieldWidth: 100
++                            text: Translation.tr("Math")
++                            value: Config.options.search.prefix.math
++                            onValueChanged: {
++                                Config.options.search.prefix.math = value;
++                            }
++                        }
++                    }
++
++                    ConfigRow {
++                        uniform: true
++                        ConfigTextArea {
++                            Layout.fillWidth: true
++                            buttonIcon: "terminal"
++                            fieldWidth: 100
++                            text: Translation.tr("Shell command")
++                            value: Config.options.search.prefix.shellCommand
++                            onValueChanged: {
++                                Config.options.search.prefix.shellCommand = value;
++                            }
++                        }
++                        ConfigTextArea {
++                            Layout.fillWidth: true
++                            fieldWidth: 100
++                            buttonIcon: "travel_explore"
++                            text: Translation.tr("Web search")
++                            value: Config.options.search.prefix.webSearch
++                            onValueChanged: {
++                                Config.options.search.prefix.webSearch = value;
++                            }
++                        }
++                    }
++
++                    ConfigRow {
++                        uniform: true
++                        ConfigTextArea {
++                            Layout.fillWidth: true
++                            buttonIcon: "apps"
++                            fieldWidth: 100
++                            text: Translation.tr("Apps")
++                            value: Config.options.search.prefix.app
++                            onValueChanged: {
++                                Config.options.search.prefix.app = value;
++                            }
++                        }
+                     }
+                 }
+             }
+-        }
+-        ContentSubsection {
+-            title: Translation.tr("Web search")
+-            MaterialTextArea {
+-                Layout.fillWidth: true
+-                placeholderText: Translation.tr("Base URL")
+-                text: Config.options.search.engineBaseUrl
+-                wrapMode: TextEdit.Wrap
+-                onTextChanged: {
+-                    Config.options.search.engineBaseUrl = text;
++            ContentSubsection {
++                title: Translation.tr("Web search")
++
++                GroupedList {
++                    ConfigTextArea {
++                        id: baseUrlField
++                        Layout.fillWidth: true
++                        fieldWidth: 320
++                        buttonIcon: "travel_explore"
++                        text: Translation.tr("Base URL")
++                        value: Config.options.search.engineBaseUrl
++                        onValueChanged: {
++                            baseUrlDebounceTimer.restart();
++                        }
++
++                        Timer {
++                            id: baseUrlDebounceTimer
++                            interval: 600
++                            repeat: false
++                            onTriggered: {
++                                Config.options.search.engineBaseUrl = baseUrlField.value;
++                            }
++                        }
++                    }
+                 }
+             }
+         }
+-    }
+-
+-    // There's no update indicator in ii for now so we shouldn't show this yet
+-    // ContentSection {
+-    //     icon: "deployed_code_update"
+-    //     title: Translation.tr("System updates (Arch only)")
+ 
+-    //     ConfigSwitch {
+-    //         text: Translation.tr("Enable update checks")
+-    //         checked: Config.options.updates.enableCheck
+-    //         onCheckedChanged: {
+-    //             Config.options.updates.enableCheck = checked;
+-    //         }
+-    //     }
++        ContentSection {
++            icon: "deployed_code_update"
++            title: Translation.tr("System updates (Arch only)")
+ 
+-    //     ConfigSpinBox {
+-    //         icon: "av_timer"
+-    //         text: Translation.tr("Check interval (mins)")
+-    //         value: Config.options.updates.checkInterval
+-    //         from: 60
+-    //         to: 1440
+-    //         stepSize: 60
+-    //         onValueChanged: {
+-    //             Config.options.updates.checkInterval = value;
+-    //         }
+-    //     }
+-    // }
++            GroupedList {
++                ConfigSwitch {
++                    buttonIcon: "update"
++                    text: Translation.tr("Enable update checks")
++                    checked: Config.options.updates.enableCheck
++                    onCheckedChanged: {
++                        Config.options.updates.enableCheck = checked;
++                    }
++                }
+ 
+-    ContentSection {
+-        icon: "weather_mix"
+-        title: Translation.tr("Weather")
+-        ConfigRow {
+-            ConfigSwitch {
+-                buttonIcon: "assistant_navigation"
+-                text: Translation.tr("Enable GPS based location")
+-                checked: Config.options.bar.weather.enableGPS
+-                onCheckedChanged: {
+-                    Config.options.bar.weather.enableGPS = checked;
++                ConfigSpinBox {
++                    icon: "av_timer"
++                    text: Translation.tr("Check interval (mins)")
++                    value: Config.options.updates.checkInterval
++                    from: 60
++                    to: 1440
++                    stepSize: 60
++                    onValueChanged: {
++                        Config.options.updates.checkInterval = value;
++                    }
+                 }
+             }
+-            ConfigSwitch {
+-                buttonIcon: "thermometer"
+-                text: Translation.tr("Fahrenheit unit")
+-                checked: Config.options.bar.weather.useUSCS
+-                onCheckedChanged: {
+-                    Config.options.bar.weather.useUSCS = checked;
++        }
++
++        ContentSection {
++            icon: "weather_mix"
++            shape: MaterialShape.Shape.Pill
++            title: Translation.tr("Weather")
++            GroupedList {
++                ConfigSwitch {
++                    buttonIcon: "check"
++                    text: Translation.tr("Enable")
++                    checked: Config.options.bar.weather.enable
++                    onCheckedChanged: {
++                        Config.options.bar.weather.enable = checked;
++                    }
++                }
++                ConfigSwitch {
++                    buttonIcon: "assistant_navigation"
++                    text: Translation.tr("Enable GPS based location")
++                    checked: Config.options.bar.weather.enableGPS
++                    onCheckedChanged: {
++                        Config.options.bar.weather.enableGPS = checked;
++                    }
+                 }
+-                StyledToolTip {
+-                    text: Translation.tr("It may take a few seconds to update")
++                ConfigSwitch {
++                    buttonIcon: "thermometer"
++                    text: Translation.tr("Fahrenheit unit")
++                    checked: Config.options.bar.weather.useUSCS
++                    onCheckedChanged: {
++                        Config.options.bar.weather.useUSCS = checked;
++                    }
++                }
++                ConfigSpinBox {
++                    icon: "av_timer"
++                    text: Translation.tr("Polling interval (m)")
++                    value: Config.options.bar.weather.fetchInterval
++                    from: 5
++                    to: 50
++                    stepSize: 5
++                    onValueChanged: {
++                        Config.options.bar.weather.fetchInterval = value;
++                    }
++                }
++                ConfigTextArea {
++                    id: cityField
++                    Layout.fillWidth: true
++                    buttonIcon: "location_city"
++                    text: Translation.tr("City name")
++                    value: Config.options.bar.weather.city
++                    onValueChanged: cityDebounceTimer.restart()
++
++                    Timer {
++                        id: cityDebounceTimer
++                        interval: 1000
++                        running: false
++                        onTriggered: Config.options.bar.weather.city = cityField.value
++                    }
+                 }
+             }
+         }
+-        
+-        MaterialTextArea {
++        WorldMap {
+             Layout.fillWidth: true
+-            placeholderText: Translation.tr("City name")
+-            text: Config.options.bar.weather.city
+-            wrapMode: TextEdit.Wrap
+-            onTextChanged: {
+-                Config.options.bar.weather.city = text;
+-            }
+-        }
+-        ConfigSpinBox {
+-            icon: "av_timer"
+-            text: Translation.tr("Polling interval (m)")
+-            value: Config.options.bar.weather.fetchInterval
+-            from: 5
+-            to: 50
+-            stepSize: 5
+-            onValueChanged: {
+-                Config.options.bar.weather.fetchInterval = value;
+-            }
++            Layout.preferredHeight: 300
+         }
+     }
+ }

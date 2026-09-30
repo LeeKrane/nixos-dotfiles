@@ -1,0 +1,312 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Wed, 30 Sep 2026 18:57:49 +0200
+Subject: [PATCH] feat(settings): take end4-pC's versions of small shared
+ widgets
+
+Port of pctrade/end4-pC dc2ca2600ee6: modules/common/widgets/ConfigSwitch.qml, modules/common/widgets/ConfigSlider.qml, modules/common/widgets/NoticeBox.qml, modules/common/widgets/ContentSubsection.qml, modules/common/widgets/StyledComboBox.qml, modules/common/widgets/RippleButton.qml, modules/common/widgets/MaterialShapeWrappedMaterialSymbol.qml, modules/common/widgets/MaterialTextArea.qml, modules/common/widgets/MaterialLoadingIndicator.qml, modules/common/widgets/SelectionGroupButton.qml, modules/common/widgets/ToolbarPairedFab.qml
+https://github.com/pctrade/end4-pC/tree/dc2ca2600ee6d7852bf0ac91361db8e510f90a74
+Problem: the ported pages set properties (for example ConfigSlider.showLabel, ConfigSwitch colBackgroundHover) these widgets lack at the pin.
+Port: clean
+Drop when: the pinned widgets have the properties the pages set, checked by running forkcheck and the page smoke tests with this commit reverted.
+---
+ .../modules/common/widgets/ConfigSlider.qml   |  3 ++-
+ .../modules/common/widgets/ConfigSwitch.qml   |  4 +++-
+ .../common/widgets/ContentSubsection.qml      |  2 +-
+ .../widgets/MaterialLoadingIndicator.qml      |  7 ++++--
+ .../MaterialShapeWrappedMaterialSymbol.qml    |  7 ++++--
+ .../common/widgets/MaterialTextArea.qml       |  3 ++-
+ .../ii/modules/common/widgets/NoticeBox.qml   |  2 +-
+ .../modules/common/widgets/RippleButton.qml   |  5 ++++
+ .../common/widgets/SelectionGroupButton.qml   | 23 ++++++++++++-------
+ .../modules/common/widgets/StyledComboBox.qml |  2 +-
+ .../common/widgets/ToolbarPairedFab.qml       | 15 ++++++------
+ 11 files changed, 47 insertions(+), 26 deletions(-)
+
+diff --git a/dots/.config/quickshell/ii/modules/common/widgets/ConfigSlider.qml b/dots/.config/quickshell/ii/modules/common/widgets/ConfigSlider.qml
+index edc63191..6dee45ee 100644
+--- a/dots/.config/quickshell/ii/modules/common/widgets/ConfigSlider.qml
++++ b/dots/.config/quickshell/ii/modules/common/widgets/ConfigSlider.qml
+@@ -18,9 +18,11 @@ RowLayout {
+     property real from: slider.from
+     property real to: slider.to
+     property real textWidth: 120
++    property bool showLabel: true
+ 
+     RowLayout {
+         id: row
++        visible: root.showLabel
+         spacing: 10
+ 
+         OptionalMaterialSymbol {
+@@ -35,7 +37,6 @@ RowLayout {
+             color: Appearance.colors.colOnSecondaryContainer
+         }
+     }
+-    
+     StyledSlider {
+         id: slider
+         configuration: StyledSlider.Configuration.XS
+diff --git a/dots/.config/quickshell/ii/modules/common/widgets/ConfigSwitch.qml b/dots/.config/quickshell/ii/modules/common/widgets/ConfigSwitch.qml
+index 53e6a27c..8f45b950 100644
+--- a/dots/.config/quickshell/ii/modules/common/widgets/ConfigSwitch.qml
++++ b/dots/.config/quickshell/ii/modules/common/widgets/ConfigSwitch.qml
+@@ -8,9 +8,11 @@ RippleButton {
+     id: root
+     property string buttonIcon
+     property alias iconSize: iconWidget.iconSize
++    colBackgroundHover: "transparent"
+ 
+     Layout.fillWidth: true
+-    implicitHeight: contentItem.implicitHeight + 8 * 2
++    Layout.bottomMargin: 6 //Visually it works and I don't know why this should be handled by the parent.
++    implicitHeight: contentItem.implicitHeight + 8 
+     font.pixelSize: Appearance.font.pixelSize.small
+     
+     onClicked: checked = !checked
+diff --git a/dots/.config/quickshell/ii/modules/common/widgets/ContentSubsection.qml b/dots/.config/quickshell/ii/modules/common/widgets/ContentSubsection.qml
+index 357ce742..6c3824e0 100644
+--- a/dots/.config/quickshell/ii/modules/common/widgets/ContentSubsection.qml
++++ b/dots/.config/quickshell/ii/modules/common/widgets/ContentSubsection.qml
+@@ -7,7 +7,7 @@ ColumnLayout {
+     id: root
+     property string title: ""
+     property string tooltip: ""
+-    default property alias contentData: sectionContent.data
++    default property alias data: sectionContent.data
+ 
+     Layout.fillWidth: true
+     Layout.topMargin: 4
+diff --git a/dots/.config/quickshell/ii/modules/common/widgets/MaterialLoadingIndicator.qml b/dots/.config/quickshell/ii/modules/common/widgets/MaterialLoadingIndicator.qml
+index 502cd1a3..296ed733 100644
+--- a/dots/.config/quickshell/ii/modules/common/widgets/MaterialLoadingIndicator.qml
++++ b/dots/.config/quickshell/ii/modules/common/widgets/MaterialLoadingIndicator.qml
+@@ -10,12 +10,15 @@ Rectangle {
+     property bool loading: true
+     property double pullProgress: 0
+ 
++    property color colBg: Appearance.colors.colPrimaryContainer
++    property color colShape: Appearance.colors.colOnPrimaryContainer
++
+     // Size, color
+     property double implicitSize: 48
+     implicitWidth: implicitSize
+     implicitHeight: implicitSize
+     radius: Math.min(width, height) / 2
+-    color: Appearance.colors.colPrimaryContainer
++    color: colBg
+     property double baseShapeSize: root.implicitSize * 0.7
+     property double leapZoomSize: root.baseShapeSize * 1.2
+     property double leapZoomProgress: 0
+@@ -82,7 +85,7 @@ Rectangle {
+             const progressSecondHalf = Math.max(root.leapZoomProgress - 0.5, 0) * 2;
+             return root.baseShapeSize + leapZoomDiff * progressFirstHalf - leapZoomDiff * progressSecondHalf;
+         }
+-        color: Appearance.colors.colOnPrimaryContainer
++        color: root.colShape
+ 
+         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+     }
+diff --git a/dots/.config/quickshell/ii/modules/common/widgets/MaterialShapeWrappedMaterialSymbol.qml b/dots/.config/quickshell/ii/modules/common/widgets/MaterialShapeWrappedMaterialSymbol.qml
+index b6abd1e9..33c5df3e 100644
+--- a/dots/.config/quickshell/ii/modules/common/widgets/MaterialShapeWrappedMaterialSymbol.qml
++++ b/dots/.config/quickshell/ii/modules/common/widgets/MaterialShapeWrappedMaterialSymbol.qml
+@@ -4,20 +4,23 @@ import qs.modules.common.widgets
+ 
+ MaterialShape {
+     id: root
++    property alias fill: symbol.fill
+     property alias text: symbol.text
+     property alias iconSize: symbol.iconSize
+     property alias font: symbol.font
+     property alias colSymbol: symbol.color
+     property real padding: 6
++    property var wrappedShape: MaterialShape.Shape.Clover4Leaf
+ 
+     color: Appearance.colors.colSecondaryContainer
+     colSymbol: Appearance.colors.colOnSecondaryContainer
+-    shape: MaterialShape.Shape.Clover4Leaf
++    shape: root.wrappedShape
+     implicitSize: Math.max(symbol.implicitWidth, symbol.implicitHeight) + padding * 2
+ 
+     MaterialSymbol {
+         id: symbol
+         anchors.centerIn: parent
+         color: root.colSymbol
++        fill: root.fill
+     }
+-}
++}
+\ No newline at end of file
+diff --git a/dots/.config/quickshell/ii/modules/common/widgets/MaterialTextArea.qml b/dots/.config/quickshell/ii/modules/common/widgets/MaterialTextArea.qml
+index 1390d716..e1b641da 100644
+--- a/dots/.config/quickshell/ii/modules/common/widgets/MaterialTextArea.qml
++++ b/dots/.config/quickshell/ii/modules/common/widgets/MaterialTextArea.qml
+@@ -1,4 +1,5 @@
+ import qs.modules.common
++import qs.modules.common.functions
+ import QtQuick
+ import QtQuick.Controls.Material
+ import QtQuick.Controls
+@@ -24,7 +25,7 @@ TextArea {
+ 
+     background: Rectangle {
+         implicitHeight: 56
+-        color: Appearance.m3colors.m3surface
++        color: Appearance.colors.colLayer1 
+         topLeftRadius: 4
+         topRightRadius: 4
+         Rectangle {
+diff --git a/dots/.config/quickshell/ii/modules/common/widgets/NoticeBox.qml b/dots/.config/quickshell/ii/modules/common/widgets/NoticeBox.qml
+index d5c56860..c6a1d29c 100644
+--- a/dots/.config/quickshell/ii/modules/common/widgets/NoticeBox.qml
++++ b/dots/.config/quickshell/ii/modules/common/widgets/NoticeBox.qml
+@@ -7,7 +7,7 @@ Rectangle {
+     id: root
+     property alias materialIcon: icon.text
+     property alias text: noticeText.text
+-    default property alias boxData: buttonRow.data
++    default property alias data: buttonRow.data
+ 
+     radius: Appearance.rounding.normal
+     color: Appearance.colors.colPrimaryContainer
+diff --git a/dots/.config/quickshell/ii/modules/common/widgets/RippleButton.qml b/dots/.config/quickshell/ii/modules/common/widgets/RippleButton.qml
+index 498bfc1c..f3b77d7b 100644
+--- a/dots/.config/quickshell/ii/modules/common/widgets/RippleButton.qml
++++ b/dots/.config/quickshell/ii/modules/common/widgets/RippleButton.qml
+@@ -22,6 +22,9 @@ Button {
+     property var releaseAction // When left clicking (release)
+     property var altAction // When right clicking
+     property var middleClickAction // When middle clicking
++    property bool border: false
++    property real borderWidth: 1
++    property color colBorder: Appearance?.colors.colOutlineVariant ?? "#79747E"
+ 
+     property color colBackground: ColorUtils.transparentize(Appearance?.colors.colLayer1Hover, 1) || "transparent"
+     property color colBackgroundHover: Appearance?.colors.colLayer1Hover ?? "#E5DFED"
+@@ -137,6 +140,8 @@ Button {
+         implicitHeight: 30
+ 
+         color: root.buttonColor
++        border.width: root.border ? root.borderWidth : 0
++        border.color: root.colBorder
+         Behavior on color {
+             animation: Appearance?.animation.elementMoveFast.colorAnimation.createObject(this)
+         }
+diff --git a/dots/.config/quickshell/ii/modules/common/widgets/SelectionGroupButton.qml b/dots/.config/quickshell/ii/modules/common/widgets/SelectionGroupButton.qml
+index ab7aa1e4..a38db2bb 100644
+--- a/dots/.config/quickshell/ii/modules/common/widgets/SelectionGroupButton.qml
++++ b/dots/.config/quickshell/ii/modules/common/widgets/SelectionGroupButton.qml
+@@ -3,21 +3,26 @@ import QtQuick.Controls
+ import QtQuick.Layouts
+ import Quickshell
+ import Quickshell.Io
+-import Quickshell.Hyprland
+ import qs.services
+ import qs.modules.common
+ import qs.modules.common.widgets
+ 
+ GroupButton {
+     id: root
+-    horizontalPadding: 12
+-    verticalPadding: 8
+     bounce: false
+     property string buttonIcon
+     property bool leftmost: false
+     property bool rightmost: false
++
++    property bool isDragging: false
++    property color colText: root.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
++
+     leftRadius: (toggled || leftmost) ? (height / 2) : Appearance.rounding.unsharpenmore
+     rightRadius: (toggled || rightmost) ? (height / 2) : Appearance.rounding.unsharpenmore
++
++    horizontalPadding: 12
++    verticalPadding: 8 
++
+     colBackground: Appearance.colors.colSecondaryContainer
+     colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+     colBackgroundActive: Appearance.colors.colSecondaryContainerActive
+@@ -36,26 +41,28 @@ GroupButton {
+                     anchors.centerIn: parent
+                     text: root.buttonIcon
+                     iconSize: Appearance.font.pixelSize.larger
+-                    color: root.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
++                    color: root.colText
++
++                    Behavior on color { ColorAnimation { duration: 180 } }
+                 }
+             }
+         }
+ 
+         Item {
+             implicitWidth: root.buttonText?.length > 0 ? textItem.implicitWidth : 0
+-            implicitHeight: textMetrics.height // Force height to that of regular text
+-
++            implicitHeight: textMetrics.height
+             TextMetrics {
+                 id: textMetrics
+                 font.family: Appearance.font.family.main
+                 text: "Abc"
+             }
+-
+             StyledText {
+                 id: textItem
+                 anchors.centerIn: parent
+-                color: root.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
++                color: root.colText
+                 text: root.buttonText
++
++                Behavior on color { ColorAnimation { duration: 180 } }
+             }
+         }
+     }
+diff --git a/dots/.config/quickshell/ii/modules/common/widgets/StyledComboBox.qml b/dots/.config/quickshell/ii/modules/common/widgets/StyledComboBox.qml
+index 55504acb..a9d2263d 100644
+--- a/dots/.config/quickshell/ii/modules/common/widgets/StyledComboBox.qml
++++ b/dots/.config/quickshell/ii/modules/common/widgets/StyledComboBox.qml
+@@ -60,7 +60,7 @@ ComboBox {
+ 
+             Loader {
+                 Layout.alignment: Qt.AlignVCenter
+-                active: root.buttonIcon.length > 0 || (root.currentIndex >= 0 && typeof root.model[root.currentIndex] === 'object' && root.model[root.currentIndex]?.icon)
++                active: root.buttonIcon.length > 0 || !!(root.currentIndex >= 0 && typeof root.model[root.currentIndex] === 'object' && root.model[root.currentIndex]?.icon)
+                 visible: active
+                 sourceComponent: MaterialSymbol {
+                     text: {
+diff --git a/dots/.config/quickshell/ii/modules/common/widgets/ToolbarPairedFab.qml b/dots/.config/quickshell/ii/modules/common/widgets/ToolbarPairedFab.qml
+index fd82d4ea..2741fe1b 100644
+--- a/dots/.config/quickshell/ii/modules/common/widgets/ToolbarPairedFab.qml
++++ b/dots/.config/quickshell/ii/modules/common/widgets/ToolbarPairedFab.qml
+@@ -4,9 +4,9 @@ import qs.modules.common
+ 
+ Item {
+     id: root
+-
+     signal clicked(event: var)
+     property alias iconText: fabWidget.iconText
++    property alias baseSize: fabWidget.baseSize
+     default property alias fabData: fabWidget.data
+     property bool enableShadow: true
+ 
+@@ -15,14 +15,13 @@ Item {
+     }
+     implicitWidth: fabWidget.implicitWidth
+     implicitHeight: fabWidget.implicitHeight
+-    Loader {
+-        active: root.enableShadow
+-        anchors.fill: parent
+-        sourceComponent: StyledRectangularShadow {
+-            target: fabWidget
+-            radius: fabWidget.buttonRadius
+-        }
++
++    StyledRectangularShadow {
++        visible: root.enableShadow
++        target: fabWidget
++        radius: fabWidget.buttonRadius
+     }
++
+     FloatingActionButton {
+         id: fabWidget
+         onClicked: e => root.clicked(e)

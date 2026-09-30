@@ -1,0 +1,32 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Wed, 30 Sep 2026 21:50:52 +0200
+Subject: [PATCH] fix(notifications): read the monitor keys Config.qml declares
+
+Port of pctrade/end4-pC dc2ca2600ee6: none (krane-only)
+https://github.com/pctrade/end4-pC/tree/dc2ca2600ee6d7852bf0ac91361db8e510f90a74
+
+Problem: NotificationPopup read notifications.forceMonitor, which
+Config.qml does not declare (it has notifications.monitor), so the
+settings switch had no effect and every popup logged a TypeError.
+
+Port: krane-only
+
+Drop when: the pinned NotificationPopup.qml reads notifications.monitor.
+---
+ .../ii/modules/ii/notificationPopup/NotificationPopup.qml       | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/dots/.config/quickshell/ii/modules/ii/notificationPopup/NotificationPopup.qml b/dots/.config/quickshell/ii/modules/ii/notificationPopup/NotificationPopup.qml
+index 669e3971..8d48b5e5 100644
+--- a/dots/.config/quickshell/ii/modules/ii/notificationPopup/NotificationPopup.qml
++++ b/dots/.config/quickshell/ii/modules/ii/notificationPopup/NotificationPopup.qml
+@@ -14,7 +14,7 @@ Scope {
+     PanelWindow {
+         id: root
+         visible: (Notifications.popupList.length > 0) && !GlobalStates.screenLocked
+-        screen: Quickshell.screens.find(s => Config.options.notifications.forceMonitor.enable ? s.name === Config.options.notifications.forceMonitor.name : s.name === Hyprland.focusedMonitor?.name) ?? null
++        screen: Quickshell.screens.find(s => Config.options.notifications.monitor.enable ? s.name === Config.options.notifications.monitor.name : s.name === Hyprland.focusedMonitor?.name) ?? null
+ 
+         WlrLayershell.namespace: "quickshell:notificationPopup"
+         WlrLayershell.layer: WlrLayer.Overlay
