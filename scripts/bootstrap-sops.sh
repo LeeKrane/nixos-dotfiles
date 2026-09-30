@@ -80,7 +80,7 @@ fi
 # home instead of the real admin account's.
 if [ "$(id -u)" -eq 0 ] && [ ! -f "$PERSONAL_AGE_KEY_FILE" ]; then
     echo "error: running as root would create a personal age key under root's home, $PERSONAL_AGE_KEY_FILE." >&2
-    echo "       Re-run as the admin user krane, or set SOPS_AGE_KEY_FILE to an" >&2
+    echo "       Re-run as this host's admin user, or set SOPS_AGE_KEY_FILE to an" >&2
     echo "       existing key you already generated as that user." >&2
     exit 1
 fi

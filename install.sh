@@ -138,6 +138,10 @@ SCAFFOLD_PREVIEW_DIR=""
 SCAFFOLD_PENDING=false
 SCAFFOLD_SOPS_SNAPSHOT=""
 
+# The target host's login account (its krane.user.name), set by
+# resolve_install_user once the host is known and staged.
+INSTALL_USER=""
+
 # Runs from run_install_mode after a successful install and from on_exit, so
 # an aborted run never leaves the swapfile inside the new root. Warns
 # instead of dying on failure, so cleanup never trips the ERR trap. Defined
@@ -421,7 +425,7 @@ Usage: install.sh [options]
   -y, --yes               Assume yes and auto-confirm every prompt. Live
                             install also requires --confirm-wipe unless
                             --dry-run is given too. Never skips setting
-                            krane's password.
+                            the login user's password.
   -n, --dry-run           Print every mutating command instead of running
                             it. Implies --yes. Safe anywhere, any time.
   --confirm-wipe          Required alongside a live, non-dry-run --yes
@@ -1312,6 +1316,30 @@ patch_disko() {
     patch_disko_file "$(host_dir)/disko.nix" "$DISK"
 }
 
+# Reads the target host's login account from its evaluated krane.user.name.
+# Runs after patch_disko's `git add -A`, since a new host's files are
+# invisible to the flake until staged. Under --dry-run a new host was never
+# written or staged, so the prompted username stands in. The eval is
+# read-only, so it runs for real under --dry-run for an existing host.
+resolve_install_user() {
+    if $NEW_HOST_MODE && $DRY_RUN; then
+        INSTALL_USER="$NEW_USER"
+        log_info "login user for $HOST: $INSTALL_USER (prompted, a new host is not evaluated under --dry-run)"
+        return 0
+    fi
+    local user=""
+    user=$(nix eval --raw "$REPO_ROOT#nixosConfigurations.$HOST.config.krane.user.name") || user=""
+    if [ -z "$user" ]; then
+        soft_fail "could not evaluate nixosConfigurations.$HOST.config.krane.user.name"
+        user="${NEW_USER:-$DEFAULT_INSTALL_USER}"
+    fi
+    if $NEW_HOST_MODE && [ "$user" != "$NEW_USER" ]; then
+        die "hosts/$HOST evaluates to login user '$user', but '$NEW_USER' was entered, check hosts/$HOST/default.nix"
+    fi
+    INSTALL_USER="$user"
+    log_info "login user for $HOST: $INSTALL_USER"
+}
+
 run_disko() {
     log_step "Running disko for $HOST (formats $DISK)"
     local disko_script
@@ -1435,7 +1463,9 @@ patch_prime() {
 }
 
 # Commits before nixos-install so the copied repo starts with a clean
-# history instead of the disko/PRIME patches left as a local diff.
+# history instead of the disko/PRIME patches left as a local diff. A new
+# host's files, its .sops.yaml placeholders and its hardware config land in
+# this one commit.
 commit_hardware_config() {
     log_step "Committing local hardware config for $HOST"
     run git -C "$REPO_ROOT" add -A
@@ -1446,9 +1476,13 @@ commit_hardware_config() {
     local id_args=()
     # Commit identity is overridden only when none is configured.
     if [ -z "$(git -C "$REPO_ROOT" config user.email 2>/dev/null || true)" ]; then
-        id_args=(-c user.name=krane -c user.email=krane@localhost)
+        id_args=(-c "user.name=$INSTALL_USER" -c "user.email=$INSTALL_USER@localhost")
     fi
-    run git -C "$REPO_ROOT" "${id_args[@]}" commit -m "Configure $HOST hardware" --quiet
+    local message="Configure $HOST hardware"
+    if $NEW_HOST_MODE; then
+        message="Add $HOST host"
+    fi
+    run git -C "$REPO_ROOT" "${id_args[@]}" commit -m "$message" --quiet
 }
 
 # disko's own nix build already ran before /mnt existed, so it used the
@@ -1509,8 +1543,8 @@ run_nixos_install() {
 
 # Always runs for real outside --dry-run: --yes must never leave a fresh
 # install with no login. Retries a few times for a mistyped password.
-set_krane_password() {
-    log_step "Set krane's password on the new install"
+set_user_password() {
+    log_step "Set $INSTALL_USER's password on the new install"
 
     if ! $DRY_RUN && [ ! -t 0 ]; then
         print_no_password_box
@@ -1520,7 +1554,7 @@ set_krane_password() {
 
     local attempt=1
     while [ "$attempt" -le 3 ]; do
-        if run nixos-enter --root /mnt -- passwd krane; then
+        if run nixos-enter --root /mnt -- passwd "$INSTALL_USER"; then
             PASSWORD_SET=true
             return 0
         fi
@@ -1537,19 +1571,21 @@ print_no_password_box() {
         --padding "1 3" --margin "1 0" \
         "NO PASSWORD SET" "" \
         "Run this yourself before rebooting:" "" \
-        "  nixos-enter --root /mnt -- passwd krane" >&2
+        "  nixos-enter --root /mnt -- passwd $INSTALL_USER" >&2
 }
 
 finish_install() {
-    log_step "Copying repo to /mnt/home/krane/.dotfiles"
-    run mkdir -p /mnt/home/krane/.dotfiles
-    run_sh "cp -a \"$REPO_ROOT/.\" /mnt/home/krane/.dotfiles/"
-    run nixos-enter --root /mnt -- chown -R krane:users /home/krane/.dotfiles
-    run_sh "test -f /mnt/home/krane/.dotfiles/flake.nix" \
-        || die "repo copy to /mnt/home/krane/.dotfiles is missing flake.nix, see $LOG"
+    [ -n "$INSTALL_USER" ] || die "INSTALL_USER is unset, resolve_install_user did not run"
+    local home_dir="/home/$INSTALL_USER"
+    log_step "Copying repo to /mnt$home_dir/.dotfiles"
+    run mkdir -p "/mnt$home_dir/.dotfiles"
+    run_sh "cp -a \"$REPO_ROOT/.\" \"/mnt$home_dir/.dotfiles/\""
+    run nixos-enter --root /mnt -- chown -R "$INSTALL_USER:users" "$home_dir/.dotfiles"
+    run_sh "test -f \"/mnt$home_dir/.dotfiles/flake.nix\"" \
+        || die "repo copy to /mnt$home_dir/.dotfiles is missing flake.nix, see $LOG"
 
     PASSWORD_SET=true
-    set_krane_password
+    set_user_password
 
     banner "Install complete" \
         "Next steps:" \
@@ -1557,12 +1593,23 @@ finish_install() {
         "  2. ~/.dotfiles/install.sh --mode setup" \
         "  3. second switch, setup mode drives this"
 
+    # The new host's only copies are this live ISO's checkout, gone at
+    # reboot, and the one on the target disk.
+    if $NEW_HOST_MODE; then
+        gum style \
+            --border double --border-foreground 226 --foreground 226 --bold \
+            --padding "1 3" --margin "1 0" \
+            "hosts/$HOST is new and not pushed anywhere" "" \
+            "It exists only as a local commit in $home_dir/.dotfiles on the new install." \
+            "Push it from there after first boot, or it is lost with this disk." >&2
+    fi
+
     if $PASSWORD_SET; then
         if confirm "Reboot now?"; then
             run reboot
         fi
     else
-        log_warn "not offering to reboot, set krane's password first"
+        log_warn "not offering to reboot, set $INSTALL_USER's password first"
     fi
 }
 
@@ -1579,6 +1626,7 @@ run_install_mode() {
     fi
     patch_disko
     run git -C "$REPO_ROOT" add -A
+    resolve_install_user
     run_disko
     setup_install_swap
     generate_hardware_config
