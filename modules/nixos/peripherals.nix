@@ -22,7 +22,12 @@
   ];
 
   services.printing.enable = true;
-  services.smartd.enable = true;
+  services.smartd = {
+    enable = true;
+    # Exit 0 instead of 17 when no disk exposes SMART, as on virtio disks in a VM,
+    # so the unit does not fail every switch.
+    extraOptions = [ "-q nodev0" ];
+  };
   hardware.i2c.enable = true;
 
   programs.ydotool.enable = true;
