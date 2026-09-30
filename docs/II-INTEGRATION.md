@@ -283,6 +283,12 @@ commit, the problem, how it was ported and when to drop it.
 | `0010` thumbnail hash for symlinked wallpapers | `local` | local | pinned thumbnail scripts hash the listed path, not its realpath |
 | `0011` unterminated OSC in terminal sequences | `local` | local | pinned `sequences.txt` ends with `ESC \` |
 
+`0008`: coalesces bursts of raw Hyprland events (a drag fires dozens) into
+hyprctl queries with a leading-edge throttle. The first event flushes
+immediately; after that, at most one round runs per 60ms. A query still
+running when the timer ticks is never killed; its pending flag retries on
+the next tick instead of restarting it.
+
 `0009` to `0011` are not fork backports. `0009`: ii's sidebar registers no
 BlueZ agent, so pairing needs one running (the `bluetooth-agent` root system
 service in `modules/nixos/bluetooth.nix`, bound to `bluetooth.service`;
@@ -325,8 +331,8 @@ The left sidebar's Translator tab, restyled after the fork (input box,
 centred source/swap/target row, output box, surfaces tinted from the
 wallpaper palette), plus five fixes the fork lacked: pill hover feedback,
 scrolling inside each box, selectable output text, a swap that also exchanges
-the texts, and a paste icon that stays enabled on its own state instead of
-the delete button's.
+the texts, and a paste icon that keeps a fixed colour instead of greying
+out with the clear button.
 
 | Patch | Fork commit | Port | Drop when |
 |---|---|---|---|
@@ -335,7 +341,7 @@ the delete button's.
 | `0003` enable by default | none | new | upstream defaults `sidebar.translator.enable` to `true` |
 | `0004` selectable output | none | new | pinned `TextCanvas.qml` output area is selectable |
 | `0005` swap texts with languages | none | new | pinned `Translator.qml` swap exchanges the texts |
-| `0006` paste icon follows its own button | none | new | pinned `Translator.qml` paste icon colour no longer depends on `deleteButton.enabled` |
+| `0006` paste icon keeps a fixed colour | none | new | pinned `Translator.qml` paste icon colour no longer depends on `deleteButton.enabled` |
 
 The `0003` default only reaches hosts whose `config.json` has no
 `sidebar.translator.enable` key yet (a fresh host). ii saves its whole
