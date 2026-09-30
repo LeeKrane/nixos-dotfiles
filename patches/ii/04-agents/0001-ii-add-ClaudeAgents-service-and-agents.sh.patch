@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: krane <chris@krane.dev>
-Date: Wed, 30 Sep 2026 03:47:37 +0200
+Date: Wed, 30 Sep 2026 04:28:05 +0200
 Subject: [PATCH] ii: add ClaudeAgents service and agents.sh
 
 Problem: nothing in the shell shows which Claude Code sessions run, which are busy, or which wait on a permission prompt.
@@ -24,23 +24,29 @@ index 30e8743..ac0851f 100644
                      property string defaultProvider: "yandere"
 diff --git a/dots/.config/quickshell/ii/scripts/claude/agents.sh b/dots/.config/quickshell/ii/scripts/claude/agents.sh
 new file mode 100755
-index 0000000..3bb9cc4
+index 0000000..115e09b
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/scripts/claude/agents.sh
-@@ -0,0 +1,36 @@
+@@ -0,0 +1,46 @@
 +#!/usr/bin/env bash
 +# Prints `claude agents --json` as one JSON array, each entry unchanged plus:
 +#   ancestors     interactive sessions: pid chain from the session up to,
 +#                 not including, init; [] for background sessions, whose
 +#                 ancestry leads to the daemon supervisor, not a terminal
 +#   lastActivity  transcript mtime in seconds, or null
-+# Reads no transcript content. Exits 127 when claude is not on PATH.
++# Reads no transcript content. Exits 3 when claude is not on PATH.
 +set -euo pipefail
 +
-+command -v claude >/dev/null 2>&1 || { echo "claude not found on PATH" >&2; exit 127; }
++command -v claude >/dev/null 2>&1 || { echo "claude not found on PATH" >&2; exit 3; }
 +
-+raw=$(claude agents --json)
++raw=$(timeout 10 claude agents --json)
 +jq -e 'type == "array"' >/dev/null <<<"$raw" || { echo "claude agents --json did not print an array" >&2; exit 2; }
++
++# --argjson would put $raw on jq's argv, hitting MAX_ARG_STRLEN with many
++# sessions; a temp file plus --slurpfile keeps it off argv.
++rawfile=$(mktemp)
++trap 'rm -f "$rawfile"' EXIT
++printf '%s' "$raw" >"$rawfile"
 +
 +jq -r '.[] | "\(.sessionId // "-") \(.kind // "-") \(.pid // 0)"' <<<"$raw" |
 +    while read -r sid kind pid; do
@@ -49,21 +55,25 @@ index 0000000..3bb9cc4
 +            p=$pid
 +            while [[ -n $p && $p != 0 && $p != 1 && ${#chain[@]} -lt 64 ]]; do
 +                chain+=("$p")
-+                p=$(awk '/^PPid:/{print $2}' "/proc/$p/status" 2>/dev/null || true)
++                ppid=
++                while read -r k v; do
++                    [[ $k == PPid: ]] && { ppid=$v; break; }
++                done < "/proc/$p/status" 2>/dev/null || true
++                p=$ppid
 +            done
 +        fi
 +        mtime=null
 +        if [[ $sid != - ]]; then
 +            for f in "$HOME"/.claude/projects/*/"$sid".jsonl; do
 +                if [[ -e $f ]]; then
-+                    mtime=$(stat -c %Y "$f")
++                    mtime=$(stat -c %Y "$f" 2>/dev/null) || mtime=null
 +                    break
 +                fi
 +            done
 +        fi
 +        printf '{"ancestors":[%s],"lastActivity":%s}\n' "$(IFS=,; echo "${chain[*]}")" "$mtime"
 +    done |
-+    jq -c -s --argjson raw "$raw" '[$raw, .] | transpose | map(.[0] + .[1])'
++    jq -c -s --slurpfile raw "$rawfile" '[$raw[0], .] | transpose | map(.[0] + .[1])'
 diff --git a/dots/.config/quickshell/ii/services/ClaudeAgents.qml b/dots/.config/quickshell/ii/services/ClaudeAgents.qml
 new file mode 100644
 index 0000000..b60d46b
@@ -207,10 +217,10 @@ index 0000000..b60d46b
 +}
 diff --git a/dots/.config/quickshell/ii/services/claude-agents.js b/dots/.config/quickshell/ii/services/claude-agents.js
 new file mode 100644
-index 0000000..5b7163c
+index 0000000..67c88a1
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/services/claude-agents.js
-@@ -0,0 +1,130 @@
+@@ -0,0 +1,145 @@
 +// Pure helpers for services/ClaudeAgents.qml, kept free of QML types so
 +// they can be tested with plain node (see the dotfiles repo's
 +// scripts/ii-agents/test-logic.mjs).
@@ -219,6 +229,9 @@ index 0000000..5b7163c
 +const MAX_INTERVAL = 15000;
 +const SLOW_RUN_MS = 1000;
 +const MAX_FAILURES = 3;
++// agents.sh's own `command -v claude` guard; a bare 127 is now an ordinary
++// shell "not found" (e.g. from `timeout`) and no longer special-cased.
++const MISSING_EXIT_CODE = 3;
 +
 +// Claude Code sets the terminal title to "<spinner> <session name>":
 +// ◐ ◑ ◒ ◓ while busy, ✳ otherwise. Braille frames are covered too.
@@ -276,20 +289,32 @@ index 0000000..5b7163c
 +    return s === "waiting" ? 0 : s === "busy" ? 1 : 2;
 +}
 +
++// Stable, unique-per-row key for ScriptModel identity in Agents.qml.
++// sessionId is not always present or unique for background sessions (it can
++// be missing or "-"), so fall back to their attach id, then to kind+pid+index.
++function computeRowKey(e, index) {
++    if (e?.sessionId && e.sessionId !== "-") return e.sessionId;
++    if (e?.id) return e.id;
++    return `${e?.kind ?? "?"}:${e?.pid ?? "?"}:${index}`;
++}
++
 +// entries: parsed agents.sh output. Returns { sessions, headlessCount }.
 +function annotate(entries, windows) {
 +    let headlessCount = 0;
 +    const sessions = [];
 +    const nameCounts = {};
 +    for (const e of entries ?? []) nameCounts[e.name] = (nameCounts[e.name] ?? 0) + 1;
-+    for (const e of entries ?? []) {
-+        const s = Object.assign({}, e, { window: matchWindow(e, windows, nameCounts[e.name] === 1) });
++    (entries ?? []).forEach((e, index) => {
++        const s = Object.assign({}, e, {
++            window: matchWindow(e, windows, nameCounts[e.name] === 1),
++            rowKey: computeRowKey(e, index),
++        });
 +        if (s.kind === "interactive" && !s.window) {
 +            headlessCount++;
-+            continue;
++            return;
 +        }
 +        sessions.push(s);
-+    }
++    });
 +    sessions.sort((a, b) => rank(a) - rank(b) || activityMs(b) - activityMs(a));
 +    return { sessions: sessions, headlessCount: headlessCount };
 +}
@@ -297,7 +322,7 @@ index 0000000..5b7163c
 +// Returns { kind: "ok", entries } | { kind: "missing", message }
 +//       | { kind: "error", message, stop }.
 +function classifyResult(exitCode, stdout, stderr, failuresSoFar) {
-+    if (exitCode === 127) return { kind: "missing", message: "Claude Code not found" };
++    if (exitCode === MISSING_EXIT_CODE) return { kind: "missing", message: "Claude Code not found" };
 +    let entries = null;
 +    if (exitCode === 0) {
 +        try {

@@ -65,7 +65,17 @@ test("background: two sessions with one name never borrow each other's window", 
     ];
     const r = plain(L.annotate(entries, wins));
     assert.deepEqual(r.sessions.map(s => s.window), [null, null]);
+    assert.deepEqual(r.sessions.map(s => s.rowKey), ["aaaa1111", "bbbb2222"]);
     assert.equal(L.matchWindow(entries[0], wins, false), null);
+});
+
+test("computeRowKey prefers sessionId, falls back to id, then to kind+pid+index", () => {
+    assert.equal(L.computeRowKey({ kind: "interactive", sessionId: "sess-a", pid: 100 }, 0), "sess-a");
+    assert.equal(L.computeRowKey({ kind: "background", sessionId: "-", id: "bg-1", pid: 200 }, 1), "bg-1");
+    // No sessionId (or "-") and no id: same kind and pid, but distinct index, must stay unique.
+    const a = L.computeRowKey({ kind: "background", sessionId: "-", pid: 300 }, 2);
+    const b = L.computeRowKey({ kind: "background", pid: 300 }, 3);
+    assert.notEqual(a, b);
 });
 
 test("effectiveStatus maps background state and keeps unknown values raw", () => {
@@ -93,8 +103,11 @@ test("annotate drops headless interactive sessions, counts them, and sorts", () 
     assert.equal(r.sessions[2].window, null);
 });
 
-test("classifyResult: 127 is missing, bad JSON is an error that stops on the third", () => {
-    assert.equal(L.classifyResult(127, "", "", 0).kind, "missing");
+test("classifyResult: 3 is missing, 127 is an ordinary error, bad JSON is an error that stops on the third", () => {
+    assert.equal(L.classifyResult(3, "", "", 0).kind, "missing");
+    const notFound = L.classifyResult(127, "", "exec: claude: not found", 0);
+    assert.equal(notFound.kind, "error");
+    assert.equal(notFound.message, "exec: claude: not found");
     const ok = L.classifyResult(0, '[{"kind":"background"}]', "", 0);
     assert.equal(ok.kind, "ok");
     assert.equal(ok.entries.length, 1);

@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: krane <chris@krane.dev>
-Date: Wed, 30 Sep 2026 03:57:56 +0200
+Date: Wed, 30 Sep 2026 04:28:05 +0200
 Subject: [PATCH] ii: add Agents tab to the left sidebar
 
 Problem: a Claude Code session blocked on a permission prompt in a window on another workspace goes unnoticed, and there is no single place to see or jump to all sessions.
@@ -10,10 +10,10 @@ Drop when: the pinned ii ships an equivalent agents tab, or `claude agents --jso
 
 diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Agents.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Agents.qml
 new file mode 100644
-index 0000000..fbdb155
+index 0000000..0c60ac9
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Agents.qml
-@@ -0,0 +1,76 @@
+@@ -0,0 +1,82 @@
 +import qs
 +import qs.services
 +import qs.modules.common
@@ -21,6 +21,7 @@ index 0000000..fbdb155
 +import qs.modules.ii.sidebarLeft.agents
 +import QtQuick
 +import QtQuick.Layouts
++import Quickshell
 +
 +/**
 + * Claude Code sessions from services/ClaudeAgents.qml. A click focuses the
@@ -31,6 +32,7 @@ index 0000000..fbdb155
 +    id: root
 +    objectName: "claudeAgentsTab"
 +    property bool detached: false
++    property bool pinned: false
 +    readonly property int needYouCount: ClaudeAgents.sessions.filter(s => ClaudeAgents.statusOf(s) === "waiting").length
 +
 +    ColumnLayout {
@@ -65,18 +67,22 @@ index 0000000..fbdb155
 +            id: sessionList
 +            Layout.fillWidth: true
 +            Layout.fillHeight: true
++            visible: ClaudeAgents.available
 +            spacing: 4
 +            clip: true
 +            popin: false
 +            animateAppearance: false
-+            model: ClaudeAgents.sessions
++            model: ScriptModel {
++                values: ClaudeAgents.sessions
++                objectProp: "rowKey"
++            }
 +            delegate: AgentRow {
 +                required property var modelData
 +                width: sessionList.width
 +                session: modelData
 +                onClicked: {
 +                    ClaudeAgents.focus(modelData);
-+                    if (!root.detached)
++                    if (!root.detached && !root.pinned)
 +                        GlobalStates.sidebarLeftOpen = false;
 +                }
 +            }
@@ -91,7 +97,7 @@ index 0000000..fbdb155
 +    }
 +}
 diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/SidebarLeftContent.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/SidebarLeftContent.qml
-index 654b46d..ad768ab 100644
+index 654b46d..381d667 100644
 --- a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/SidebarLeftContent.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/SidebarLeftContent.qml
 @@ -1,3 +1,4 @@
@@ -138,7 +144,7 @@ index 654b46d..ad768ab 100644
                      ...(root.animeEnabled ? [anime.createObject()] : []),
                  ]
              }
-@@ -96,6 +109,12 @@ Item {
+@@ -96,6 +109,13 @@ Item {
              id: aiChat
              AiChat {}
          }
@@ -146,6 +152,7 @@ index 654b46d..ad768ab 100644
 +            id: agents
 +            Agents {
 +                detached: root.scopeRoot?.detach ?? false
++                pinned: root.scopeRoot?.pin ?? false
 +            }
 +        }
          Component {

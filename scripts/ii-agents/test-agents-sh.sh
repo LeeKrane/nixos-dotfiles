@@ -22,7 +22,7 @@ FAKE
 chmod +x "$work/bin/claude"
 # Only the tools agents.sh needs, so a claude installed on the host stays invisible.
 mkdir -p "$work/tools"
-for t in jq awk stat bash; do ln -s "$(command -v "$t")" "$work/tools/$t"; done
+for t in jq stat bash timeout mktemp rm; do ln -s "$(command -v "$t")" "$work/tools/$t"; done
 base_path="$work/tools"
 
 out=$(HOME="$work/home" PATH="$work/bin:$base_path" bash "$script")
@@ -44,11 +44,32 @@ HOME="$work/home" PATH="$work/bin:$base_path" bash "$script" >/dev/null 2>&1; rc
 set -e
 check "non-array output fails" 2 "$rc"
 
+printf '#!/usr/bin/env bash\nexit 127\n' > "$work/bin/claude"
+chmod +x "$work/bin/claude"
+set +e
+HOME="$work/home" PATH="$work/bin:$base_path" bash "$script" >/dev/null 2>&1; rc=$?
+set -e
+check "claude's own exit 127 passes through, distinct from the exit-3 guard" 127 "$rc"
+
+command cat > "$work/bin/claude" <<'FAKE'
+#!/usr/bin/env bash
+[[ $1 == agents && $2 == --json ]] || exit 9
+sleep 30
+FAKE
+chmod +x "$work/bin/claude"
+set +e
+start=$(date +%s)
+HOME="$work/home" PATH="$work/bin:$base_path" bash "$script" >/dev/null 2>&1; rc=$?
+elapsed=$(( $(date +%s) - start ))
+set -e
+check "a hung claude is killed by the script's own timeout" true "$([[ $elapsed -lt 30 ]] && echo true || echo false)"
+check "a timeout is an ordinary failure, not the missing-claude code" true "$([[ $rc -ne 0 && $rc -ne 3 ]] && echo true || echo false)"
+
 rm "$work/bin/claude"
 set +e
 err=$(HOME="$work/home" PATH="$work/bin:$base_path" bash "$script" 2>&1 >/dev/null); rc=$?
 set -e
-check "missing claude exits 127" 127 "$rc"
+check "missing claude exits 3" 3 "$rc"
 check "missing claude says so on stderr" "claude not found on PATH" "$err"
 
 exit $fail
