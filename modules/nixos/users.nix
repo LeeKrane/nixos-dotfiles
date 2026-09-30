@@ -1,11 +1,11 @@
-# The one human user account.
-{ pkgs, ... }:
+# The one human user account, named by krane.user.name (modules/nixos/user.nix).
+{ config, pkgs, ... }:
 {
   # `i2c` group already exists via hardware.i2c.enable. `plugdev` is
   # declared here since it's just a side effect of zsa.enable elsewhere.
   users.groups.plugdev = { };
 
-  users.users.krane = {
+  users.users.${config.krane.user.name} = {
     isNormalUser = true;
     shell = pkgs.fish;
     extraGroups = [
@@ -37,7 +37,7 @@
     };
   };
 
-  # No password hash is ever committed. krane's login password is set
-  # once at install with `nixos-enter -- passwd krane`.
+  # No password hash is ever committed. The account's login password is set
+  # once at install with `nixos-enter -- passwd <krane.user.name>`.
   users.mutableUsers = true;
 }

@@ -1,5 +1,5 @@
 # Core `nix.conf` / nix daemon settings shared by every host.
-{ inputs, ... }:
+{ config, inputs, ... }:
 {
   nix = {
     settings = {
@@ -8,7 +8,7 @@
         "flakes"
       ];
       auto-optimise-store = true;
-      trusted-users = [ "krane" ];
+      trusted-users = [ config.krane.user.name ];
 
       # cache.nixos.org only; the CUDA cache is scoped to the CUDA host in
       # modules/nixos/gpu/nvidia-desktop.nix (nix.settings lists merge across modules).

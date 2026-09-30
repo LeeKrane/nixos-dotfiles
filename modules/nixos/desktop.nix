@@ -22,7 +22,7 @@
         user = "greeter";
       };
 
-      # Boot straight into krane's plain (non-UWSM) Hyprland session; the session locks
+      # Boot straight into krane.user.name's plain (non-UWSM) Hyprland session; the session locks
       # itself at start (modules/home/lock-on-start.nix), so the ii lock screen is the
       # first screen. tuigreet stays as default_session for logout. The disk is not
       # encrypted, so this trades the greeter's password gate for the lock screen's. See
@@ -30,7 +30,7 @@
       # runs, not the "Hyprland (UWSM)" one.
       initial_session = {
         command = "${config.programs.hyprland.package}/bin/start-hyprland";
-        user = "krane";
+        user = config.krane.user.name;
       };
     };
 

@@ -125,8 +125,10 @@
           let
             renderedFiles = nixpkgs.lib.concatMap (
               host:
-              nixpkgs.lib.attrValues
-                self.nixosConfigurations.${host}.config.home-manager.users.krane.krane.hypr._rendered
+              let
+                cfg = self.nixosConfigurations.${host}.config;
+              in
+              nixpkgs.lib.attrValues cfg.home-manager.users.${cfg.krane.user.name}.krane.hypr._rendered
             ) hosts;
           in
           # Keeps `hosts` honest against hosts/: a mismatch fails loudly
@@ -155,6 +157,82 @@
                   ''
                 )
             );
+
+        # krane.user wiring (modules/nixos/user.nix): the stock hosts keep "krane", and
+        # overriding it moves the account, the home-manager user, the git identity,
+        # nix trusted-users and greetd autologin with it. Eval-only: the derivation is
+        # trivial, the assertions run while evaluating it.
+        user-option =
+          let
+            base = self.nixosConfigurations.taractias.config;
+            moved =
+              (self.nixosConfigurations.taractias.extendModules {
+                modules = [
+                  {
+                    krane.user = {
+                      name = "tester";
+                      gitName = "Test Er";
+                      gitEmail = "tester@example.invalid";
+                    };
+                  }
+                ];
+              }).config;
+            nameOnly =
+              (self.nixosConfigurations.taractias.extendModules {
+                modules = [ { krane.user.name = "solo"; } ];
+              }).config;
+            hm = moved.home-manager.users.tester;
+            expectations = [
+              {
+                ok = base.krane.user.name == "krane";
+                what = "default krane.user.name is not krane";
+              }
+              {
+                ok = base.krane.user.gitName == "krane" && base.krane.user.gitEmail == "chris@krane.dev";
+                what = "default git identity is not krane <chris@krane.dev>";
+              }
+              {
+                ok = base.users.users ? krane && base.home-manager.users ? krane;
+                what = "default account krane is missing from users.users or home-manager.users";
+              }
+              {
+                ok = nameOnly.krane.user.gitName == "solo";
+                what = "krane.user.gitName does not default to krane.user.name";
+              }
+              {
+                ok = moved.users.users ? tester && !(moved.users.users ? krane);
+                what = "users.users does not follow krane.user.name";
+              }
+              {
+                ok = moved.users.users.tester.home == "/home/tester" && hm.home.homeDirectory == "/home/tester";
+                what = "home directory does not follow krane.user.name";
+              }
+              {
+                ok = hm.home.username == "tester";
+                what = "home.username does not follow krane.user.name";
+              }
+              {
+                ok =
+                  hm.programs.git.settings.user.name == "Test Er"
+                  && hm.programs.git.settings.user.email == "tester@example.invalid";
+                what = "git identity does not follow krane.user.gitName/gitEmail";
+              }
+              {
+                ok =
+                  builtins.elem "tester" moved.nix.settings.trusted-users
+                  && !(builtins.elem "krane" moved.nix.settings.trusted-users);
+                what = "nix trusted-users does not follow krane.user.name";
+              }
+              {
+                ok = moved.services.greetd.settings.initial_session.user == "tester";
+                what = "greetd autologin does not follow krane.user.name";
+              }
+            ];
+            failed = map (e: e.what) (builtins.filter (e: !e.ok) expectations);
+          in
+          nixpkgs.lib.throwIf (failed != [ ])
+            "checks.user-option: ${nixpkgs.lib.concatStringsSep "; " failed}"
+            (pkgs.runCommand "krane-user-option" { } "touch $out");
 
         # NixVim's own startup test: fails on errors or warnings at startup.
         nvim = nvimEval.config.build.test;
