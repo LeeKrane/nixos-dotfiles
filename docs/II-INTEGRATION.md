@@ -262,7 +262,7 @@ every new terminal after each activation. The backup lives at
 
 `patches/ii/` holds one `git format-patch` series per sub-project:
 `01-fixes` (fixes from [pctrade/end4-pC](https://github.com/pctrade/end4-pC)),
-then `02-translator`, `03-dock`, `04-agents` and `05-settings` as they land.
+then `02-translator`, `04-agents` and `05-settings` as they land.
 `lib/mk-host.nix` applies them with `applyPatches`, after the cheatsheet
 patch, to build the `dots-hyprland-patched` source the soymou module copies:
 directories in lexical order, and the files in each directory in lexical
