@@ -45,6 +45,7 @@
   programs.lazygit.enable = true;
 
   home.packages = with pkgs; [
+    gh
     gitleaks
     pre-commit
   ];
