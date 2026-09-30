@@ -2,6 +2,7 @@
 # QCA9377 Wi-Fi (ath10k_pci), ELAN I2C touchpad. nixos-hardware applies here, not to
 # tariognatha/tarmantria, since those are Intel and these AMD profiles would be no-ops there at best.
 {
+  config,
   inputs,
   ...
 }:
@@ -26,7 +27,7 @@
   system.stateVersion = "26.05";
 
   # display.nix is a home-manager module (sets krane.hypr.*), so it is imported at the user level.
-  home-manager.users.krane.imports = [ ./display.nix ];
+  home-manager.users.${config.krane.user.name}.imports = [ ./display.nix ];
 
   # Explicit rather than left to common-gpu-amd's mkDefault, so this reads correctly standalone.
   hardware.graphics = {

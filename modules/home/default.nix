@@ -1,5 +1,6 @@
 {
   config,
+  kraneUser,
   ...
 }:
 {
@@ -25,10 +26,12 @@
   ];
 
   home.stateVersion = "26.05";
-  home.username = "krane";
+  # krane.user.name from the NixOS side (modules/nixos/user.nix), handed in by
+  # lib/mk-host.nix as the kraneUser specialArg.
+  home.username = kraneUser.name;
   # The one absolute /home path this repo constructs, derived from the username option, not
-  # hardcoded. No mkForce/mkDefault needed: NixOS already sets users.users.krane.home =
-  # mkDefault "/home/krane" (users.nix), which HM copies into this option, the same value, so
-  # they agree.
+  # hardcoded. No mkForce/mkDefault needed: NixOS already sets users.users.<name>.home =
+  # mkDefault "/home/<name>" for users.nix's normal user, which HM copies into this option,
+  # the same value, so they agree.
   home.homeDirectory = "/home/${config.home.username}";
 }

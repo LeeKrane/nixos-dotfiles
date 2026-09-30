@@ -1,0 +1,16 @@
+# GPU profile intel-igpu: Intel CPU with its integrated GPU and no dGPU.
+# install.sh's render_host_templates splices "imports" into default.nix's imports list and
+# "body" after it. Each section keeps its own leading blank line.
+#== imports
+
+    # Intel microcode plus nixos-hardware's Intel GPU module, which installs intel-media-driver.
+    inputs.nixos-hardware.nixosModules.common-cpu-intel
+#== body
+
+  hardware.graphics = {
+    enable = true;
+    enable32Bit = true;
+  };
+
+  # VA-API decode through intel-media-driver (iHD), installed by common-cpu-intel above.
+  environment.sessionVariables.LIBVA_DRIVER_NAME = "iHD";

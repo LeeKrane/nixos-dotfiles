@@ -1,0 +1,11 @@
+# GPU profile intel-nvidia-prime: Intel iGPU plus NVIDIA dGPU with PRIME offload, tarmantria's
+# setup. The two krane.prime lines must keep the `krane.prime.<key> = "…";` form that
+# install.sh's patch_prime detects and patch_prime_line rewrites.
+#== imports
+    ../../modules/nixos/gpu/nvidia-prime.nix
+#== body
+
+  # PCI bus IDs, patched by install.sh's patch_prime from `lspci -D` at install time. If the
+  # install could not detect them, fill them in from `lspci | grep -E 'VGA|3D'` by hand.
+  krane.prime.intelBusId = "PCI:0:2:0"; # FILL AT INSTALL
+  krane.prime.nvidiaBusId = "PCI:1:0:0"; # FILL AT INSTALL

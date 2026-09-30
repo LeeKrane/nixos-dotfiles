@@ -7,6 +7,8 @@
     ./hardware.nix
     ./locale.nix
     ./users.nix
+    ./user.nix
+    ./keyboard.nix
     ./boot.nix
     ./networking.nix
     ./audio.nix

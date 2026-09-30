@@ -55,13 +55,36 @@ gum_tty() {
     fi
 }
 
-# hosts/ is the single source of truth here, same as flake.nix's hosts,
-# known_hosts() and docker-check.sh's HOSTS.
+# hosts/ is the single source of truth: flake.nix discovers its hosts from
+# the same directories, as do bootstrap-sops.sh's known_hosts() and
+# docker-check.sh's HOSTS.
 AVAILABLE_HOSTS=()
 for _d in "$REPO_ROOT"/hosts/*/; do
     AVAILABLE_HOSTS+=("$(basename "$_d")")
 done
 unset _d
+
+# templates/host/ is what the new-host flow renders hosts/<name>/ from.
+# Profile and form-factor names are the file names under its profiles/ and
+# form-factors/ (scripts/check-new-host.sh derives the same lists the same way).
+TEMPLATE_DIR="$REPO_ROOT/templates/host"
+GPU_PROFILES=()
+for _f in "$TEMPLATE_DIR"/profiles/*.nix.in; do
+    GPU_PROFILES+=("$(basename "$_f" .nix.in)")
+done
+mapfile -t GPU_PROFILES < <(printf '%s\n' "${GPU_PROFILES[@]}" | sort)
+FORM_FACTORS=()
+for _f in "$TEMPLATE_DIR"/form-factors/*.nix.in; do
+    FORM_FACTORS+=("$(basename "$_f" .nix.in)")
+done
+mapfile -t FORM_FACTORS < <(printf '%s\n' "${FORM_FACTORS[@]}" | sort)
+unset _f
+# Defaults for a new host's answers, the values the original hosts use.
+DEFAULT_INSTALL_USER=krane
+DEFAULT_GIT_EMAIL=chris@krane.dev
+# shellcheck disable=SC2209 # "at" is the keyboard layout, not the job-scheduling command.
+DEFAULT_KB_LAYOUT="at"
+DEFAULT_KB_VARIANT=nodeadkeys
 
 MODE=""
 # Not "${HOST:-}", so an ambient $HOST in the shell never picks the target.
@@ -74,6 +97,7 @@ SELF_TEST=false
 SELF_TEST_TRIGGER_ERR=false
 SELF_TEST_CHECK_DISKO_SED=false
 SELF_TEST_CHECK_PRIME_SED=false
+SELF_TEST_CHECK_SCAFFOLD=false
 SELF_TEST_FAILURES=0
 # The most recent command run/run_sh/capture executed, so err_trap can show
 # the real failing command instead of just a line number. Cleared to ""
@@ -86,6 +110,46 @@ USAGE_EXIT=false
 # and on_exit know whether there is anything to remove.
 INSTALL_SWAP_ACTIVE=false
 INSTALL_SWAP_ON=false
+
+# New-host flow (--new-host, or "+ new host" in the host menu). Empty means
+# not given yet: prompt_new_host fills the rest from a prompt or, under
+# --yes, from the DEFAULT_* values.
+NEW_HOST_MODE=false
+NEW_HOST=""
+NEW_USER=""
+NEW_GIT_NAME=""
+NEW_GIT_EMAIL=""
+NEW_PROFILE=""
+NEW_FORM_FACTOR=""
+NEW_KB_LAYOUT=""
+NEW_KB_VARIANT=""
+# --kb-variant "" is a real answer (no variant), so it needs its own flag.
+NEW_KB_VARIANT_SET=false
+# Account names a new host's login user must not take: root and the system
+# accounts NixOS or this flake's modules create. nixbld* and systemd-* are
+# matched as prefixes in check_new_username.
+SYSTEM_ACCOUNT_NAMES=(root nobody daemon bin sys sync games man lp mail news uucp proxy backup operator
+    sshd messagebus polkituser rtkit avahi geoclue nscd dhcpcd greeter flatpak ollama pipewire colord
+    cups usbmux qemu-libvirtd nm-openvpn nm-iodine fwupd-refresh)
+
+SELF_TEST_SCAFFOLD=false
+NEW_HOST_MENU_ENTRY="+ new host"
+# scaffold_host state. SCAFFOLD_STAGING is its render dir, removed on exit.
+# SCAFFOLD_PREVIEW_DIR points host_dir at it under --dry-run, which never
+# writes hosts/<name>/. SCAFFOLD_PENDING is true only while hosts/$HOST/ and
+# .sops.yaml may be half-written, which is when on_exit rolls them back.
+# SCAFFOLD_SOPS_SNAPSHOT is a copy of .sops.yaml's exact on-disk content
+# (including any uncommitted edits) taken right before register_sops_host
+# runs, so a rollback restores that content instead of discarding those
+# edits; also removed on exit.
+SCAFFOLD_STAGING=""
+SCAFFOLD_PREVIEW_DIR=""
+SCAFFOLD_PENDING=false
+SCAFFOLD_SOPS_SNAPSHOT=""
+
+# The target host's login account (its krane.user.name), set by
+# resolve_install_user once the host is known and staged.
+INSTALL_USER=""
 
 # Runs from run_install_mode after a successful install and from on_exit, so
 # an aborted run never leaves the swapfile inside the new root. Warns
@@ -102,6 +166,29 @@ teardown_install_swap() {
     fi
     run_soft rm -f /mnt/swapfile || log_warn "could not remove /mnt/swapfile"
     INSTALL_SWAP_ACTIVE=false
+}
+
+# Undoes a scaffold_host that did not finish: removes the new hosts/$HOST/
+# and restores .sops.yaml from SCAFFOLD_SOPS_SNAPSHOT (its exact content
+# right before register_sops_host ran), never from git: a `git checkout`
+# would discard any uncommitted .sops.yaml edits the user already had on
+# disk before scaffold_host started. SCAFFOLD_PENDING is only true between
+# scaffold_host's "does not exist yet" check and its last step, and never
+# under --dry-run, so this can never touch an existing host. Warns instead
+# of dying, like teardown_install_swap.
+rollback_scaffold() {
+    if ! $SCAFFOLD_PENDING || [ -z "$HOST" ]; then
+        return 0
+    fi
+    SCAFFOLD_PENDING=false
+    log_warn "rolling back the partial hosts/$HOST scaffold"
+    rm -rf "${REPO_ROOT:?}/hosts/$HOST" || log_warn "could not remove hosts/$HOST, delete it by hand"
+    if [ -n "$SCAFFOLD_SOPS_SNAPSHOT" ] && [ -f "$SCAFFOLD_SOPS_SNAPSHOT" ]; then
+        cat "$SCAFFOLD_SOPS_SNAPSHOT" >"$REPO_ROOT/.sops.yaml" \
+            || log_warn "could not restore .sops.yaml, its snapshot is at $SCAFFOLD_SOPS_SNAPSHOT"
+    else
+        log_warn "no .sops.yaml snapshot to restore from, check .sops.yaml by hand"
+    fi
 }
 
 banner() {
@@ -193,6 +280,13 @@ on_exit() {
         fi
     fi
     teardown_install_swap
+    rollback_scaffold
+    if [ -n "$SCAFFOLD_STAGING" ]; then
+        rm -rf "$SCAFFOLD_STAGING"
+    fi
+    if [ -n "$SCAFFOLD_SOPS_SNAPSHOT" ]; then
+        rm -f "$SCAFFOLD_SOPS_SNAPSHOT"
+    fi
 }
 trap on_exit EXIT
 
@@ -324,11 +418,24 @@ Usage: install.sh [options]
 
   --mode install|setup   Force a mode instead of auto-detecting it.
   --host HOST             One of: ${AVAILABLE_HOSTS[*]}
+  --new-host NAME         Install mode only: create hosts/NAME from
+                            templates/host/ instead of using an existing
+                            host. Asks for the settings below unless given.
+  --user NAME             New host's login user (default $DEFAULT_INSTALL_USER).
+  --git-name NAME         New host's git user.name (default: the login user).
+  --git-email EMAIL       New host's git user.email (default $DEFAULT_GIT_EMAIL).
+  --profile PROFILE       New host's GPU profile: ${GPU_PROFILES[*]}
+  --form-factor FF        New host's form factor: ${FORM_FACTORS[*]}
+  --kb-layout LAYOUT      New host's keyboard layout (default $DEFAULT_KB_LAYOUT).
+  --kb-variant VARIANT    New host's keyboard variant (default
+                            $DEFAULT_KB_VARIANT for --kb-layout $DEFAULT_KB_LAYOUT,
+                            otherwise empty). --yes --new-host also requires
+                            --user, --profile and --form-factor.
   --disk DISK              Target block device, install mode only.
   -y, --yes               Assume yes and auto-confirm every prompt. Live
                             install also requires --confirm-wipe unless
                             --dry-run is given too. Never skips setting
-                            krane's password.
+                            the login user's password.
   -n, --dry-run           Print every mutating command instead of running
                             it. Implies --yes. Safe anywhere, any time.
   --confirm-wipe          Required alongside a live, non-dry-run --yes
@@ -381,6 +488,82 @@ while [ "$#" -gt 0 ]; do
             DISK="${1#*=}"
             shift
             ;;
+        --new-host)
+            require_arg "$@"
+            NEW_HOST_MODE=true
+            NEW_HOST="$2"
+            shift 2
+            ;;
+        --new-host=*)
+            NEW_HOST_MODE=true
+            NEW_HOST="${1#*=}"
+            shift
+            ;;
+        --user)
+            require_arg "$@"
+            NEW_USER="$2"
+            shift 2
+            ;;
+        --user=*)
+            NEW_USER="${1#*=}"
+            shift
+            ;;
+        --git-name)
+            require_arg "$@"
+            NEW_GIT_NAME="$2"
+            shift 2
+            ;;
+        --git-name=*)
+            NEW_GIT_NAME="${1#*=}"
+            shift
+            ;;
+        --git-email)
+            require_arg "$@"
+            NEW_GIT_EMAIL="$2"
+            shift 2
+            ;;
+        --git-email=*)
+            NEW_GIT_EMAIL="${1#*=}"
+            shift
+            ;;
+        --profile)
+            require_arg "$@"
+            NEW_PROFILE="$2"
+            shift 2
+            ;;
+        --profile=*)
+            NEW_PROFILE="${1#*=}"
+            shift
+            ;;
+        --form-factor)
+            require_arg "$@"
+            NEW_FORM_FACTOR="$2"
+            shift 2
+            ;;
+        --form-factor=*)
+            NEW_FORM_FACTOR="${1#*=}"
+            shift
+            ;;
+        --kb-layout)
+            require_arg "$@"
+            NEW_KB_LAYOUT="$2"
+            shift 2
+            ;;
+        --kb-layout=*)
+            NEW_KB_LAYOUT="${1#*=}"
+            shift
+            ;;
+        --kb-variant)
+            require_arg "$@"
+            NEW_KB_VARIANT="$2"
+            NEW_KB_VARIANT_SET=true
+            shift 2
+            ;;
+        --kb-variant=*)
+            NEW_KB_VARIANT="${1#*=}"
+            NEW_KB_VARIANT_SET=true
+            shift
+            ;;
         -y | --yes)
             YES=true
             shift
@@ -408,6 +591,14 @@ while [ "$#" -gt 0 ]; do
             ;;
         --self-test-check-prime-sed)
             SELF_TEST_CHECK_PRIME_SED=true
+            shift
+            ;;
+        --self-test-check-scaffold)
+            SELF_TEST_CHECK_SCAFFOLD=true
+            shift
+            ;;
+        --self-test-scaffold)
+            SELF_TEST_SCAFFOLD=true
             shift
             ;;
         -h | --help)
@@ -438,9 +629,25 @@ detect_mode() {
 
 # True only when $HOST's own default.nix imports the NVIDIA desktop GPU
 # module, confirmed with `git grep -n nvidia-desktop hosts/`: tariognatha
-# only. Empty $HOST (interactive host choice not made yet) reads as false.
+# only, among the committed hosts. A new host is not written until after
+# check_dns runs, so it answers from its chosen GPU profile instead. Empty
+# $HOST (interactive host choice not made yet) reads as false.
 host_uses_cuda() {
+    if $NEW_HOST_MODE && [ -n "$NEW_PROFILE" ]; then
+        [ "$NEW_PROFILE" = nvidia-desktop ]
+        return
+    fi
     grep -q 'gpu/nvidia-desktop' "$REPO_ROOT/hosts/$HOST/default.nix" 2>/dev/null
+}
+
+# hosts/$HOST, or under --dry-run for a new host the staging copy
+# scaffold_host rendered, since --dry-run never writes hosts/<name>/.
+host_dir() {
+    if [ -n "$SCAFFOLD_PREVIEW_DIR" ]; then
+        printf '%s\n' "$SCAFFOLD_PREVIEW_DIR"
+    else
+        printf '%s\n' "$REPO_ROOT/hosts/$HOST"
+    fi
 }
 
 # Prints the --option flags that add the CUDA cache substituter, so the
@@ -557,15 +764,407 @@ suggest_host() {
 }
 
 choose_host() {
+    if $NEW_HOST_MODE; then
+        prompt_new_host
+        return
+    fi
     if [ -n "$HOST" ]; then
         return
     fi
     if $YES; then
-        die "--host is required together with --yes or --dry-run, no interactive prompts under --yes"
+        die "--host or --new-host is required together with --yes or --dry-run, no interactive prompts under --yes"
     fi
     local suggestion
     suggestion=$(suggest_host)
-    HOST=$(choose_one "Select the target host" "$suggestion" "${AVAILABLE_HOSTS[@]}")
+    HOST=$(choose_one "Select the target host" "$suggestion" "${AVAILABLE_HOSTS[@]}" "$NEW_HOST_MENU_ENTRY")
+    if [ "$HOST" = "$NEW_HOST_MENU_ENTRY" ]; then
+        HOST=""
+        NEW_HOST_MODE=true
+        prompt_new_host
+    fi
+}
+
+# Escapes $1 for a Nix double-quoted string: \ first, then " and ${, so
+# any git name or email renders as the same string it was typed as.
+nix_string_escape() {
+    local s="$1"
+    s=${s//\\/\\\\}
+    s=${s//\"/\\\"}
+    s=${s//\$\{/\\\$\{}
+    printf '%s' "$s"
+}
+
+# Escapes $1 for the replacement side of a sed s/// using / as delimiter:
+# / ends the expression, & inserts the match and \ escapes, so all three
+# get a backslash.
+sed_replacement_escape() {
+    printf '%s' "$1" | sed -e 's/[\/&\\]/\\&/g'
+}
+
+# Prints section $2 of template $1: the lines after a "#== $2" header up to
+# the next "#== " header. Lines before the first header are the file's own
+# comment and never printed. A missing section prints nothing.
+template_section() {
+    awk -v want="$2" '/^#== / { cur = $2; next } cur == want' "$1"
+}
+
+# Replaces every line of $1 that is exactly @$2@ (surrounding blanks
+# ignored) with $3, in place. An empty $3 drops the line. $3 reaches awk
+# through ENVIRON, not -v, so awk never rewrites its backslashes.
+replace_block_token() {
+    local file="$1" token="@$2@" tmp
+    tmp=$(mktemp "$file.XXXXXX")
+    BLOCK="$3" awk -v tok="$token" '
+        { t = $0; gsub(/^[ \t]+|[ \t]+$/, "", t) }
+        t == tok { if (ENVIRON["BLOCK"] != "") print ENVIRON["BLOCK"]; next }
+        { print }
+    ' "$file" >"$tmp"
+    mv "$tmp" "$file"
+}
+
+# Renders templates/host/ into $1 for host $2: the profile's and form
+# factor's #== sections first, then every scalar @TOKEN@ through sed with
+# its value Nix- and sed-escaped. Writes only under $1, which callers point
+# at a temp dir, so this runs for real under --dry-run too.
+render_host_templates() {
+    local dest="$1" host="$2" user="$3" git_name="$4" git_email="$5"
+    local profile="$6" form_factor="$7" kb_layout="$8" kb_variant="$9"
+    local profile_file="$TEMPLATE_DIR/profiles/$profile.nix.in"
+    local ff_file="$TEMPLATE_DIR/form-factors/$form_factor.nix.in"
+    [ -f "$profile_file" ] || die "unknown GPU profile '$profile', expected one of: ${GPU_PROFILES[*]}"
+    [ -f "$ff_file" ] || die "unknown form factor '$form_factor', expected one of: ${FORM_FACTORS[*]}"
+    mkdir -p "$dest"
+    local name
+    for name in default.nix disko.nix display.nix hardware-configuration.nix; do
+        cp "$TEMPLATE_DIR/$name.in" "$dest/$name"
+    done
+    replace_block_token "$dest/default.nix" PROFILE_IMPORTS "$(template_section "$profile_file" imports)"
+    replace_block_token "$dest/default.nix" FORM_FACTOR_IMPORTS "$(template_section "$ff_file" imports)"
+    replace_block_token "$dest/default.nix" PROFILE "$(template_section "$profile_file" body)"
+    replace_block_token "$dest/display.nix" TOUCHPAD "$(template_section "$ff_file" touchpad)"
+    # GIT_EMAIL's -e expression runs last of the eight so a rendered GIT_NAME is never
+    # mistaken for a later token's placeholder by that expression. It cannot protect
+    # GIT_NAME itself: all -e expressions run in one pass over each line, so a git name
+    # containing the literal text "@GIT_EMAIL@" would be rewritten again when GIT_EMAIL's
+    # expression runs right after it, leaving no unrendered @TOKEN@ for the leftover-token
+    # grep below to catch. So a git name containing @ is refused outright. Task 6's
+    # validator forbids @ in a new host's git name too; this is defence in depth for any
+    # other caller of render_host_templates.
+    case "$git_name" in
+        *@*) die "git name '$git_name' contains '@', refusing to render: it could be rewritten by a later sed expression" ;;
+    esac
+    local sed_args=() pair key value
+    for pair in "HOST=$host" "USERNAME=$user" "PROFILE_NAME=$profile" "FORM_FACTOR=$form_factor" \
+        "KB_LAYOUT=$kb_layout" "KB_VARIANT=$kb_variant" "GIT_NAME=$git_name" "GIT_EMAIL=$git_email"; do
+        key="${pair%%=*}"
+        value="${pair#*=}"
+        sed_args+=(-e "s/@${key}@/$(sed_replacement_escape "$(nix_string_escape "$value")")/g")
+    done
+    for name in default.nix disko.nix display.nix hardware-configuration.nix; do
+        sed -i "${sed_args[@]}" "$dest/$name"
+    done
+    if grep -nE '@(HOST|USERNAME|GIT_NAME|GIT_EMAIL|PROFILE_NAME|FORM_FACTOR|KB_LAYOUT|KB_VARIANT|PROFILE_IMPORTS|FORM_FACTOR_IMPORTS|PROFILE|TOUCHPAD)@' "$dest"/*.nix >&2; then
+        die "unrendered @TOKEN@ left in $dest, see the lines above"
+    fi
+}
+
+# nix-instantiate --parse catches a template or substitution mistake before
+# anything lands in hosts/ or the disk is touched.
+parse_check_nix_dir() {
+    local file
+    for file in "$1"/*.nix; do
+        nix-instantiate --parse "$file" >/dev/null \
+            || die "rendered $(basename "$file") does not parse as Nix, see the error above"
+    done
+}
+
+# True if $1 is already a hosts/ directory name (AVAILABLE_HOSTS).
+host_known() {
+    local h
+    for h in "${AVAILABLE_HOSTS[@]}"; do
+        [ "$h" = "$1" ] && return 0
+    done
+    return 1
+}
+
+# Each check_* prints why its value is unusable and returns 1, or returns 0
+# silently. prompt_validated re-prompts on 1; validate_new_host_flags turns
+# it into a usage error.
+
+# Beyond the spec regex: no trailing -, since NixOS's networking.hostName
+# type rejects it and that would only surface in nixos-install, after the
+# wipe. tariognatha-vm is flake.nix's VM check target, not a hosts/ dir.
+check_new_hostname() {
+    local name="$1"
+    if ! [[ "$name" =~ ^[a-z][a-z0-9-]{0,62}$ ]]; then
+        echo "hostname '$name' must start with a lowercase letter and use only a-z, 0-9 and -, at most 63 characters"
+        return 1
+    fi
+    if [[ "$name" == *- ]]; then
+        echo "hostname '$name' must not end in -, NixOS's networking.hostName rejects that"
+        return 1
+    fi
+    if [ "$name" = tariognatha-vm ]; then
+        echo "hostname 'tariognatha-vm' is taken by flake.nix's VM check target"
+        return 1
+    fi
+    if host_known "$name"; then
+        echo "hosts/$name already exists, pick it from the host list instead"
+        return 1
+    fi
+    if [ -e "$REPO_ROOT/hosts/$name" ] || [ -L "$REPO_ROOT/hosts/$name" ]; then
+        echo "hosts/$name already exists"
+        return 1
+    fi
+    return 0
+}
+
+check_new_username() {
+    local name="$1" sys
+    if ! [[ "$name" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]; then
+        echo "username '$name' must start with a-z or _ and use only a-z, 0-9, _ and -, at most 32 characters"
+        return 1
+    fi
+    case "$name" in
+        nixbld* | systemd-*)
+            echo "username '$name' is reserved for a NixOS system account"
+            return 1
+            ;;
+    esac
+    for sys in "${SYSTEM_ACCOUNT_NAMES[@]}"; do
+        if [ "$sys" = "$name" ]; then
+            echo "username '$name' is a system account name"
+            return 1
+        fi
+    done
+    return 0
+}
+
+# No @: no git name needs one, and it keeps render_host_templates'
+# leftover-@TOKEN@ check unambiguous. Nix and sed escaping covers the rest.
+check_git_name() {
+    if [ -z "$1" ]; then
+        echo "git name must not be empty"
+        return 1
+    fi
+    if [[ "$1" == *@* || "$1" == *[[:cntrl:]]* ]]; then
+        echo "git name must not contain @ or control characters"
+        return 1
+    fi
+    return 0
+}
+
+check_git_email() {
+    if ! [[ "$1" =~ ^[^@[:space:][:cntrl:]]+@[^@[:space:][:cntrl:]]+$ ]]; then
+        echo "git email '$1' must look like name@domain, with one @ and no spaces"
+        return 1
+    fi
+    return 0
+}
+
+check_kb_layout() {
+    if ! [[ "$1" =~ ^[a-z0-9_]+(,[a-z0-9_]+)*$ ]]; then
+        echo "keyboard layout '$1' must be an XKB layout such as at or de,us"
+        return 1
+    fi
+    return 0
+}
+
+# Empty is valid: no variant.
+check_kb_variant() {
+    if ! [[ "$1" =~ ^[a-z0-9_,-]*$ ]]; then
+        echo "keyboard variant '$1' must be an XKB variant such as nodeadkeys, or empty"
+        return 1
+    fi
+    return 0
+}
+
+check_profile() {
+    local p
+    for p in "${GPU_PROFILES[@]}"; do
+        [ "$p" != "$1" ] || return 0
+    done
+    echo "unknown GPU profile '$1', expected one of: ${GPU_PROFILES[*]}"
+    return 1
+}
+
+check_form_factor() {
+    local f
+    for f in "${FORM_FACTORS[@]}"; do
+        [ "$f" != "$1" ] || return 0
+    done
+    echo "unknown form factor '$1', expected one of: ${FORM_FACTORS[*]}"
+    return 1
+}
+
+# Prints "<gpu-profile> <form-factor>" from the same dmidecode/lspci probes
+# as suggest_host, separated by exactly one space so callers split with
+# ${s%% *} / ${s#* } and an empty field stays empty. Missing tools or no
+# match mean no pre-selection, never a failure. AMD+NVIDIA PRIME is out of
+# scope, so an NVIDIA GPU without an Intel one suggests nvidia-desktop.
+suggest_profile() {
+    local chassis="" gpu_info="" profile="" form_factor=""
+    if command -v dmidecode >/dev/null 2>&1; then
+        chassis=$(dmidecode -s chassis-type 2>/dev/null || true)
+    fi
+    if command -v lspci >/dev/null 2>&1; then
+        gpu_info=$(lspci 2>/dev/null | grep -iE 'vga|3d controller' || true)
+    fi
+    if printf '%s' "$chassis" | grep -qiE 'laptop|notebook|portable|convertible|detachable'; then
+        form_factor=laptop
+    elif printf '%s' "$chassis" | grep -qiE 'desktop|tower|mini pc|all in one'; then
+        form_factor=desktop
+    fi
+    if printf '%s' "$gpu_info" | grep -qi nvidia; then
+        if printf '%s' "$gpu_info" | grep -qi intel; then
+            # intel-nvidia-prime's whole point is switching between the
+            # iGPU and the NVIDIA GPU to save battery, which only matters
+            # on a laptop. A desktop with both keeps the NVIDIA GPU on.
+            if [ "$form_factor" = desktop ]; then
+                profile=nvidia-desktop
+            else
+                profile=intel-nvidia-prime
+            fi
+        else
+            profile=nvidia-desktop
+        fi
+    elif printf '%s' "$gpu_info" | grep -qiE 'amd|advanced micro devices'; then
+        profile=amd-igpu
+    elif printf '%s' "$gpu_info" | grep -qi intel; then
+        profile=intel-igpu
+    fi
+    printf '%s %s\n' "$profile" "$form_factor"
+}
+
+# Enforces the new-host flag rules before anything runs. The new-host
+# flags need --new-host. --new-host needs install mode and excludes --host.
+# --yes needs --user, --profile and --form-factor. Every value given must
+# pass the same check_* prompt_new_host applies. Any violation is a usage
+# error.
+validate_new_host_flags() {
+    local given=() reason
+    [ -z "$NEW_USER" ] || given+=(--user)
+    [ -z "$NEW_GIT_NAME" ] || given+=(--git-name)
+    [ -z "$NEW_GIT_EMAIL" ] || given+=(--git-email)
+    [ -z "$NEW_PROFILE" ] || given+=(--profile)
+    [ -z "$NEW_FORM_FACTOR" ] || given+=(--form-factor)
+    [ -z "$NEW_KB_LAYOUT" ] || given+=(--kb-layout)
+    if $NEW_KB_VARIANT_SET; then
+        given+=(--kb-variant)
+    fi
+    if ! $NEW_HOST_MODE; then
+        [ "${#given[@]}" -eq 0 ] || usage_die "${given[*]} only apply together with --new-host"
+        return 0
+    fi
+    [ "$MODE" = install ] || usage_die "--new-host only works in install mode, setup mode runs on a host already in hosts/"
+    [ -z "$HOST" ] || usage_die "--host and --new-host are mutually exclusive"
+    reason=$(check_new_hostname "$NEW_HOST") || usage_die "--new-host: $reason"
+    if $YES; then
+        local missing=()
+        [ -n "$NEW_USER" ] || missing+=(--user)
+        [ -n "$NEW_PROFILE" ] || missing+=(--profile)
+        [ -n "$NEW_FORM_FACTOR" ] || missing+=(--form-factor)
+        [ "${#missing[@]}" -eq 0 ] || usage_die "--yes --new-host also requires ${missing[*]}"
+    fi
+    if [ -n "$NEW_USER" ]; then
+        reason=$(check_new_username "$NEW_USER") || usage_die "--user: $reason"
+    fi
+    if [ -n "$NEW_GIT_NAME" ]; then
+        reason=$(check_git_name "$NEW_GIT_NAME") || usage_die "--git-name: $reason"
+    fi
+    if [ -n "$NEW_GIT_EMAIL" ]; then
+        reason=$(check_git_email "$NEW_GIT_EMAIL") || usage_die "--git-email: $reason"
+    fi
+    if [ -n "$NEW_PROFILE" ]; then
+        reason=$(check_profile "$NEW_PROFILE") || usage_die "--profile: $reason"
+    fi
+    if [ -n "$NEW_FORM_FACTOR" ]; then
+        reason=$(check_form_factor "$NEW_FORM_FACTOR") || usage_die "--form-factor: $reason"
+    fi
+    if [ -n "$NEW_KB_LAYOUT" ]; then
+        reason=$(check_kb_layout "$NEW_KB_LAYOUT") || usage_die "--kb-layout: $reason"
+    fi
+    if $NEW_KB_VARIANT_SET; then
+        reason=$(check_kb_variant "$NEW_KB_VARIANT") || usage_die "--kb-variant: $reason"
+    fi
+}
+
+# Prompts until $3 accepts the answer, printing the validator's reason and
+# asking again otherwise. $2 is pre-filled. Never reached under --yes:
+# validate_new_host_flags requires or defaults every answer there.
+prompt_validated() {
+    local prompt="$1" default="$2" validator="$3" answer reason
+    while true; do
+        answer=$(gum_tty input --prompt "$prompt: " --value "$default" --placeholder "$default")
+        if reason=$("$validator" "$answer"); then
+            log_info "$prompt: $answer"
+            printf '%s\n' "$answer"
+            return 0
+        fi
+        log_warn "$reason"
+    done
+}
+
+# Collects every new-host answer before anything is written: flags win,
+# then --yes takes the DEFAULT_*s (validate_new_host_flags already required
+# --user/--profile/--form-factor), else a prompt pre-filled with the
+# default or suggest_profile's guess. Sets HOST last.
+prompt_new_host() {
+    log_step "New host"
+    if [ -z "$NEW_HOST" ]; then
+        NEW_HOST=$(prompt_validated "Hostname" "" check_new_hostname)
+    fi
+    if [ -z "$NEW_USER" ]; then
+        NEW_USER=$(prompt_validated "Login username" "$DEFAULT_INSTALL_USER" check_new_username)
+    fi
+    if [ -z "$NEW_GIT_NAME" ]; then
+        if $YES; then
+            NEW_GIT_NAME="$NEW_USER"
+        else
+            NEW_GIT_NAME=$(prompt_validated "git user.name" "$NEW_USER" check_git_name)
+        fi
+    fi
+    if [ -z "$NEW_GIT_EMAIL" ]; then
+        if $YES; then
+            NEW_GIT_EMAIL="$DEFAULT_GIT_EMAIL"
+        else
+            NEW_GIT_EMAIL=$(prompt_validated "git user.email" "$DEFAULT_GIT_EMAIL" check_git_email)
+        fi
+    fi
+    if [ -z "$NEW_PROFILE" ] || [ -z "$NEW_FORM_FACTOR" ]; then
+        local suggestion
+        suggestion=$(suggest_profile)
+        if [ -z "$NEW_PROFILE" ]; then
+            NEW_PROFILE=$(choose_one "GPU profile for $NEW_HOST" "${suggestion%% *}" "${GPU_PROFILES[@]}")
+        fi
+        if [ -z "$NEW_FORM_FACTOR" ]; then
+            NEW_FORM_FACTOR=$(choose_one "Form factor for $NEW_HOST" "${suggestion#* }" "${FORM_FACTORS[@]}")
+        fi
+    fi
+    if [ -z "$NEW_KB_LAYOUT" ]; then
+        if $YES; then
+            NEW_KB_LAYOUT="$DEFAULT_KB_LAYOUT"
+        else
+            NEW_KB_LAYOUT=$(prompt_validated "Keyboard layout" "$DEFAULT_KB_LAYOUT" check_kb_layout)
+        fi
+    fi
+    if ! $NEW_KB_VARIANT_SET; then
+        # DEFAULT_KB_VARIANT (nodeadkeys) only makes sense for
+        # DEFAULT_KB_LAYOUT (at): "us(nodeadkeys)" etc. is not a valid xkb
+        # variant, so any other layout defaults to no variant.
+        local default_kb_variant=""
+        if [ "$NEW_KB_LAYOUT" = "$DEFAULT_KB_LAYOUT" ]; then
+            default_kb_variant="$DEFAULT_KB_VARIANT"
+        fi
+        if $YES; then
+            NEW_KB_VARIANT="$default_kb_variant"
+        else
+            NEW_KB_VARIANT=$(prompt_validated "Keyboard variant (may be empty)" "$default_kb_variant" check_kb_variant)
+        fi
+        NEW_KB_VARIANT_SET=true
+    fi
+    HOST="$NEW_HOST"
+    log_info "new host $HOST: user $NEW_USER, git $NEW_GIT_NAME <$NEW_GIT_EMAIL>, $NEW_PROFILE, $NEW_FORM_FACTOR, keyboard $NEW_KB_LAYOUT/${NEW_KB_VARIANT:-<none>}"
 }
 
 # Excludes zram, device-mapper, MD-RAID and loop devices by name, since
@@ -665,10 +1264,14 @@ confirm_wipe_target() {
     kernel=$(basename "$(readlink -f "$DISK")")
     local kernel_hl
     kernel_hl=$(gum style --foreground 226 --bold "$kernel")
+    local host_label="$HOST"
+    if $NEW_HOST_MODE; then
+        host_label="$HOST (new: hosts/$HOST is written after this confirmation)"
+    fi
     gum style \
         --border double --border-foreground 196 --foreground 196 --bold \
         --padding "1 3" --margin "1 0" \
-        "This will ERASE ALL DATA on:" "" "  $DISK" "  resolves to /dev/$kernel_hl" "" "Host: $HOST" >&2
+        "This will ERASE ALL DATA on:" "" "  $DISK" "  resolves to /dev/$kernel_hl" "" "Host: $host_label" >&2
     if $YES; then
         log_warn "auto-confirmed wipe of $DISK via --yes"
         return
@@ -679,6 +1282,55 @@ confirm_wipe_target() {
     log_info "wipe confirmed for /dev/$kernel"
 }
 
+# Renders templates/host/ for $HOST into a staging dir, parse-checks every
+# file, then copies it into hosts/$HOST/ and registers $HOST's sops
+# placeholders. Runs only after the wipe is confirmed, so an abort before
+# then leaves the repo untouched. Until it finishes, on_exit's
+# rollback_scaffold removes hosts/$HOST/ and restores .sops.yaml. A later
+# failure leaves the host in place, and a rerun picks it from the menu.
+scaffold_host() {
+    log_step "Scaffolding hosts/$HOST ($NEW_PROFILE, $NEW_FORM_FACTOR, user $NEW_USER)"
+    require nix-instantiate awk
+    local dest="$REPO_ROOT/hosts/$HOST"
+    if [ -e "$dest" ] || [ -L "$dest" ]; then
+        die "$dest already exists, rerun and pick $HOST from the host list instead"
+    fi
+    SCAFFOLD_STAGING=$(mktemp -d "${TMPDIR:-/tmp}/krane-install-scaffold.XXXXXX")
+    render_host_templates "$SCAFFOLD_STAGING" "$HOST" "$NEW_USER" "$NEW_GIT_NAME" "$NEW_GIT_EMAIL" \
+        "$NEW_PROFILE" "$NEW_FORM_FACTOR" "$NEW_KB_LAYOUT" "$NEW_KB_VARIANT"
+    parse_check_nix_dir "$SCAFFOLD_STAGING"
+    log_ok "rendered and parse-checked hosts/$HOST in $SCAFFOLD_STAGING"
+    if $DRY_RUN; then
+        # Nothing below writes under --dry-run, so later steps read the
+        # staging copy instead (host_dir). No snapshot either: there is
+        # nothing for rollback_scaffold to ever restore.
+        SCAFFOLD_PREVIEW_DIR="$SCAFFOLD_STAGING"
+    else
+        # .sops.yaml must exist and be readable before anything else below
+        # is written: SCAFFOLD_PENDING only flips to true once the snapshot
+        # is safely on disk, so a missing/unreadable .sops.yaml dies here,
+        # rollback_scaffold sees SCAFFOLD_PENDING still false, and never
+        # fabricates an empty .sops.yaml where none existed.
+        [ -f "$REPO_ROOT/.sops.yaml" ] || die "$REPO_ROOT/.sops.yaml not found, cannot register sops placeholders for $HOST"
+        # Snapshot .sops.yaml's exact current content, uncommitted edits
+        # included, before register_sops_host mutates it. Lives in TMPDIR,
+        # never inside the repo or SCAFFOLD_STAGING (which lands in
+        # hosts/$HOST/ below, and must not carry this file along).
+        SCAFFOLD_SOPS_SNAPSHOT=$(mktemp "${TMPDIR:-/tmp}/krane-install-sops-snapshot.XXXXXX")
+        cp -p "$REPO_ROOT/.sops.yaml" "$SCAFFOLD_SOPS_SNAPSHOT"
+        SCAFFOLD_PENDING=true
+    fi
+    run mkdir -p "$dest"
+    run cp -a "$SCAFFOLD_STAGING/." "$dest/"
+    run chmod -R u+rwX,go+rX,go-w "$dest"
+    run register_sops_host "$REPO_ROOT/.sops.yaml" "$HOST"
+    SCAFFOLD_PENDING=false
+    if [ -n "$SCAFFOLD_SOPS_SNAPSHOT" ]; then
+        rm -f "$SCAFFOLD_SOPS_SNAPSHOT"
+        SCAFFOLD_SOPS_SNAPSHOT=""
+    fi
+}
+
 # grep -qF verifies the sed actually landed, factored out so --self-test
 # can exercise it for real against a throwaway copy.
 patch_disko_file() {
@@ -687,8 +1339,14 @@ patch_disko_file() {
         log_info "disko.nix already patched for $disk"
         return 0
     fi
+    # A committed disk that differs from the chosen one stays a hard stop: the
+    # by-id path in git is the only check on the disk choice that lives
+    # outside this prompt flow. Replacing a disk means recording the new one
+    # in git first, so the message says how.
     if ! grep -qF 'device = "/dev/CHANGE-ME";' "$disko_file"; then
-        die "$disko_file has neither the CHANGE-ME placeholder nor $disk already patched in, check it by hand"
+        local committed
+        committed=$(sed -n 's/^[[:space:]]*device = "\(.*\)";.*/\1/p' "$disko_file" | head -n 1)
+        die "$disko_file is set up for ${committed:-another disk}, not $disk. To install onto $disk (e.g. after replacing the disk), set its device line to \"$disk\" or \"/dev/CHANGE-ME\", commit, and rerun"
     fi
     run sed -i "s#device = \"/dev/CHANGE-ME\";#device = \"$disk\";#" "$disko_file"
     if ! $DRY_RUN; then
@@ -699,7 +1357,31 @@ patch_disko_file() {
 patch_disko() {
     log_step "Patching hosts/$HOST/disko.nix for $DISK"
     validate_disk_charset
-    patch_disko_file "$REPO_ROOT/hosts/$HOST/disko.nix" "$DISK"
+    patch_disko_file "$(host_dir)/disko.nix" "$DISK"
+}
+
+# Reads the target host's login account from its evaluated krane.user.name.
+# Runs after patch_disko's `git add -A`, since a new host's files are
+# invisible to the flake until staged. Under --dry-run a new host was never
+# written or staged, so the prompted username stands in. The eval is
+# read-only, so it runs for real under --dry-run for an existing host.
+resolve_install_user() {
+    if $NEW_HOST_MODE && $DRY_RUN; then
+        INSTALL_USER="$NEW_USER"
+        log_info "login user for $HOST: $INSTALL_USER (prompted, a new host is not evaluated under --dry-run)"
+        return 0
+    fi
+    local user=""
+    user=$(nix eval --raw "$REPO_ROOT#nixosConfigurations.$HOST.config.krane.user.name") || user=""
+    if [ -z "$user" ]; then
+        soft_fail "could not evaluate nixosConfigurations.$HOST.config.krane.user.name"
+        user="${NEW_USER:-$DEFAULT_INSTALL_USER}"
+    fi
+    if $NEW_HOST_MODE && [ "$user" != "$NEW_USER" ]; then
+        die "hosts/$HOST evaluates to login user '$user', but '$NEW_USER' was entered, check hosts/$HOST/default.nix"
+    fi
+    INSTALL_USER="$user"
+    log_info "login user for $HOST: $INSTALL_USER"
 }
 
 run_disko() {
@@ -789,7 +1471,8 @@ patch_prime_line() {
 }
 
 patch_prime() {
-    local default_nix="$REPO_ROOT/hosts/$HOST/default.nix"
+    local default_nix
+    default_nix="$(host_dir)/default.nix"
     if ! grep -qE '^[[:space:]]*krane\.prime\.(intelBusId|nvidiaBusId)[[:space:]]*=[[:space:]]*"' "$default_nix"; then
         return 0
     fi
@@ -824,7 +1507,9 @@ patch_prime() {
 }
 
 # Commits before nixos-install so the copied repo starts with a clean
-# history instead of the disko/PRIME patches left as a local diff.
+# history instead of the disko/PRIME patches left as a local diff. A new
+# host's files, its .sops.yaml placeholders and its hardware config land in
+# this one commit.
 commit_hardware_config() {
     log_step "Committing local hardware config for $HOST"
     run git -C "$REPO_ROOT" add -A
@@ -835,9 +1520,13 @@ commit_hardware_config() {
     local id_args=()
     # Commit identity is overridden only when none is configured.
     if [ -z "$(git -C "$REPO_ROOT" config user.email 2>/dev/null || true)" ]; then
-        id_args=(-c user.name=krane -c user.email=krane@localhost)
+        id_args=(-c "user.name=$INSTALL_USER" -c "user.email=$INSTALL_USER@localhost")
     fi
-    run git -C "$REPO_ROOT" "${id_args[@]}" commit -m "Configure $HOST hardware" --quiet
+    local message="Configure $HOST hardware"
+    if $NEW_HOST_MODE; then
+        message="Add $HOST host"
+    fi
+    run git -C "$REPO_ROOT" "${id_args[@]}" commit -m "$message" --quiet
 }
 
 # disko's own nix build already ran before /mnt existed, so it used the
@@ -898,8 +1587,8 @@ run_nixos_install() {
 
 # Always runs for real outside --dry-run: --yes must never leave a fresh
 # install with no login. Retries a few times for a mistyped password.
-set_krane_password() {
-    log_step "Set krane's password on the new install"
+set_user_password() {
+    log_step "Set $INSTALL_USER's password on the new install"
 
     if ! $DRY_RUN && [ ! -t 0 ]; then
         print_no_password_box
@@ -909,7 +1598,7 @@ set_krane_password() {
 
     local attempt=1
     while [ "$attempt" -le 3 ]; do
-        if run nixos-enter --root /mnt -- passwd krane; then
+        if run nixos-enter --root /mnt -- passwd "$INSTALL_USER"; then
             PASSWORD_SET=true
             return 0
         fi
@@ -926,19 +1615,21 @@ print_no_password_box() {
         --padding "1 3" --margin "1 0" \
         "NO PASSWORD SET" "" \
         "Run this yourself before rebooting:" "" \
-        "  nixos-enter --root /mnt -- passwd krane" >&2
+        "  nixos-enter --root /mnt -- passwd $INSTALL_USER" >&2
 }
 
 finish_install() {
-    log_step "Copying repo to /mnt/home/krane/.dotfiles"
-    run mkdir -p /mnt/home/krane/.dotfiles
-    run_sh "cp -a \"$REPO_ROOT/.\" /mnt/home/krane/.dotfiles/"
-    run nixos-enter --root /mnt -- chown -R krane:users /home/krane/.dotfiles
-    run_sh "test -f /mnt/home/krane/.dotfiles/flake.nix" \
-        || die "repo copy to /mnt/home/krane/.dotfiles is missing flake.nix, see $LOG"
+    [ -n "$INSTALL_USER" ] || die "INSTALL_USER is unset, resolve_install_user did not run"
+    local home_dir="/home/$INSTALL_USER"
+    log_step "Copying repo to /mnt$home_dir/.dotfiles"
+    run mkdir -p "/mnt$home_dir/.dotfiles"
+    run_sh "cp -a \"$REPO_ROOT/.\" \"/mnt$home_dir/.dotfiles/\""
+    run nixos-enter --root /mnt -- chown -R "$INSTALL_USER:users" "$home_dir/.dotfiles"
+    run_sh "test -f \"/mnt$home_dir/.dotfiles/flake.nix\"" \
+        || die "repo copy to /mnt$home_dir/.dotfiles is missing flake.nix, see $LOG"
 
     PASSWORD_SET=true
-    set_krane_password
+    set_user_password
 
     banner "Install complete" \
         "Next steps:" \
@@ -946,12 +1637,23 @@ finish_install() {
         "  2. ~/.dotfiles/install.sh --mode setup" \
         "  3. second switch, setup mode drives this"
 
+    # The new host's only copies are this live ISO's checkout, gone at
+    # reboot, and the one on the target disk.
+    if $NEW_HOST_MODE; then
+        gum style \
+            --border double --border-foreground 226 --foreground 226 --bold \
+            --padding "1 3" --margin "1 0" \
+            "hosts/$HOST is new and not pushed anywhere" "" \
+            "It exists only as a local commit in $home_dir/.dotfiles on the new install." \
+            "Push it from there after first boot, or it is lost with this disk." >&2
+    fi
+
     if $PASSWORD_SET; then
         if confirm "Reboot now?"; then
             run reboot
         fi
     else
-        log_warn "not offering to reboot, set krane's password first"
+        log_warn "not offering to reboot, set $INSTALL_USER's password first"
     fi
 }
 
@@ -963,8 +1665,12 @@ run_install_mode() {
     validate_disk_is_physical
 
     confirm_wipe_target
+    if $NEW_HOST_MODE; then
+        scaffold_host
+    fi
     patch_disko
     run git -C "$REPO_ROOT" add -A
+    resolve_install_user
     run_disko
     setup_install_swap
     generate_hardware_config
@@ -982,9 +1688,10 @@ preflight_setup() {
     fi
     require git just sops age ssh-to-age
     HOST="${HOST:-$(hostname)}"
-    if [ ! -d "$REPO_ROOT/hosts/$HOST" ]; then
-        soft_fail "unknown host '$HOST', expected one of: ${AVAILABLE_HOSTS[*]}"
-    fi
+    # A die, not soft_fail: setup mode on a machine this flake never
+    # installed has no host config to bootstrap or switch to, and a new host
+    # can only be created from install mode.
+    host_known "$HOST" || die "host '$HOST' not in hosts/ — install it via install mode, or pass --host"
     if [ "$REPO_ROOT" != "$HOME/.dotfiles" ]; then
         log_warn "checked out at $REPO_ROOT, not \$HOME/.dotfiles. The docs assume the latter"
     fi
@@ -1006,6 +1713,56 @@ sops_placeholder_present() {
     admin_placeholder="age1PLACEHOLDER_ADMIN_${host_upper}_REPLACE_VIA_BOOTSTRAP_SOPS_SH"
     grep -qF "$host_placeholder" "$sops_yaml" 2>/dev/null \
         || grep -qF "$admin_placeholder" "$sops_yaml" 2>/dev/null
+}
+
+# Adds host $2's two age1PLACEHOLDER_* recipients to the sops config $1 as
+# the last `keys:` entries and appends a creation rule for secrets/$2.yaml:
+# the same shape the committed hosts had before scripts/bootstrap-sops.sh
+# replaced their placeholders, so setup mode's run_bootstrap_sops and
+# sops_placeholder_present work unchanged. No secrets/$2.yaml is created:
+# modules/nixos/sops.nix's pathExists gate handles its absence. A no-op when
+# either anchor already exists, matched whole so `tar` never hits
+# `&admin_taractias`.
+register_sops_host() {
+    local sops_yaml="$1" host="$2" host_upper tmp
+    [ -f "$sops_yaml" ] || die "$sops_yaml not found, cannot register sops placeholders for $host"
+    if grep -qE "&(admin|host)_${host}([[:space:]]|\$)" "$sops_yaml"; then
+        log_info "$sops_yaml already has anchors for $host, leaving it as is"
+        return 0
+    fi
+    grep -q '^creation_rules:' "$sops_yaml" \
+        || die "$sops_yaml has no top-level creation_rules:, cannot place $host's recipients"
+    host_upper=$(printf '%s' "$host" | tr '[:lower:]' '[:upper:]')
+    tmp=$(mktemp "${TMPDIR:-/tmp}/krane-install-sops.XXXXXX")
+    # Blank lines are held back until the next non-blank line, so the new keys
+    # go right after the last keys: entry and the gap stays before
+    # creation_rules:.
+    awk -v host="$host" -v upper="$host_upper" '
+        /^creation_rules:/ && !done {
+            printf "  - &admin_%s age1PLACEHOLDER_ADMIN_%s_REPLACE_VIA_BOOTSTRAP_SOPS_SH\n", host, upper
+            printf "  - &host_%s age1PLACEHOLDER_HOST_%s_REPLACE_VIA_BOOTSTRAP_SOPS_SH\n", host, upper
+            printf "%s", gap
+            gap = ""
+            done = 1
+            print
+            next
+        }
+        /^[[:space:]]*$/ && !done { gap = gap $0 "\n"; next }
+        { printf "%s", gap; gap = ""; print }
+        END {
+            printf "%s", gap
+            printf "\n  - path_regex: secrets/%s\\.yaml$\n", host
+            printf "    key_groups:\n      - age:\n          - *admin_%s\n          - *host_%s\n", host, host
+        }
+    ' "$sops_yaml" >"$tmp"
+    if ! grep -qF "&admin_${host} age1PLACEHOLDER_ADMIN_${host_upper}_REPLACE_VIA_BOOTSTRAP_SOPS_SH" "$tmp" \
+        || ! grep -qF "&host_${host} age1PLACEHOLDER_HOST_${host_upper}_REPLACE_VIA_BOOTSTRAP_SOPS_SH" "$tmp"; then
+        rm -f "$tmp"
+        die "post-awk verification failed for $host in $sops_yaml"
+    fi
+    # cat into the original, not mv, so the file keeps its mode and owner.
+    cat "$tmp" >"$sops_yaml"
+    rm -f "$tmp"
 }
 
 # True when $2, in the worktree of the git repo at $1, has no uncommitted
@@ -1269,12 +2026,10 @@ main() {
         *) die "invalid --mode '$MODE', expected install or setup" ;;
     esac
 
+    validate_new_host_flags
+
     if [ -n "$HOST" ]; then
-        local known=false h
-        for h in "${AVAILABLE_HOSTS[@]}"; do
-            [ "$h" = "$HOST" ] && known=true
-        done
-        $known || die "unknown host '$HOST', expected one of: ${AVAILABLE_HOSTS[*]}"
+        host_known "$HOST" || die "unknown host '$HOST', expected one of: ${AVAILABLE_HOSTS[*]}"
     fi
 
     if [ "$MODE" = install ] && $YES && ! $DRY_RUN && ! $CONFIRM_WIPE; then
@@ -1335,6 +2090,168 @@ if $SELF_TEST_CHECK_PRIME_SED; then
     echo "self-test-check-prime-sed: OK"
     exit 0
 fi
+
+# Renders every GPU profile x form factor from templates/host/ into a
+# throwaway dir with the real (non-dry-run) helpers and parse-checks each
+# result, the same checks scaffold_host runs before it writes hosts/<name>/.
+if $SELF_TEST_CHECK_SCAFFOLD; then
+    self_test_tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/krane-install-selftest.XXXXXX")
+    trap 'rc=$?; rm -rf "$self_test_tmpdir"; (exit $rc); on_exit' EXIT
+    DRY_RUN=false
+    command -v nix-instantiate >/dev/null 2>&1 || die "nix-instantiate not found, cannot parse-check the templates"
+    for st_profile in "${GPU_PROFILES[@]}"; do
+        for st_ff in "${FORM_FACTORS[@]}"; do
+            st_dir="$self_test_tmpdir/$st_profile-$st_ff"
+            render_host_templates "$st_dir" testhost tester "Test Er" tester@example.invalid \
+                "$st_profile" "$st_ff" at nodeadkeys
+            parse_check_nix_dir "$st_dir"
+            for st_file in default.nix disko.nix display.nix hardware-configuration.nix; do
+                [ -f "$st_dir/$st_file" ] || die "$st_profile/$st_ff: $st_file was not rendered"
+            done
+            grep -qF 'name = "tester";' "$st_dir/default.nix" \
+                || die "$st_profile/$st_ff: default.nix has no krane.user name line"
+            grep -qF 'system.stateVersion = "26.05";' "$st_dir/default.nix" \
+                || die "$st_profile/$st_ff: default.nix has no stateVersion 26.05"
+            grep -qF 'device = "/dev/CHANGE-ME";' "$st_dir/disko.nix" \
+                || die "$st_profile/$st_ff: disko.nix lost the CHANGE-ME placeholder patch_disko needs"
+            grep -qF 'layout = "at";' "$st_dir/default.nix" \
+                || die "$st_profile/$st_ff: default.nix has no krane.keyboard layout line"
+            grep -qF 'kb_layout = osConfig.krane.keyboard.layout;' "$st_dir/display.nix" \
+                || die "$st_profile/$st_ff: display.nix does not read osConfig.krane.keyboard.layout"
+            if [ "$st_ff" = laptop ]; then
+                grep -qF 'tap_to_click = true;' "$st_dir/display.nix" \
+                    || die "$st_profile/$st_ff: laptop display.nix has no touchpad block"
+            else
+                ! grep -qF 'touchpad' "$st_dir/display.nix" \
+                    || die "$st_profile/$st_ff: desktop display.nix has a touchpad block"
+            fi
+            # host_uses_cuda keys on this import.
+            if [ "$st_profile" = nvidia-desktop ]; then
+                grep -q 'gpu/nvidia-desktop' "$st_dir/default.nix" \
+                    || die "$st_profile/$st_ff: default.nix does not import gpu/nvidia-desktop.nix"
+            else
+                ! grep -q 'gpu/nvidia-desktop' "$st_dir/default.nix" \
+                    || die "$st_profile/$st_ff: default.nix imports gpu/nvidia-desktop.nix"
+            fi
+            # patch_prime keys on these two lines, with its own regex.
+            if [ "$st_profile" = intel-nvidia-prime ]; then
+                grep -qE '^[[:space:]]*krane\.prime\.intelBusId[[:space:]]*=[[:space:]]*"' "$st_dir/default.nix" \
+                    || die "$st_profile/$st_ff: no intelBusId line in the form patch_prime expects"
+                grep -qE '^[[:space:]]*krane\.prime\.nvidiaBusId[[:space:]]*=[[:space:]]*"' "$st_dir/default.nix" \
+                    || die "$st_profile/$st_ff: no nvidiaBusId line in the form patch_prime expects"
+                patch_prime_line "$st_dir/default.nix" intelBusId PCI:9:9:9
+                patch_prime_line "$st_dir/default.nix" nvidiaBusId PCI:8:8:8
+                parse_check_nix_dir "$st_dir"
+            else
+                ! grep -qE '^[[:space:]]*krane\.prime\.' "$st_dir/default.nix" \
+                    || die "$st_profile/$st_ff: non-PRIME profile has krane.prime lines"
+            fi
+        done
+    done
+    # A git name containing @ could be rewritten again by GIT_EMAIL's later sed
+    # expression (see render_host_templates), so it must be refused outright. Captured
+    # through $(...), a subshell, so render_host_templates's own die exits only that
+    # subshell and not this whole self-test.
+    st_dir="$self_test_tmpdir/refuse-at-in-git-name"
+    st_out8=$(render_host_templates "$st_dir" testhost tester 'Bad@Name' tester@example.invalid \
+        amd-igpu laptop at nodeadkeys 2>&1) && st_rc8=0 || st_rc8=$?
+    if [ "$st_rc8" -eq 0 ]; then
+        die "render_host_templates accepted a git name containing '@', expected it to refuse"
+    fi
+    printf '%s' "$st_out8" | grep -qF "contains '@'" \
+        || die "render_host_templates refused the @ git name for the wrong reason: $st_out8"
+    # sed's / & \ and Nix's " \ ${ must land as the same string, not break
+    # the sed expression or the Nix string.
+    st_dir="$self_test_tmpdir/escaping"
+    # shellcheck disable=SC2016 # the literal ${x} is the point of this value.
+    render_host_templates "$st_dir" testhost tester 'A/B & C\D "q" ${x}' 'a&b/c\d@example.invalid' \
+        amd-igpu laptop at nodeadkeys
+    parse_check_nix_dir "$st_dir"
+    # shellcheck disable=SC2016 # matches the escaped Nix text literally.
+    grep -qF 'gitName = "A/B & C\\D \"q\" \${x}";' "$st_dir/default.nix" \
+        || die "git name with / & \\ \" \${ was not escaped for Nix and sed"
+    grep -qF 'gitEmail = "a&b/c\\d@example.invalid";' "$st_dir/default.nix" \
+        || die "git email with & / \\ was not escaped for Nix and sed"
+    # A non-"at" layout with an empty variant (prompt_new_host's default for
+    # e.g. "us") must still render a valid, empty Nix string, not a stray
+    # "()" or unterminated quote.
+    st_dir="$self_test_tmpdir/empty-kb-variant"
+    render_host_templates "$st_dir" testhost tester "Test Er" tester@example.invalid \
+        amd-igpu laptop us ""
+    parse_check_nix_dir "$st_dir"
+    grep -qF 'layout = "us";' "$st_dir/default.nix" \
+        || die "non-at keyboard layout did not render into krane.keyboard.layout"
+    grep -qF 'variant = "";' "$st_dir/default.nix" \
+        || die "empty keyboard variant did not render as variant = \"\";"
+    # .sops.yaml: the new anchors land as the last keys: entries, a second
+    # run is a no-op, and a host whose name prefixes an existing one (tar vs
+    # taractias) is still added.
+    st_sops="$self_test_tmpdir/sops.yaml"
+    cp "$REPO_ROOT/.sops.yaml" "$st_sops"
+    register_sops_host "$st_sops" testhost
+    sops_placeholder_present "$st_sops" testhost \
+        || die "sops_placeholder_present missed testhost's new placeholders"
+    ! sops_placeholder_present "$st_sops" taractias \
+        || die "registering testhost made taractias read as not bootstrapped"
+    [ "$(grep -c '&admin_testhost ' "$st_sops")" = 1 ] || die "&admin_testhost is not in .sops.yaml exactly once"
+    st_rules_line=$(grep -n '^creation_rules:' "$st_sops" | cut -d: -f1)
+    st_key_line=$(grep -n '&host_testhost ' "$st_sops" | cut -d: -f1)
+    [ "$st_key_line" -lt "$st_rules_line" ] || die "&host_testhost landed after creation_rules:"
+    grep -qF 'path_regex: secrets/testhost\.yaml$' "$st_sops" || die "no creation rule for secrets/testhost.yaml"
+    if command -v yq >/dev/null 2>&1 && yq --version 2>&1 | grep -q mikefarah; then
+        [ "$(yq 'explode(.) | .creation_rules[-1].key_groups[0].age[1]' "$st_sops")" = age1PLACEHOLDER_HOST_TESTHOST_REPLACE_VIA_BOOTSTRAP_SOPS_SH ] \
+            || die "yq does not resolve testhost's creation rule to its host placeholder"
+    else
+        log_warn "mikefarah yq not found, skipping the YAML structure check"
+    fi
+    cp "$st_sops" "$st_sops.once"
+    register_sops_host "$st_sops" testhost
+    cmp -s "$st_sops" "$st_sops.once" || die "a second register_sops_host testhost changed .sops.yaml"
+    register_sops_host "$st_sops" tar
+    grep -qF '&admin_tar age1PLACEHOLDER_ADMIN_TAR_REPLACE_VIA_BOOTSTRAP_SOPS_SH' "$st_sops" \
+        || die "host 'tar' was treated as already registered because of &admin_taractias"
+    register_sops_host "$st_sops" my-box
+    sops_placeholder_present "$st_sops" my-box \
+        || die "sops_placeholder_present missed a dashed host's placeholders"
+    echo "self-test-check-scaffold: OK"
+    exit 0
+fi
+
+# Scaffolds the --new-host flags' host for real (DRY_RUN=false) into this
+# checkout's hosts/ and .sops.yaml, patches its disko.nix with a fake disk,
+# then exits. For scripts/check-new-host.sh and self_test's rollback check,
+# which both run it from a throwaway copy of the repo. The env guard keeps
+# it from writing into a real checkout by accident.
+if $SELF_TEST_SCAFFOLD; then
+    [ "${KRANE_ALLOW_SCAFFOLD_HOOK:-}" = 1 ] \
+        || die "--self-test-scaffold writes hosts/ and .sops.yaml for real, it only runs with KRANE_ALLOW_SCAFFOLD_HOOK=1 from a throwaway copy of the repo"
+    YES=true
+    DRY_RUN=false
+    MODE=install
+    validate_new_host_flags
+    $NEW_HOST_MODE || usage_die "--self-test-scaffold needs --new-host"
+    prompt_new_host
+    scaffold_host
+    patch_disko_file "$REPO_ROOT/hosts/$HOST/disko.nix" /dev/disk/by-id/check-new-host-fake-disk
+    echo "self-test-scaffold: OK $HOST"
+    exit 0
+fi
+
+# For self_test: runs validator $2 on each remaining argument and prints a
+# FAIL line for each one whose verdict is not $1 (valid or invalid).
+# Returns 1 if any verdict was wrong.
+self_test_validator() {
+    local want="$1" validator="$2" value rc=0
+    shift 2
+    for value in "$@"; do
+        if "$validator" "$value" >/dev/null; then
+            [ "$want" = valid ] || { echo "FAIL: $validator accepted '$value'" >&2; rc=1; }
+        else
+            [ "$want" = invalid ] || { echo "FAIL: $validator rejected '$value'" >&2; rc=1; }
+        fi
+    done
+    return "$rc"
+}
 
 self_test() {
     echo "== self-test: run_sh honours pipefail ==" >&2
@@ -1411,6 +2328,17 @@ self_test() {
     else
         echo "FAIL: patch_prime_line sed check failed (rc=$rc4)" >&2
         echo "  captured output: $out4" >&2
+        SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
+    fi
+
+    echo "== self-test: new-host templates render and parse (real, non-dry-run) ==" >&2
+    local out7 rc7=0
+    out7=$(bash "$0" --self-test-check-scaffold 2>&1) || rc7=$?
+    if [ "$rc7" -eq 0 ] && printf '%s' "$out7" | grep -q "self-test-check-scaffold: OK"; then
+        echo "OK: every GPU profile x form factor renders, parses and keeps its install.sh hooks" >&2
+    else
+        echo "FAIL: new-host template check failed (rc=$rc7)" >&2
+        echo "  captured output: $out7" >&2
         SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
     fi
 
@@ -1552,6 +2480,378 @@ self_test() {
     if $clean_ok; then
         echo "OK: git_path_clean covers committed/modified/untracked/staged/deleted/no-HEAD" >&2
     else
+        SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
+    fi
+
+    echo "== self-test: new-host input validators ==" >&2
+    local vd_ok=true long63 long64 long32 long33
+    long63=$(printf 'a%.0s' {1..63})
+    long64=$(printf 'a%.0s' {1..64})
+    long32=$(printf 'u%.0s' {1..32})
+    long33=$(printf 'u%.0s' {1..33})
+    self_test_validator valid check_new_hostname newbox a b2 my-box "$long63" || vd_ok=false
+    # box- passes the bare regex but NixOS's networking.hostName rejects it.
+    self_test_validator invalid check_new_hostname "" 9box Box -box box- my_box my.box "my box" \
+        tariognatha-vm "${AVAILABLE_HOSTS[@]}" "$long64" || vd_ok=false
+    self_test_validator valid check_new_username krane alice _svc a-b a_b "$long32" || vd_ok=false
+    self_test_validator invalid check_new_username "" root nobody daemon sshd greeter nixbld nixbld1 \
+        systemd-network Alice 1abc "a b" a.b "$long33" || vd_ok=false
+    # shellcheck disable=SC2016 # the literal ${x} is the point of this value.
+    self_test_validator valid check_git_name krane "Test Er" "Zoë O'Brien" 'A/B & C\D "q" ${x}' || vd_ok=false
+    self_test_validator invalid check_git_name "" "a@b" "$(printf 'a\nb')" || vd_ok=false
+    self_test_validator valid check_git_email chris@krane.dev a+b@x.y root@localhost || vd_ok=false
+    self_test_validator invalid check_git_email "" nodomain a@b@c "a b@c.d" a@ @b || vd_ok=false
+    self_test_validator valid check_kb_layout at us de,us || vd_ok=false
+    self_test_validator invalid check_kb_layout "" AT "at;rm" "at us" || vd_ok=false
+    self_test_validator valid check_kb_variant "" nodeadkeys altgr-intl || vd_ok=false
+    self_test_validator invalid check_kb_variant "no dead" 'x"y' || vd_ok=false
+    self_test_validator valid check_profile "${GPU_PROFILES[@]}" || vd_ok=false
+    self_test_validator invalid check_profile "" amd-nvidia-prime || vd_ok=false
+    self_test_validator valid check_form_factor "${FORM_FACTORS[@]}" || vd_ok=false
+    self_test_validator invalid check_form_factor "" tablet || vd_ok=false
+    if $vd_ok; then
+        echo "OK: hostname, username, git, keyboard, profile and form-factor validators" >&2
+    else
+        SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
+    fi
+
+    echo "== self-test: prompt_new_host defaults kb-variant off DEFAULT_KB_LAYOUT only ==" >&2
+    local kv_ok=true
+    local saved_yes="$YES" saved_new_host_mode="$NEW_HOST_MODE" saved_new_host="$NEW_HOST" \
+        saved_new_user="$NEW_USER" saved_new_git_name="$NEW_GIT_NAME" saved_new_git_email="$NEW_GIT_EMAIL" \
+        saved_new_profile="$NEW_PROFILE" saved_new_form_factor="$NEW_FORM_FACTOR" \
+        saved_new_kb_layout="$NEW_KB_LAYOUT" saved_new_kb_variant="$NEW_KB_VARIANT" \
+        saved_new_kb_variant_set="$NEW_KB_VARIANT_SET" saved_host3="$HOST"
+    YES=true
+    NEW_HOST_MODE=true
+    NEW_HOST=kvtest
+    NEW_USER=tester
+    NEW_GIT_NAME="Test Er"
+    NEW_GIT_EMAIL=tester@example.invalid
+    NEW_PROFILE=amd-igpu
+    NEW_FORM_FACTOR=laptop
+    NEW_KB_LAYOUT="$DEFAULT_KB_LAYOUT"
+    NEW_KB_VARIANT=""
+    NEW_KB_VARIANT_SET=false
+    prompt_new_host >/dev/null
+    [ "$NEW_KB_VARIANT" = "$DEFAULT_KB_VARIANT" ] \
+        || { echo "FAIL: --kb-layout $DEFAULT_KB_LAYOUT defaulted kb-variant to '$NEW_KB_VARIANT', expected '$DEFAULT_KB_VARIANT'" >&2; kv_ok=false; }
+    NEW_KB_LAYOUT=us
+    NEW_KB_VARIANT=""
+    NEW_KB_VARIANT_SET=false
+    prompt_new_host >/dev/null
+    [ "$NEW_KB_VARIANT" = "" ] \
+        || { echo "FAIL: --kb-layout us defaulted kb-variant to '$NEW_KB_VARIANT', expected empty" >&2; kv_ok=false; }
+    YES="$saved_yes"
+    NEW_HOST_MODE="$saved_new_host_mode"
+    NEW_HOST="$saved_new_host"
+    NEW_USER="$saved_new_user"
+    NEW_GIT_NAME="$saved_new_git_name"
+    NEW_GIT_EMAIL="$saved_new_git_email"
+    NEW_PROFILE="$saved_new_profile"
+    NEW_FORM_FACTOR="$saved_new_form_factor"
+    NEW_KB_LAYOUT="$saved_new_kb_layout"
+    NEW_KB_VARIANT="$saved_new_kb_variant"
+    NEW_KB_VARIANT_SET="$saved_new_kb_variant_set"
+    HOST="$saved_host3"
+    if $kv_ok; then
+        echo "OK: kb-variant defaults to nodeadkeys only for layout at, else empty" >&2
+    else
+        SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
+    fi
+
+    echo "== self-test: suggest_profile keeps each field in its slot ==" >&2
+    local sp_ok=true sp_got
+    sp_got=$(
+        lspci() { printf '00:02.0 VGA compatible controller: Intel Corporation Alder Lake-P GT2\n'; }
+        dmidecode() { [ "$2" = chassis-type ] && echo Notebook; }
+        suggest_profile
+    )
+    [ "$sp_got" = "intel-igpu laptop" ] || { echo "FAIL: Intel-only notebook suggested '$sp_got'" >&2; sp_ok=false; }
+    sp_got=$(
+        lspci() { printf '00:02.0 VGA compatible controller: Intel Corporation UHD\n01:00.0 3D controller: NVIDIA Corporation GA107M\n'; }
+        dmidecode() { [ "$2" = chassis-type ] && echo Laptop; }
+        suggest_profile
+    )
+    [ "$sp_got" = "intel-nvidia-prime laptop" ] || { echo "FAIL: Intel+NVIDIA laptop suggested '$sp_got'" >&2; sp_ok=false; }
+    # Desktop chassis with both GPUs: no battery to save by prime-switching,
+    # so this should suggest nvidia-desktop, not intel-nvidia-prime.
+    sp_got=$(
+        lspci() { printf '00:02.0 VGA compatible controller: Intel Corporation UHD\n01:00.0 3D controller: NVIDIA Corporation GA104\n'; }
+        dmidecode() { [ "$2" = chassis-type ] && echo Desktop; }
+        suggest_profile
+    )
+    [ "$sp_got" = "nvidia-desktop desktop" ] || { echo "FAIL: Intel+NVIDIA desktop suggested '$sp_got'" >&2; sp_ok=false; }
+    sp_got=$(
+        lspci() { printf '0a:00.0 VGA compatible controller: Advanced Micro Devices, Inc. [AMD/ATI] Raphael\n'; }
+        dmidecode() { [ "$2" = chassis-type ] && echo Desktop; }
+        suggest_profile
+    )
+    [ "$sp_got" = "amd-igpu desktop" ] || { echo "FAIL: AMD desktop suggested '$sp_got'" >&2; sp_ok=false; }
+    sp_got=$(
+        lspci() { printf '01:00.0 VGA compatible controller: NVIDIA Corporation AD104 [GeForce RTX 4070 Ti]\n'; }
+        dmidecode() { [ "$2" = chassis-type ] && echo Tower; }
+        suggest_profile
+    )
+    [ "$sp_got" = "nvidia-desktop desktop" ] || { echo "FAIL: NVIDIA tower suggested '$sp_got'" >&2; sp_ok=false; }
+    # Unknown GPU, known chassis: the profile slot stays empty and laptop
+    # stays in the form-factor slot.
+    sp_got=$(
+        lspci() { :; }
+        dmidecode() { [ "$2" = chassis-type ] && echo Notebook; }
+        suggest_profile
+    )
+    [ "${sp_got%% *}" = "" ] && [ "${sp_got#* }" = laptop ] \
+        || { echo "FAIL: unknown GPU on a notebook split as profile='${sp_got%% *}' form='${sp_got#* }'" >&2; sp_ok=false; }
+    # Both probes fail, as without dmidecode/lspci: no suggestion at all.
+    sp_got=$(
+        lspci() { return 1; }
+        dmidecode() { return 1; }
+        suggest_profile
+    )
+    [ "$sp_got" = " " ] || { echo "FAIL: failed probes suggested '$sp_got'" >&2; sp_ok=false; }
+    if $sp_ok; then
+        echo "OK: suggest_profile maps lspci/dmidecode output and never shifts fields" >&2
+    else
+        SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
+    fi
+
+    echo "== self-test: new-host flag rules are usage errors ==" >&2
+    local fl_ok=true fl_want fl_case fl_out fl_rc
+    while IFS='|' read -r fl_want fl_case; do
+        fl_rc=0
+        # shellcheck disable=SC2086 # fl_case is a flag list, split on purpose.
+        fl_out=$(bash "$REPO_ROOT/install.sh" $fl_case 2>&1) || fl_rc=$?
+        if [ "$fl_rc" -eq 0 ] || ! printf '%s' "$fl_out" | grep -qF -- "$fl_want"; then
+            echo "FAIL: install.sh $fl_case: rc=$fl_rc, expected an error containing '$fl_want'" >&2
+            fl_ok=false
+        fi
+    done <<'EOF'
+only works in install mode|--mode setup --dry-run --new-host newbox --user alice --profile amd-igpu --form-factor laptop
+only apply together with --new-host|--mode install --dry-run --host taractias --disk /dev/null --user alice
+also requires --user --profile --form-factor|--mode install --dry-run --disk /dev/null --new-host newbox
+mutually exclusive|--mode install --dry-run --disk /dev/null --host taractias --new-host newbox --user alice --profile amd-igpu --form-factor laptop
+must start with a lowercase letter|--mode install --dry-run --disk /dev/null --new-host 9box --user alice --profile amd-igpu --form-factor laptop
+already exists|--mode install --dry-run --disk /dev/null --new-host taractias --user alice --profile amd-igpu --form-factor laptop
+system account|--mode install --dry-run --disk /dev/null --new-host newbox --user root --profile amd-igpu --form-factor laptop
+unknown GPU profile|--mode install --dry-run --disk /dev/null --new-host newbox --user alice --profile amd-nvidia-prime --form-factor laptop
+EOF
+    if $fl_ok; then
+        echo "OK: misused new-host flags stop with a usage error" >&2
+    else
+        SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
+    fi
+
+    echo "== self-test: a failed scaffold rolls back, a good one lands, a repeat is refused ==" >&2
+    local sb_tmp sb_out sb_rc sb_ok=true
+    sb_tmp=$(mktemp -d "${TMPDIR:-/tmp}/krane-install-selftest-scaffold.XXXXXX")
+    cp "$REPO_ROOT/install.sh" "$sb_tmp/install.sh"
+    cp -r "$REPO_ROOT/templates" "$sb_tmp/templates"
+    mkdir -p "$sb_tmp/hosts/taractias"
+    cp "$REPO_ROOT/hosts/taractias/default.nix" "$sb_tmp/hosts/taractias/default.nix"
+    # No creation_rules: line, so register_sops_host dies after hosts/rbhost/
+    # has already been copied in: on_exit's rollback_scaffold must remove it.
+    printf 'keys:\n  - &admin_taractias age1PLACEHOLDER_ADMIN_TARACTIAS_REPLACE_VIA_BOOTSTRAP_SOPS_SH\n' >"$sb_tmp/.sops.yaml"
+    (
+        cd "$sb_tmp"
+        git init -q
+        git add -A
+        git -c user.email=t@t -c user.name=t -c commit.gpgsign=false commit -q -m init
+    )
+    sb_rc=0
+    sb_out=$(KRANE_ALLOW_SCAFFOLD_HOOK=1 bash "$sb_tmp/install.sh" --self-test-scaffold \
+        --new-host rbhost --user tester --profile amd-igpu --form-factor laptop 2>&1) || sb_rc=$?
+    if [ "$sb_rc" -eq 0 ] || ! printf '%s' "$sb_out" | grep -q 'no top-level creation_rules'; then
+        echo "FAIL: scaffolding into a .sops.yaml without creation_rules: did not die in register_sops_host (rc=$sb_rc)" >&2
+        echo "  captured output: $sb_out" >&2
+        sb_ok=false
+    fi
+    printf '%s' "$sb_out" | grep -q 'rolling back the partial hosts/rbhost scaffold' \
+        || { echo "FAIL: no rollback log line, .sops.yaml passing the diff check below would prove nothing" >&2; sb_ok=false; }
+    [ ! -e "$sb_tmp/hosts/rbhost" ] || { echo "FAIL: hosts/rbhost survived the failed scaffold" >&2; sb_ok=false; }
+    [ -f "$sb_tmp/hosts/taractias/default.nix" ] || { echo "FAIL: the rollback touched hosts/taractias" >&2; sb_ok=false; }
+    git -C "$sb_tmp" diff --quiet -- .sops.yaml || { echo "FAIL: .sops.yaml was not restored" >&2; sb_ok=false; }
+    printf 'keys:\n  - &admin_taractias age1PLACEHOLDER_ADMIN_TARACTIAS_REPLACE_VIA_BOOTSTRAP_SOPS_SH\n\ncreation_rules:\n  - path_regex: secrets/taractias\\.yaml$\n    key_groups:\n      - age:\n          - *admin_taractias\n' >"$sb_tmp/.sops.yaml"
+    git -C "$sb_tmp" -c user.email=t@t -c user.name=t -c commit.gpgsign=false commit -q -am sops
+    sb_rc=0
+    sb_out=$(KRANE_ALLOW_SCAFFOLD_HOOK=1 bash "$sb_tmp/install.sh" --self-test-scaffold \
+        --new-host goodhost --user tester --profile intel-nvidia-prime --form-factor desktop 2>&1) || sb_rc=$?
+    if [ "$sb_rc" -ne 0 ] || [ ! -f "$sb_tmp/hosts/goodhost/default.nix" ] \
+        || ! grep -qF '&host_goodhost age1PLACEHOLDER_HOST_GOODHOST_REPLACE_VIA_BOOTSTRAP_SOPS_SH' "$sb_tmp/.sops.yaml" \
+        || ! grep -qF 'device = "/dev/disk/by-id/check-new-host-fake-disk";' "$sb_tmp/hosts/goodhost/disko.nix"; then
+        echo "FAIL: a valid scaffold of goodhost did not land (rc=$sb_rc)" >&2
+        echo "  captured output: $sb_out" >&2
+        sb_ok=false
+    fi
+    # cp -a preserves mktemp -d's 0700/0600 modes; scaffold_host must widen
+    # them back to the repo's normal 0755 dirs / 0644 files.
+    [ "$(stat -c%a "$sb_tmp/hosts/goodhost")" = 755 ] \
+        || { echo "FAIL: hosts/goodhost is $(stat -c%a "$sb_tmp/hosts/goodhost"), expected 755" >&2; sb_ok=false; }
+    [ "$(stat -c%a "$sb_tmp/hosts/goodhost/default.nix")" = 644 ] \
+        || { echo "FAIL: hosts/goodhost/default.nix is $(stat -c%a "$sb_tmp/hosts/goodhost/default.nix"), expected 644" >&2; sb_ok=false; }
+    # A .sops.yaml missing entirely (not just missing creation_rules:) must
+    # die before SCAFFOLD_PENDING is ever set, so rollback never fabricates
+    # an empty .sops.yaml where none existed.
+    rm -f "$sb_tmp/.sops.yaml"
+    sb_rc=0
+    sb_out=$(KRANE_ALLOW_SCAFFOLD_HOOK=1 bash "$sb_tmp/install.sh" --self-test-scaffold \
+        --new-host nosopshost --user tester --profile amd-igpu --form-factor laptop 2>&1) || sb_rc=$?
+    if [ "$sb_rc" -eq 0 ] || ! printf '%s' "$sb_out" | grep -qF '.sops.yaml not found'; then
+        echo "FAIL: scaffolding with no .sops.yaml at all did not die with the expected message (rc=$sb_rc)" >&2
+        echo "  captured output: $sb_out" >&2
+        sb_ok=false
+    fi
+    [ ! -e "$sb_tmp/hosts/nosopshost" ] || { echo "FAIL: hosts/nosopshost survived a scaffold with no .sops.yaml" >&2; sb_ok=false; }
+    [ ! -e "$sb_tmp/.sops.yaml" ] \
+        || { echo "FAIL: rollback fabricated a .sops.yaml where none existed before scaffolding" >&2; sb_ok=false; }
+    git -C "$sb_tmp" checkout -q -- .sops.yaml
+    sb_rc=0
+    sb_out=$(KRANE_ALLOW_SCAFFOLD_HOOK=1 bash "$sb_tmp/install.sh" --self-test-scaffold \
+        --new-host goodhost --user tester --profile amd-igpu --form-factor laptop 2>&1) || sb_rc=$?
+    if [ "$sb_rc" -eq 0 ] || ! printf '%s' "$sb_out" | grep -q 'already exists'; then
+        echo "FAIL: a second scaffold of goodhost was not refused (rc=$sb_rc)" >&2
+        sb_ok=false
+    fi
+    [ -f "$sb_tmp/hosts/goodhost/default.nix" ] || { echo "FAIL: the refused repeat deleted hosts/goodhost" >&2; sb_ok=false; }
+    rm -rf "$sb_tmp"
+    if $sb_ok; then
+        echo "OK: scaffold rolls back on failure, lands on success, refuses an existing host" >&2
+    else
+        SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
+    fi
+
+    echo "== self-test: rollback_scaffold restores .sops.yaml by content, not git checkout ==" >&2
+    local rb_ok=true rb_tmp rb_committed rb_edited rb_registered rb_got
+    local saved_repo_root="$REPO_ROOT" saved_host_rb="$HOST" \
+        saved_pending="$SCAFFOLD_PENDING" saved_snapshot="$SCAFFOLD_SOPS_SNAPSHOT"
+    rb_tmp=$(mktemp -d "${TMPDIR:-/tmp}/krane-install-selftest-rollback.XXXXXX")
+    mkdir -p "$rb_tmp/hosts/taractias" "$rb_tmp/hosts/rbhost"
+    : >"$rb_tmp/hosts/taractias/default.nix"
+    : >"$rb_tmp/hosts/rbhost/x.nix"
+    rb_committed='keys:
+  - &admin_taractias age1PLACEHOLDER_ADMIN_TARACTIAS_REPLACE_VIA_BOOTSTRAP_SOPS_SH
+'
+    # A pre-existing uncommitted edit, made before scaffold_host ever ran.
+    rb_edited='keys:
+  - &admin_taractias age1PLACEHOLDER_ADMIN_TARACTIAS_REPLACE_VIA_BOOTSTRAP_SOPS_SH
+  - &uncommitted_local_edit age1UNCOMMITTED_LOCAL_EDIT_MUST_SURVIVE_ROLLBACK
+'
+    # register_sops_host's own mutation, applied after the snapshot: the
+    # thing rollback_scaffold must undo.
+    rb_registered='keys:
+  - &admin_taractias age1PLACEHOLDER_ADMIN_TARACTIAS_REPLACE_VIA_BOOTSTRAP_SOPS_SH
+  - &uncommitted_local_edit age1UNCOMMITTED_LOCAL_EDIT_MUST_SURVIVE_ROLLBACK
+  - &host_rbhost age1PLACEHOLDER_HOST_RBHOST_REPLACE_VIA_BOOTSTRAP_SOPS_SH
+'
+    (
+        cd "$rb_tmp"
+        git init -q
+        printf '%s' "$rb_committed" >.sops.yaml
+        git add -A
+        git -c user.email=t@t -c user.name=t -c commit.gpgsign=false commit -q -m init
+    )
+    printf '%s' "$rb_edited" >"$rb_tmp/.sops.yaml"
+    SCAFFOLD_SOPS_SNAPSHOT=$(mktemp "${TMPDIR:-/tmp}/krane-install-selftest-snapshot.XXXXXX")
+    printf '%s' "$rb_edited" >"$SCAFFOLD_SOPS_SNAPSHOT"
+    printf '%s' "$rb_registered" >"$rb_tmp/.sops.yaml"
+    REPO_ROOT="$rb_tmp"
+    HOST=rbhost
+    SCAFFOLD_PENDING=true
+    rollback_scaffold
+    [ ! -e "$rb_tmp/hosts/rbhost" ] || { echo "FAIL: hosts/rbhost survived rollback_scaffold" >&2; rb_ok=false; }
+    [ -e "$rb_tmp/hosts/taractias/default.nix" ] || { echo "FAIL: rollback_scaffold touched hosts/taractias" >&2; rb_ok=false; }
+    # Command substitution strips trailing newlines on every side of this
+    # comparison, so run the expected strings through it too rather than
+    # let a newline count mismatch masquerade as a content mismatch.
+    rb_got=$(command cat "$rb_tmp/.sops.yaml")
+    if [ "$rb_got" != "$(printf '%s' "$rb_edited")" ]; then
+        echo "FAIL: .sops.yaml after rollback_scaffold does not match the pre-registration snapshot" >&2
+        if [ "$rb_got" = "$(printf '%s' "$rb_committed")" ]; then
+            echo "  it matches the git-committed content instead: the uncommitted edit was discarded" >&2
+        fi
+        rb_ok=false
+    fi
+    $SCAFFOLD_PENDING && { echo "FAIL: rollback_scaffold left SCAFFOLD_PENDING=true" >&2; rb_ok=false; }
+    rm -rf "$rb_tmp" "$SCAFFOLD_SOPS_SNAPSHOT"
+    REPO_ROOT="$saved_repo_root"
+    HOST="$saved_host_rb"
+    SCAFFOLD_PENDING="$saved_pending"
+    SCAFFOLD_SOPS_SNAPSHOT="$saved_snapshot"
+    if $rb_ok; then
+        echo "OK: rollback_scaffold restores .sops.yaml from its snapshot, keeping uncommitted edits" >&2
+    else
+        SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
+    fi
+
+    echo "== self-test: check_new_hostname refuses a dangling symlink at hosts/<name> ==" >&2
+    local dl_ok=true dl_tmp saved_repo_root2="$REPO_ROOT"
+    dl_tmp=$(mktemp -d "${TMPDIR:-/tmp}/krane-install-selftest-symlink.XXXXXX")
+    mkdir -p "$dl_tmp/hosts"
+    ln -s "$dl_tmp/hosts/nonexistent-target" "$dl_tmp/hosts/deadlink"
+    REPO_ROOT="$dl_tmp"
+    if check_new_hostname deadlink >/dev/null; then
+        echo "FAIL: check_new_hostname accepted a dangling symlink at hosts/deadlink" >&2
+        dl_ok=false
+    fi
+    REPO_ROOT="$saved_repo_root2"
+    rm -rf "$dl_tmp"
+    if $dl_ok; then
+        echo "OK: check_new_hostname refuses a dangling symlink" >&2
+    else
+        SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
+    fi
+
+    # Distinct from check_new_hostname's own guard above: scaffold_host has
+    # its own separate "$dest already exists" check ($dest -e or -L), which
+    # is what actually protects a real scaffold. Exercised directly, with
+    # REPO_ROOT/HOST overridden only for this one command (so the die's
+    # exit 1 does not abort self_test, and neither global leaks outside it).
+    echo "== self-test: scaffold_host refuses a dangling symlink at hosts/<name> ==" >&2
+    local dg_ok=true dg_tmp dg_out dg_rc=0
+    dg_tmp=$(mktemp -d "${TMPDIR:-/tmp}/krane-install-selftest-scaffold-symlink.XXXXXX")
+    mkdir -p "$dg_tmp/hosts"
+    ln -s "$dg_tmp/hosts/nonexistent-target" "$dg_tmp/hosts/deadlink"
+    dg_out=$(REPO_ROOT="$dg_tmp" HOST=deadlink scaffold_host 2>&1) || dg_rc=$?
+    if [ "$dg_rc" -eq 0 ] || ! printf '%s' "$dg_out" | grep -qF 'already exists'; then
+        echo "FAIL: scaffold_host accepted a dangling symlink at hosts/deadlink (rc=$dg_rc)" >&2
+        echo "  captured output: $dg_out" >&2
+        dg_ok=false
+    fi
+    rm -rf "$dg_tmp"
+    if $dg_ok; then
+        echo "OK: scaffold_host's own dest guard refuses a dangling symlink" >&2
+    else
+        SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
+    fi
+
+    echo "== self-test: host_uses_cuda follows a new host's GPU profile ==" >&2
+    local nc_ok=true saved_new_mode="$NEW_HOST_MODE" saved_new_profile="$NEW_PROFILE" saved_host2="$HOST"
+    NEW_HOST_MODE=true
+    HOST=newbox
+    NEW_PROFILE=nvidia-desktop
+    host_uses_cuda || { echo "FAIL: host_uses_cuda false for a new nvidia-desktop host" >&2; nc_ok=false; }
+    NEW_PROFILE=intel-nvidia-prime
+    ! host_uses_cuda || { echo "FAIL: host_uses_cuda true for a new intel-nvidia-prime host" >&2; nc_ok=false; }
+    NEW_HOST_MODE="$saved_new_mode"
+    NEW_PROFILE="$saved_new_profile"
+    HOST="$saved_host2"
+    if $nc_ok; then
+        echo "OK: host_uses_cuda true only for a new nvidia-desktop host" >&2
+    else
+        SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
+    fi
+
+    echo "== self-test: setup mode refuses a hostname that is not in hosts/ ==" >&2
+    local sg_tmp sg_out sg_rc=0
+    sg_tmp=$(mktemp -d "${TMPDIR:-/tmp}/krane-install-selftest-hostname.XXXXXX")
+    printf '#!/bin/sh\necho bogushost\n' >"$sg_tmp/hostname"
+    chmod +x "$sg_tmp/hostname"
+    sg_out=$(PATH="$sg_tmp:$PATH" bash "$REPO_ROOT/install.sh" --mode setup --dry-run 2>&1) || sg_rc=$?
+    rm -rf "$sg_tmp"
+    if [ "$sg_rc" -ne 0 ] && printf '%s' "$sg_out" | grep -qF "host 'bogushost' not in hosts/"; then
+        echo "OK: setup mode on an unknown hostname dies even under --dry-run (rc=$sg_rc)" >&2
+    else
+        echo "FAIL: setup mode on hostname bogushost: rc=$sg_rc, no \"not in hosts/\" error" >&2
         SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
     fi
 

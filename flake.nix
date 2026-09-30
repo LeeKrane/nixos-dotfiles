@@ -1,5 +1,5 @@
 {
-  description = "NixOS + Hyprland (illogical-impulse) dotfiles flake for tariognatha, tarmantria and taractias";
+  description = "NixOS + Hyprland (illogical-impulse) dotfiles flake, one nixosConfiguration per hosts/ directory";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -33,7 +33,8 @@
     nixvim.url = "github:nix-community/nixvim";
 
     # No `nixpkgs.follows`: nixos-hardware's modules aren't pinned to a
-    # nixpkgs revision. Applied only to taractias.
+    # nixpkgs revision. Imported by taractias and by hosts scaffolded from
+    # templates/host/ (GPU profile and form-factor imports).
     nixos-hardware.url = "github:NixOS/nixos-hardware/master";
   };
 
@@ -61,21 +62,13 @@
       };
       nvim = nvimEval.config.build.package;
 
-      # Single source of truth for this flake's host list, checked
-      # against hosts/ by checks.lua-syntax below.
-      hosts = [
-        "tariognatha"
-        "tarmantria"
-        "taractias"
-      ];
-
-      # Sorted the same way as `hosts` for comparison below.
-      hostDirs = nixpkgs.lib.sort (a: b: a < b) (
-        nixpkgs.lib.attrNames (
-          nixpkgs.lib.filterAttrs (_: type: type == "directory") (builtins.readDir ./hosts)
-        )
+      # Every directory under hosts/ is a host. install.sh's new-host flow adds one by
+      # scaffolding hosts/<name>/ from templates/host/. install.sh, bootstrap-sops.sh's
+      # known_hosts() and docker-check.sh's HOSTS glob the same directories. Plain files
+      # under hosts/ are ignored.
+      hosts = nixpkgs.lib.attrNames (
+        nixpkgs.lib.filterAttrs (_: type: type == "directory") (builtins.readDir ./hosts)
       );
-      hostsSorted = nixpkgs.lib.sort (a: b: a < b) hosts;
     in
     {
       nixosConfigurations =
@@ -125,36 +118,120 @@
           let
             renderedFiles = nixpkgs.lib.concatMap (
               host:
-              nixpkgs.lib.attrValues
-                self.nixosConfigurations.${host}.config.home-manager.users.krane.krane.hypr._rendered
+              let
+                cfg = self.nixosConfigurations.${host}.config;
+              in
+              nixpkgs.lib.attrValues cfg.home-manager.users.${cfg.krane.user.name}.krane.hypr._rendered
             ) hosts;
           in
-          # Keeps `hosts` honest against hosts/: a mismatch fails loudly
-          # instead of silently skipping a host.
-          nixpkgs.lib.throwIf (hostDirs != hostsSorted)
-            "checks.lua-syntax: flake.nix's `hosts` list [${nixpkgs.lib.concatStringsSep ", " hostsSorted}] does not match hosts/ directory contents [${nixpkgs.lib.concatStringsSep ", " hostDirs}] -- add/remove a hosts/<name>/ directory or update `hosts` in flake.nix so they match"
+          # Refuse an empty `_rendered` list here, at eval time, and
+          # again in the builder, so this check can't pass vacuously.
+          nixpkgs.lib.throwIf (renderedFiles == [ ])
+            "checks.lua-syntax: krane.hypr._rendered is empty for all hosts; the check would pass vacuously"
             (
-              # Refuse an empty `_rendered` list here, at eval time, and
-              # again in the builder, so this check can't pass vacuously.
-              nixpkgs.lib.throwIf (renderedFiles == [ ])
-                "checks.lua-syntax: krane.hypr._rendered is empty for all hosts; the check would pass vacuously"
-                (
-                  pkgs.runCommand "krane-hypr-lua-syntax" { } ''
-                    count=0
-                    for f in ${nixpkgs.lib.escapeShellArgs renderedFiles}; do
-                      echo "luac -p $f"
-                      ${pkgs.lua5_4}/bin/luac -p "$f"
-                      count=$((count + 1))
-                    done
-                    if [ "$count" -eq 0 ]; then
-                      echo "no rendered Lua files were checked" >&2
-                      exit 1
-                    fi
-                    echo "checked $count rendered Lua files"
-                    touch "$out"
-                  ''
-                )
+              pkgs.runCommand "krane-hypr-lua-syntax" { } ''
+                count=0
+                for f in ${nixpkgs.lib.escapeShellArgs renderedFiles}; do
+                  echo "luac -p $f"
+                  ${pkgs.lua5_4}/bin/luac -p "$f"
+                  count=$((count + 1))
+                done
+                if [ "$count" -eq 0 ]; then
+                  echo "no rendered Lua files were checked" >&2
+                  exit 1
+                fi
+                echo "checked $count rendered Lua files"
+                touch "$out"
+              ''
             );
+
+        # krane.user wiring (modules/nixos/user.nix): the stock hosts keep "krane", and
+        # overriding it moves the account, the home-manager user, the git identity,
+        # nix trusted-users and greetd autologin with it. Eval-only: the derivation is
+        # trivial, the assertions run while evaluating it.
+        user-option =
+          let
+            base = self.nixosConfigurations.taractias.config;
+            moved =
+              (self.nixosConfigurations.taractias.extendModules {
+                modules = [
+                  {
+                    krane.user = {
+                      name = "tester";
+                      gitName = "Test Er";
+                      gitEmail = "tester@example.invalid";
+                    };
+                    krane.keyboard = {
+                      layout = "de";
+                      variant = "";
+                    };
+                  }
+                ];
+              }).config;
+            nameOnly =
+              (self.nixosConfigurations.taractias.extendModules {
+                modules = [ { krane.user.name = "solo"; } ];
+              }).config;
+            hm = moved.home-manager.users.tester;
+            expectations = [
+              {
+                ok = base.krane.user.name == "krane";
+                what = "default krane.user.name is not krane";
+              }
+              {
+                ok = base.krane.user.gitName == "krane" && base.krane.user.gitEmail == "chris@krane.dev";
+                what = "default git identity is not krane <chris@krane.dev>";
+              }
+              {
+                ok = base.users.users ? krane && base.home-manager.users ? krane;
+                what = "default account krane is missing from users.users or home-manager.users";
+              }
+              {
+                ok = nameOnly.krane.user.gitName == "solo";
+                what = "krane.user.gitName does not default to krane.user.name";
+              }
+              {
+                ok = moved.users.users ? tester && !(moved.users.users ? krane);
+                what = "users.users does not follow krane.user.name";
+              }
+              {
+                ok = moved.users.users.tester.home == "/home/tester" && hm.home.homeDirectory == "/home/tester";
+                what = "home directory does not follow krane.user.name";
+              }
+              {
+                ok = hm.home.username == "tester";
+                what = "home.username does not follow krane.user.name";
+              }
+              {
+                ok =
+                  hm.programs.git.settings.user.name == "Test Er"
+                  && hm.programs.git.settings.user.email == "tester@example.invalid";
+                what = "git identity does not follow krane.user.gitName/gitEmail";
+              }
+              {
+                ok =
+                  builtins.elem "tester" moved.nix.settings.trusted-users
+                  && !(builtins.elem "krane" moved.nix.settings.trusted-users);
+                what = "nix trusted-users does not follow krane.user.name";
+              }
+              {
+                ok = moved.services.greetd.settings.initial_session.user == "tester";
+                what = "greetd autologin does not follow krane.user.name";
+              }
+              {
+                ok = base.krane.keyboard.layout == "at" && base.krane.keyboard.variant == "nodeadkeys";
+                what = "default krane.keyboard is not at/nodeadkeys";
+              }
+              {
+                ok = moved.services.xserver.xkb.layout == "de" && moved.services.xserver.xkb.variant == "";
+                what = "services.xserver.xkb does not follow krane.keyboard";
+              }
+            ];
+            failed = map (e: e.what) (builtins.filter (e: !e.ok) expectations);
+          in
+          nixpkgs.lib.throwIf (failed != [ ])
+            "checks.user-option: ${nixpkgs.lib.concatStringsSep "; " failed}"
+            (pkgs.runCommand "krane-user-option" { } "touch $out");
 
         # NixVim's own startup test: fails on errors or warnings at startup.
         nvim = nvimEval.config.build.test;
@@ -182,6 +259,13 @@
         # matched below. Errors raised inside a spec's own internal
         # vim.wait() window are also caught now, since :messages accumulates
         # for the whole nvim session rather than being reset per-window.
+        #
+        # Specs run with a 10 s format_on_save budget (vim.g.format_on_save_timeout_ms,
+        # read by modules/nixvim/lang/default.nix; interactive default 500 ms): a
+        # loaded CI runner once missed 500 ms for prettierd, and conform then saves
+        # unformatted without an error, failing a formatting assertion for a
+        # reason unrelated to the gating logic under test. A failing spec also
+        # prints :messages and conform.log, so the next failure shows its cause.
         nvim-specs =
           pkgs.runCommand "nvim-specs"
             {
@@ -200,7 +284,7 @@
                 echo "== $(basename "$spec")"
                 export XDG_STATE_HOME="$TMPDIR/state-$count"
                 mkdir -p "$XDG_STATE_HOME"
-                if ! timeout 120 nvim --headless -c "lua local ok, err = pcall(dofile, '$spec'); if not ok then io.stderr:write(tostring(err) .. '\n'); vim.cmd('cquit 1') end; vim.wait(200); local m = vim.api.nvim_exec2('messages', { output = true }).output; if m:find('callback:', 1, true) or m:find('E5108', 1, true) then io.stderr:write(m .. '\n'); vim.cmd('cquit 1') end; vim.cmd('qall!')"; then
+                if ! timeout 120 nvim --headless -c "lua vim.g.format_on_save_timeout_ms = 10000; local function messages() return vim.api.nvim_exec2('messages', { output = true }).output end; local ok, err = pcall(dofile, '$spec'); if not ok then io.stderr:write(tostring(err) .. '\n:messages:\n' .. messages() .. '\n'); local log = vim.fn.stdpath('log') .. '/conform.log'; if vim.fn.filereadable(log) == 1 then io.stderr:write('conform.log:\n' .. table.concat(vim.fn.readfile(log), '\n') .. '\n') end; vim.cmd('cquit 1') end; vim.wait(200); local m = messages(); if m:find('callback:', 1, true) or m:find('E5108', 1, true) then io.stderr:write(m .. '\n'); vim.cmd('cquit 1') end; vim.cmd('qall!')"; then
                   echo "nvim-specs: $(basename "$spec") failed or timed out after 120s" >&2
                   exit 1
                 fi

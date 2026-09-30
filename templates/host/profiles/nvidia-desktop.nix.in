@@ -1,0 +1,6 @@
+# GPU profile nvidia-desktop: a single NVIDIA GPU, no PRIME, tariognatha's setup. Everything
+# lives in modules/nixos/gpu/nvidia-desktop.nix, so there is no body. install.sh's
+# host_uses_cuda greps default.nix for this import to grant the CUDA cache.
+#== imports
+    ../../modules/nixos/gpu/nvidia-desktop.nix
+#== body

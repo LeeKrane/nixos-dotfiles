@@ -1,4 +1,4 @@
-{ ... }:
+{ config, ... }:
 {
   imports = [
     ./hardware-configuration.nix
@@ -10,7 +10,7 @@
   system.stateVersion = "26.05";
 
   # display.nix sets krane.hypr.*, a home-manager module, imported at the user level.
-  home-manager.users.krane.imports = [ ./display.nix ];
+  home-manager.users.${config.krane.user.name}.imports = [ ./display.nix ];
 
   # PCI bus IDs from `lspci | grep -E 'VGA|3D'`. FILL AT INSTALL: these placeholders are
   # almost certainly wrong for the actual laptop.

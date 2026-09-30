@@ -71,10 +71,11 @@ in
           mode = "0400";
         };
       }
-      # Owned by krane, not root: copied verbatim into krane's own rclone.conf.
+      # Owned by the login account (krane.user.name), not root: copied verbatim into
+      # that account's own rclone.conf.
       // lib.optionalAttrs (hasSection "rclone") {
         "rclone/config-seed" = {
-          owner = "krane";
+          owner = config.krane.user.name;
           mode = "0400";
         };
       };

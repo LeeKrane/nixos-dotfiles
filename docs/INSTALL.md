@@ -1,6 +1,6 @@
 # Install guide
 
-Full path from a blank machine to a working `tariognatha`, `tarmantria`, or `taractias`. Read [README.md](../README.md) and [docs/II-INTEGRATION.md](II-INTEGRATION.md) first if you haven't.
+Full path from a blank machine to a working `tariognatha`, `tarmantria`, or `taractias`, or to a new host that `install.sh` scaffolds for you (see [Installing a new machine](#installing-a-new-machine)). Read [README.md](../README.md) and [docs/II-INTEGRATION.md](II-INTEGRATION.md) first if you haven't.
 
 The normal path runs the repo's own `install.sh`. It drives disko, `nixos-install`, secrets bootstrap, the Rust toolchain, flathub, and the required second `nixos-rebuild switch`, and every destructive step has a `--dry-run` preview. Appendix A is the manual, `install.sh`-free path. Appendix B documents what `install.sh` does, step by step, for auditing or maintenance.
 
@@ -33,7 +33,7 @@ cd ~/.dotfiles
 With no flags, `install.sh` detects a live ISO and walks through a live install:
 
 1. Preflight checks root, UEFI boot, network, and required tools. Missing `dmidecode`/`lspci` only skips host suggestion and PRIME detection. It does not abort. Preflight also checks DNS for the caches the install needs and offers to pin public DNS through NetworkManager if a lookup fails or is slow.
-2. Host: suggests one of `tariognatha`, `tarmantria`, `taractias` from the chassis, in a `gum choose` list you can override.
+2. Host: suggests one of the hosts under `hosts/` from the chassis, in a `gum choose` list you can override. The last entry, `+ new host`, creates a new host instead: see [Installing a new machine](#installing-a-new-machine).
 3. Disk: lists real disks, excludes the ISO's own device, offers to swap in a stable `/dev/disk/by-id/...` path.
 4. Confirmation: restates the disk and host, then asks you to type the kernel device name, such as `nvme0n1`, to confirm.
 5. Partition and format: patches `hosts/<host>/disko.nix`'s `/dev/CHANGE-ME` placeholder with your disk, then runs disko. This erases the chosen disk. Layout: GPT, an ESP, and a btrfs root split into `@`, `@home`, `@nix`, `@snapshots` subvolumes, zstd-compressed, no swap partition, zram swap instead.
@@ -44,8 +44,8 @@ With no flags, `install.sh` detects a live ISO and walks through a live install:
 7. PRIME bus IDs, `tarmantria` only: reads `lspci -D` and patches `hosts/tarmantria/default.nix`'s `krane.prime.intelBusId`/`nvidiaBusId`. Left as `FILL AT INSTALL` placeholders otherwise.
 8. Local commit: commits the hardware config and PRIME changes, since flakes only see git-tracked files.
 9. `nixos-install`: builds and installs the flake. Slow: quickshell compiles from source. The CUDA cache is trusted only on `tariognatha`, the one host with CUDA packages. On a failure, `install.sh` retries up to three times, confirming each retry: nix resumes from the paths it already copied, so a retry costs a 10 second wait, not the whole download.
-10. Copies this repo to `/mnt/home/krane/.dotfiles`.
-11. Sets krane's password. This always runs, even under `--yes`.
+10. Copies this repo to `/mnt/home/<user>/.dotfiles`, where `<user>` is the host's `krane.user.name` (`krane` on the three original hosts).
+11. Sets that user's password. This always runs, even under `--yes`.
 12. Offers to reboot.
 
 ## 2. After first boot: setup mode
@@ -70,20 +70,64 @@ On an already-installed system this runs setup mode:
 6. Runs a second `nixos-rebuild switch`. The first switch already ran the ii (illogical-impulse) dotfiles copy and this repo's overrides once, so switching again proves the ordering holds on repeat.
 7. Prints a next-steps panel. Add the WireGuard and rclone values to `secrets/<host>.yaml` with `sops set` (see [secrets/README.md](../secrets/README.md)), rebuild, and the wg0 tunnel autostarts. Then run `just check`.
 
+## Installing a new machine
+
+For a machine that has no `hosts/<name>/` yet. This is install mode only: setup mode needs the host to exist already, and it stops with `host '<name>' not in hosts/` otherwise.
+
+1. Boot the ISO and clone the repo as in section 0, then run `./install.sh`.
+2. Pick `+ new host` at the bottom of the host list. `install.sh` asks for:
+    - Hostname: a lowercase letter, then lowercase letters, digits and `-`, at most 63 characters. It must not end in `-`, and must not be an existing host or `tariognatha-vm`.
+    - Login username, default `krane`. It must not be `root` or another system account name.
+    - Git name (default: the username) and git email (default `chris@krane.dev`), written to the host's `krane.user`.
+    - GPU profile and form factor, pre-selected from `lspci`/`dmidecode` when they are available:
+
+        | Profile | For |
+        | --- | --- |
+        | `amd-igpu` | AMD CPU with integrated Radeon, no dGPU (like `taractias`) |
+        | `intel-igpu` | Intel CPU with its integrated GPU, no dGPU |
+        | `nvidia-desktop` | A single NVIDIA GPU (like `tariognatha`), gets the CUDA cache |
+        | `intel-nvidia-prime` | Intel iGPU plus NVIDIA dGPU, PRIME offload (like `tarmantria`) |
+
+        `laptop` adds nixos-hardware's laptop profiles and a touchpad block. `desktop` adds the SSD profile only. AMD CPU plus NVIDIA dGPU PRIME is not offered.
+    - Keyboard layout and variant, default `at` / `nodeadkeys` (the variant default is empty for any other layout).
+3. Disk selection and the typed wipe confirmation work as usual. Nothing is written to the repo before that confirmation, so aborting earlier leaves the checkout untouched.
+4. `install.sh` renders `templates/host/` into `hosts/<name>/` (`default.nix`, `disko.nix`, `display.nix`, and a placeholder `hardware-configuration.nix`) and parse-checks every file. It then adds `age1PLACEHOLDER_*` recipients for the host to `.sops.yaml`. If rendering or parsing fails, it removes `hosts/<name>/` again and restores `.sops.yaml`. After that the normal flow runs: disko, hardware config, PRIME bus IDs (`intel-nvidia-prime` only), one local commit `Add <name> host`, and `nixos-install`.
+5. The new host exists only as that local commit in `~/.dotfiles` on the new machine. After first boot, run setup mode as usual (it bootstraps the host's sops recipients), then push the branch from there.
+6. `display.nix` starts with one catch-all `preferred` monitor rule, because the live ISO runs no Hyprland to detect outputs. After first login, check `hyprctl monitors -j` and name the real outputs.
+
+Non-interactively:
+
+```sh
+./install.sh --new-host newbox --user alice --profile amd-igpu --form-factor laptop \
+    --disk /dev/disk/by-id/<disk> --yes --confirm-wipe
+```
+
+`--yes --new-host` requires `--user`, `--profile` and `--form-factor`. `--git-name`, `--git-email`, `--kb-layout` and `--kb-variant` take the defaults above (`--kb-variant` defaults to empty unless `--kb-layout` is `at`). All of these flags are usage errors without `--new-host` or outside install mode.
+
+To check the templates without a machine, commit your change and run `just check-new-host`. It needs local Nix. It scaffolds a throwaway `testhost` for each GPU profile × form factor in a temporary git worktree, and checks that each one is nixfmt-clean and evaluates.
+
 ## Flags
 
 | Flag | What it does |
 | --- | --- |
 | `--mode install\|setup` | Force a mode instead of auto-detecting it. |
-| `--host HOST` | One of `tariognatha`, `tarmantria`, `taractias`. |
+| `--host HOST` | One of the directories under `hosts/`. |
+| `--new-host NAME` | Install mode only: create `hosts/NAME` from `templates/host/`. See "Installing a new machine". |
+| `--user NAME` | New host's login user, default `krane`. |
+| `--git-name NAME` | New host's git `user.name`, default: the login user. |
+| `--git-email EMAIL` | New host's git `user.email`, default `chris@krane.dev`. |
+| `--profile PROFILE` | New host's GPU profile: `amd-igpu`, `intel-igpu`, `nvidia-desktop`, `intel-nvidia-prime`. |
+| `--form-factor FF` | New host's form factor: `laptop` or `desktop`. |
+| `--kb-layout LAYOUT` | New host's keyboard layout, default `at`. |
+| `--kb-variant VARIANT` | New host's keyboard variant, default `nodeadkeys` for `--kb-layout at`, otherwise empty. |
 | `--disk DISK` | Target block device, install mode only. |
-| `-y`, `--yes` | Auto-confirm every prompt. Never skips setting krane's password. |
+| `-y`, `--yes` | Auto-confirm every prompt. Never skips setting the login user's password. |
 | `-n`, `--dry-run` | Print every mutating command instead of running it. Implies `--yes`. |
 | `--confirm-wipe` | Required for a live, non-dry-run `--yes` install. |
 | `--self-test` | Exercise `install.sh`'s own failure-handling logic in isolation. |
 | `-h`, `--help` | Show usage and exit. |
 
-`--host`/`--disk` are required alongside `--yes`/`--dry-run`: neither mode falls back to an interactive prompt once prompts are off. In install mode, `--yes` without `--dry-run` needs `--confirm-wipe` too.
+`--host` (or `--new-host` with `--user`, `--profile` and `--form-factor`) and `--disk` are required alongside `--yes`/`--dry-run`: neither mode falls back to an interactive prompt once prompts are off. In install mode, `--yes` without `--dry-run` needs `--confirm-wipe` too.
 
 On a non-NixOS system `install.sh` defaults to install mode. Pass `--dry-run` or `--mode setup` explicitly if you are experimenting from an ordinary Linux box rather than a live ISO.
 
@@ -91,7 +135,7 @@ On a non-NixOS system `install.sh` defaults to install mode. Pass `--dry-run` or
 
 `--dry-run` is safe to run anywhere, any time, as any user. Every destructive step (disk writes, `nixos-install`, `nixos-rebuild switch`, commits, `passwd`, `reboot`) prints `+ the command` instead of running it, while read-only probes still run for real. This is how `just install-lint` (`scripts/docker-check.sh shellcheck`) exercises it in CI, checking `git status --porcelain` and `git rev-parse HEAD` before and after to prove the tree stayed untouched.
 
-`--self-test` is an undocumented maintainer and CI hook, not in `--help`, that exercises `install.sh`'s own failure handling: that `run_sh` honours `pipefail`, that the `ERR` trap fires inside a shell function, and that the disko and PRIME sed helpers produce the expected line when run for real against a throwaway fixture.
+`--self-test` is an undocumented maintainer and CI hook, not in `--help`, that exercises `install.sh`'s own failure handling: that `run_sh` honours `pipefail`, that the `ERR` trap fires inside a shell function, and that the disko and PRIME sed helpers produce the expected line when run for real against a throwaway fixture, that every new-host template combination renders and parses, and that a failed new-host scaffold rolls back.
 
 ### DNS timeouts ("Resolving timed out")
 
@@ -288,18 +332,20 @@ Mode detection (`detect_mode`) picks `install` if `/iso` exists, `/etc/NIXOS` is
 ### Live mode (`run_install_mode`)
 
 - `preflight_live`: checks root, UEFI boot, network, and required tools. `check_dns` probes `cache.nixos.org`, plus `cache.nixos-cuda.org` on the CUDA host, and offers to pin public DNS on the active NetworkManager connection when a lookup fails or is slow.
-- `choose_host` and `choose_disk`: `gum choose` over `suggest_host`'s guess and `lsblk`'s disk list, excluding the ISO's own device and offering a stable `/dev/disk/by-id` path.
+- `choose_host` and `choose_disk`: `gum choose` over `suggest_host`'s guess plus `+ new host`, and `lsblk`'s disk list, excluding the ISO's own device and offering a stable `/dev/disk/by-id` path. `+ new host` (or `--new-host`) runs `prompt_new_host`, which collects every answer first, pre-selecting `suggest_profile`'s GPU profile and form factor.
 - `validate_disk_is_physical` and `confirm_wipe_target`: a typed-confirmation gate before anything destructive.
+- `scaffold_host`, new hosts only: renders `templates/host/` into a staging dir, runs `nix-instantiate --parse` on each file, copies it to `hosts/<name>/`, and adds the host's placeholders to `.sops.yaml` (`register_sops_host`). A failure before that finishes rolls both back from `on_exit`. Under `--dry-run` only the staging dir is written, and `patch_disko`/`patch_prime` patch that copy.
 - `patch_disko` and `run_disko`: sed-patches `/dev/CHANGE-ME` in `hosts/$HOST/disko.nix`, verified with `grep -qF`, then builds and runs that host's disko script.
+- `resolve_install_user`: after `git add -A`, reads the login user from `nix eval …#nixosConfigurations.$HOST.config.krane.user.name`, or from the prompt for a new host under `--dry-run`.
 - `generate_hardware_config`: `nixos-generate-config`, checked for `availableKernelModules` and the absence of `fileSystems`.
 - `patch_prime`: on `tarmantria` only, converts `lspci -D` addresses to `PCI:B:D:F` decimal and patches `krane.prime.intelBusId`/`nvidiaBusId`, once per bus ID.
-- `commit_hardware_config`: commits with a throwaway `krane@localhost` identity if none is already configured.
+- `commit_hardware_config`: commits (`Add <name> host` for a new host) with a throwaway `<user>@localhost` identity if none is already configured.
 - `run_nixos_install`: `nixos-install --flake "$REPO_ROOT#$HOST" --no-root-passwd`, plus `flake_config_opt`'s `--option extra-substituters ... --option extra-trusted-public-keys ...` on the CUDA host, nothing on the others. Retries up to 3 times on failure, 10 seconds apart, confirmed each time.
-- `finish_install`: copies the repo to `/mnt/home/krane/.dotfiles`, chowns it, verifies `flake.nix` landed, sets krane's password, offers a reboot.
+- `finish_install`: copies the repo to `/mnt/home/<user>/.dotfiles`, chowns it, verifies `flake.nix` landed, sets the user's password, warns that a new host is only a local commit, and offers a reboot.
 
 ### Setup mode (`run_setup_mode`)
 
-- `preflight_setup`: refuses to run as root, requires `git just sops age ssh-to-age`.
+- `preflight_setup`: refuses to run as root, requires `git just sops age ssh-to-age`, and dies when the host (`--host` or `hostname`) is not under `hosts/`.
 - `run_bootstrap_sops`: runs `scripts/bootstrap-sops.sh $HOST`, offers to commit `.sops.yaml`.
 - `edit_host_secrets`: offers `sops secrets/$HOST.yaml`, skipped under `--yes`, then offers to commit it.
 - `setup_rust` and `check_flathub`: offer the Rust toolchain and the flathub remote, each independently.

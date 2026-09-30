@@ -1,12 +1,13 @@
-{ pkgs, ... }:
+{ kraneUser, pkgs, ... }:
 {
   programs.git = {
     enable = true;
 
     settings = {
       # programs.git.userName/.userEmail are renamed to settings.user.{name,email} on this revision.
-      user.name = "krane";
-      user.email = "chris@krane.dev";
+      # Per host, from krane.user.gitName/gitEmail (modules/nixos/user.nix).
+      user.name = kraneUser.gitName;
+      user.email = kraneUser.gitEmail;
 
       core.editor = "nvim";
       core.autocrlf = "input";

@@ -1,5 +1,6 @@
 # tariognatha, the desktop: single NVIDIA GPU, RTX 4070 Ti class, no
-# PRIME offload. Imported only by hosts/tariognatha/default.nix.
+# PRIME offload. Imported by hosts/tariognatha/default.nix and by hosts
+# scaffolded with templates/host/profiles/nvidia-desktop.nix.in.
 { config, pkgs, ... }:
 {
   services.xserver.videoDrivers = [ "nvidia" ];

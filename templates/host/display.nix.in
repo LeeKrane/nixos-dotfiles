@@ -1,0 +1,37 @@
+# home-manager module: display / input layout for @HOST@, imported at the user level from
+# hosts/@HOST@/default.nix, rendered to Lua by modules/home/hypr-config.nix. Scaffolded with
+# one catch-all monitor rule because the live ISO runs no Hyprland to detect outputs: after
+# first login, check `hyprctl monitors -j` and name the real outputs here (see
+# hosts/tariognatha/display.nix for a multi-monitor layout).
+{ osConfig, ... }:
+{
+  krane.hypr = {
+    monitors = [
+      # Empty output: the rule applies to every monitor, at its preferred mode.
+      {
+        output = "";
+        mode = "preferred";
+        position = "auto";
+        scale = 1;
+      }
+    ];
+
+    # Layout/variant come from krane.keyboard (modules/nixos/keyboard.nix), set
+    # in default.nix, so locale.nix's xkb/TTY keymap and this Hyprland setting
+    # never drift apart.
+    settings.input = {
+      kb_layout = osConfig.krane.keyboard.layout;
+      kb_variant = osConfig.krane.keyboard.variant;
+@TOUCHPAD@
+    };
+
+    # Same as the other hosts. See hosts/tariognatha/display.nix for why.
+    variables = {
+      terminal = "kitty";
+      browser = "zen-beta";
+      codeEditor = "kitty -1 nvim";
+      textEditor = "kitty -1 nvim";
+      fileManager = "dolphin";
+    };
+  };
+}

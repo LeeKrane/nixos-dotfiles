@@ -2,7 +2,7 @@
 # everything that assumes real NVIDIA hardware or a real disk so this builds as a plain llvmpipe
 # smoke test. All overrides use mkForce: the base host modules set these at normal priority, so a
 # plain definition here would conflict instead of overriding.
-{ lib, ... }:
+{ config, lib, ... }:
 {
   # No GPU passthrough here: force generic `modesetting` instead of nvidia-desktop.nix's "nvidia".
   services.xserver.videoDrivers = lib.mkForce [ "modesetting" ];
@@ -40,10 +40,10 @@
 
     services.greetd.settings.initial_session = {
       command = "uwsm start hyprland-uwsm.desktop";
-      user = "krane";
+      user = config.krane.user.name;
     };
 
     # Throwaway login for the interactive smoke test only. Never used on real hardware.
-    users.users.krane.initialPassword = "krane";
+    users.users.${config.krane.user.name}.initialPassword = "krane";
   };
 }

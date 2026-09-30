@@ -39,9 +39,13 @@ fmt:
 lint:
     scripts/docker-check.sh lint
 
-# bash -n, shellcheck and three --dry-run runs of install.sh, in docker.
+# bash -n, shellcheck and four --dry-run runs of install.sh, in docker.
 install-lint:
     scripts/docker-check.sh shellcheck
+
+# Scaffolds a throwaway testhost for every GPU profile x form factor in a temporary git worktree of HEAD and evaluates each, needs local Nix, commit first.
+check-new-host:
+    scripts/check-new-host.sh
 
 # Opens FILE in $EDITOR through sops, never routed through the docker sandbox.
 sops-edit FILE:

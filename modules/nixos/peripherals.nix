@@ -31,7 +31,7 @@
   #   KERNEL=="uinput", GROUP="uinput", MODE="0660", OPTIONS+="static_node=uinput"
   # '';
   # users.groups.uinput = { };
-  # users.users.krane.extraGroups = [ "uinput" ];
+  # users.users.${config.krane.user.name}.extraGroups = [ "uinput" ];
 
   services.udisks2.enable = true;
 

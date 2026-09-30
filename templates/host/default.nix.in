@@ -1,0 +1,31 @@
+# @HOST@: scaffolded by install.sh from templates/host/ (GPU profile @PROFILE_NAME@,
+# form factor @FORM_FACTOR@). From here on it is an ordinary host config: edit it freely.
+{ config, inputs, ... }:
+{
+  imports = [
+    ./hardware-configuration.nix
+    ./disko.nix
+@PROFILE_IMPORTS@
+@FORM_FACTOR_IMPORTS@
+  ];
+@PROFILE@
+
+  # The login account and its git identity (modules/nixos/user.nix).
+  krane.user = {
+    name = "@USERNAME@";
+    gitName = "@GIT_NAME@";
+    gitEmail = "@GIT_EMAIL@";
+  };
+
+  # Keyboard layout/variant (modules/nixos/keyboard.nix), read by locale.nix
+  # and, via osConfig, by display.nix's Hyprland settings.
+  krane.keyboard = {
+    layout = "@KB_LAYOUT@";
+    variant = "@KB_VARIANT@";
+  };
+
+  system.stateVersion = "26.05";
+
+  # display.nix sets krane.hypr.*, a home-manager module, imported at the user level.
+  home-manager.users.${config.krane.user.name}.imports = [ ./display.nix ];
+}

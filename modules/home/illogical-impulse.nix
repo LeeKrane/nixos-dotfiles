@@ -177,7 +177,7 @@ in
   # and latches emergency mode (no binds) until the next explicit reload. Reload once the tree is
   # complete and our overrides are in. `config-only` skips the monitor reapply; execs.lua keeps
   # every exec inside hyprland.start, so nothing respawns.
-  # home-manager-krane.service (logs as hm-activate-krane) does not get HYPRLAND_INSTANCE_SIGNATURE,
+  # home-manager-<user>.service (logs as hm-activate-<user>) does not get HYPRLAND_INSTANCE_SIGNATURE,
   # so fall back to scanning the runtime dir. `-S` is also true for a socket a crashed instance left
   # behind, so the reload itself is the liveness test: try each candidate, stop at the first that answers.
   home.activation.kraneIiHyprReload = lib.hm.dag.entryAfter [ "kraneIiOverrides" "kraneIiPatches" ] ''
