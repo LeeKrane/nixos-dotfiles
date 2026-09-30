@@ -36,7 +36,7 @@ jobs:
           ref: ${{ inputs.ref }}
       - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
       - name: nixfmt
-        run: nix fmt -- --check .
+        run: nix fmt -- --ci
       - name: statix
         run: nix shell --inputs-from . nixpkgs#statix -c statix check .
       - name: deadnix

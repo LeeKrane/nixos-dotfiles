@@ -114,8 +114,8 @@ case "$mode" in
         run_in_container "nix eval .#nixosConfigurations.$host.config.system.build.toplevel.drvPath"
         ;;
     fmt)
-        # nix fmt with no path reads empty stdin instead of the tree, so pass "." explicitly.
-        run_in_container 'nix fmt -- .'
+        # nixfmt-tree (treefmt) formats the whole tree when given no paths.
+        run_in_container 'nix fmt'
         ;;
     lint)
         # Report-only, each check falls through to status=1 instead of aborting.

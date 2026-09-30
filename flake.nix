@@ -100,7 +100,7 @@
 
       overlays.default = nixpkgs.lib.composeManyExtensions overlaysList;
 
-      formatter.${system} = pkgs.nixfmt;
+      formatter.${system} = pkgs.nixfmt-tree;
 
       devShells.${system}.default = pkgs.mkShell {
         packages = with pkgs; [
