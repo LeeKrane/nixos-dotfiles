@@ -11,15 +11,15 @@ Drop when: the pinned Translator.qml paste icon colour reads pasteButton.enabled
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
-index 2f68669c..90e26b1a 100644
+index f0dea782..35bbc940 100644
 --- a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
-@@ -171,7 +171,7 @@ Item {
+@@ -191,7 +191,7 @@ Item {
                      horizontalAlignment: Text.AlignHCenter
                      iconSize: Appearance.font.pixelSize.larger
                      text: "content_paste"
 -                    color: deleteButton.enabled ? Appearance.colors.colOnLayer1 : Appearance.colors.colSubtext
-+                    color: pasteButton.enabled ? Appearance.colors.colOnLayer1 : Appearance.colors.colSubtext
++                    color: Appearance.colors.colOnLayer1
                  }
                  onClicked: {
                      root.inputField.text = Quickshell.clipboardText

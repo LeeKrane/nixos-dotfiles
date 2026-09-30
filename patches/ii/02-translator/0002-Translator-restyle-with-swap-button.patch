@@ -10,13 +10,13 @@ Port: hand-ported (squashed; dropped bar hunks and comment stripping; removed
   buttonColor shadow; per-pill hover tokens; added scrolling)
 Drop when: never (feature, not a fix); revisit if upstream restyles Translator.qml
 ---
- .../ii/modules/ii/sidebarLeft/Translator.qml  | 178 +++++++++++-------
+ .../ii/modules/ii/sidebarLeft/Translator.qml  | 179 +++++++++++-------
  .../translator/LanguageSelectorButton.qml     |   9 +-
  .../ii/sidebarLeft/translator/TextCanvas.qml  | 101 ++++++----
- 3 files changed, 182 insertions(+), 106 deletions(-)
+ 3 files changed, 183 insertions(+), 106 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
-index 994880eb..bde79536 100644
+index 994880eb..dfd28239 100644
 --- a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
 @@ -39,6 +39,18 @@ Item {
@@ -123,7 +123,7 @@ index 994880eb..bde79536 100644
              placeholderText: Translation.tr("Enter text to translate...")
              onInputTextChanged: {
                  translateTimer.restart();
-@@ -217,6 +159,98 @@ Item {
+@@ -217,6 +159,99 @@ Item {
                  }
              }
          }
@@ -150,6 +150,7 @@ index 994880eb..bde79536 100644
 +                colBackground: Appearance.colors.colTertiaryContainer
 +                colBackgroundHover: Appearance.colors.colTertiaryContainerHover
 +                buttonRadius: Appearance.rounding.full
++                altAction: () => root.swapLanguages() // Long press also swaps
 +                contentItem: MaterialSymbol {
 +                    anchors.centerIn: parent
 +                    horizontalAlignment: Text.AlignHCenter
