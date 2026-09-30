@@ -206,4 +206,6 @@ current. Dependabot pull requests trigger `check.yml` normally.
 - `.github/workflows/update.yml` (new)
 - `.github/dependabot.yml` (new)
 - Nix and shell sources touched only as needed to pass `lint` cleanly.
-- `README.md`: one line under Quickstart pointing to the CI workflows.
+- `README.md`: GitHub-native status badges for `check.yml` (filtered to
+  `branch=main`) and `update.yml` directly under the title, and one line under
+  Quickstart pointing to the CI workflows.
