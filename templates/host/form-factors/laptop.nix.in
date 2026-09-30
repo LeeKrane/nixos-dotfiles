@@ -1,0 +1,15 @@
+# Form factor laptop: nixos-hardware's laptop and SSD profiles, plus a touchpad block in
+# display.nix. install.sh's render_host_templates splices "imports" into default.nix and
+# "touchpad" into display.nix's settings.input.
+#== imports
+
+    # Sets services.tlp.enable = mkDefault (!power-profiles-daemon.enable), so tlp stays disabled.
+    inputs.nixos-hardware.nixosModules.common-pc-laptop
+
+    # Same as common-pc-ssd (fstrim only), redundant with boot.nix's services.fstrim.enable = true.
+    inputs.nixos-hardware.nixosModules.common-pc-laptop-ssd
+#== touchpad
+      touchpad = {
+        natural_scroll = true;
+        tap_to_click = true;
+      };

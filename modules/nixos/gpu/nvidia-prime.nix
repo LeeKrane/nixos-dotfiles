@@ -1,5 +1,6 @@
 # tarmantria, the laptop: Intel iGPU and NVIDIA dGPU, PRIME offload.
-# Imported only by hosts/tarmantria/default.nix.
+# Imported by hosts/tarmantria/default.nix and by hosts scaffolded with
+# templates/host/profiles/intel-nvidia-prime.nix.in.
 {
   config,
   lib,

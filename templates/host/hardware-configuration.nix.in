@@ -1,0 +1,5 @@
+# Placeholder written by install.sh's scaffold_host so hosts/@HOST@ evaluates (run_disko
+# builds the disko script from it) before generate_hardware_config replaces this file with
+# `nixos-generate-config --no-filesystems` output. Never boot a system built from this one.
+{ ... }:
+{ }

@@ -64,6 +64,22 @@ for _d in "$REPO_ROOT"/hosts/*/; do
 done
 unset _d
 
+# templates/host/ is what the new-host flow renders hosts/<name>/ from.
+# Profile and form-factor names are the file names under its profiles/ and
+# form-factors/ (and scripts/check-new-host.sh mirrors both lists).
+TEMPLATE_DIR="$REPO_ROOT/templates/host"
+GPU_PROFILES=(amd-igpu intel-igpu nvidia-desktop intel-nvidia-prime)
+FORM_FACTORS=(laptop desktop)
+# Defaults for a new host's answers, the values the original hosts use.
+# shellcheck disable=SC2034 # read by the interactive new-host flow, a later task.
+DEFAULT_INSTALL_USER=krane
+# shellcheck disable=SC2034 # read by the interactive new-host flow, a later task.
+DEFAULT_GIT_EMAIL=chris@krane.dev
+# shellcheck disable=SC2034,SC2209 # "at" is the keyboard layout, not the job-scheduling command.
+DEFAULT_KB_LAYOUT="at"
+# shellcheck disable=SC2034 # read by the interactive new-host flow, a later task.
+DEFAULT_KB_VARIANT=nodeadkeys
+
 MODE=""
 # Not "${HOST:-}", so an ambient $HOST in the shell never picks the target.
 HOST=""
@@ -75,6 +91,7 @@ SELF_TEST=false
 SELF_TEST_TRIGGER_ERR=false
 SELF_TEST_CHECK_DISKO_SED=false
 SELF_TEST_CHECK_PRIME_SED=false
+SELF_TEST_CHECK_SCAFFOLD=false
 SELF_TEST_FAILURES=0
 # The most recent command run/run_sh/capture executed, so err_trap can show
 # the real failing command instead of just a line number. Cleared to ""
@@ -411,6 +428,10 @@ while [ "$#" -gt 0 ]; do
             SELF_TEST_CHECK_PRIME_SED=true
             shift
             ;;
+        --self-test-check-scaffold)
+            SELF_TEST_CHECK_SCAFFOLD=true
+            shift
+            ;;
         -h | --help)
             usage
             exit 0
@@ -567,6 +588,90 @@ choose_host() {
     local suggestion
     suggestion=$(suggest_host)
     HOST=$(choose_one "Select the target host" "$suggestion" "${AVAILABLE_HOSTS[@]}")
+}
+
+# Escapes $1 for a Nix double-quoted string: \ first, then " and ${, so
+# any git name or email renders as the same string it was typed as.
+nix_string_escape() {
+    local s="$1"
+    s=${s//\\/\\\\}
+    s=${s//\"/\\\"}
+    s=${s//\$\{/\\\$\{}
+    printf '%s' "$s"
+}
+
+# Escapes $1 for the replacement side of a sed s/// using / as delimiter:
+# / ends the expression, & inserts the match and \ escapes, so all three
+# get a backslash.
+sed_replacement_escape() {
+    printf '%s' "$1" | sed -e 's/[\/&\\]/\\&/g'
+}
+
+# Prints section $2 of template $1: the lines after a "#== $2" header up to
+# the next "#== " header. Lines before the first header are the file's own
+# comment and never printed. A missing section prints nothing.
+template_section() {
+    awk -v want="$2" '/^#== / { cur = $2; next } cur == want' "$1"
+}
+
+# Replaces every line of $1 that is exactly @$2@ (surrounding blanks
+# ignored) with $3, in place. An empty $3 drops the line. $3 reaches awk
+# through ENVIRON, not -v, so awk never rewrites its backslashes.
+replace_block_token() {
+    local file="$1" token="@$2@" tmp
+    tmp=$(mktemp "$file.XXXXXX")
+    BLOCK="$3" awk -v tok="$token" '
+        { t = $0; gsub(/^[ \t]+|[ \t]+$/, "", t) }
+        t == tok { if (ENVIRON["BLOCK"] != "") print ENVIRON["BLOCK"]; next }
+        { print }
+    ' "$file" >"$tmp"
+    mv "$tmp" "$file"
+}
+
+# Renders templates/host/ into $1 for host $2: the profile's and form
+# factor's #== sections first, then every scalar @TOKEN@ through sed with
+# its value Nix- and sed-escaped. Writes only under $1, which callers point
+# at a temp dir, so this runs for real under --dry-run too.
+render_host_templates() {
+    local dest="$1" host="$2" user="$3" git_name="$4" git_email="$5"
+    local profile="$6" form_factor="$7" kb_layout="$8" kb_variant="$9"
+    local profile_file="$TEMPLATE_DIR/profiles/$profile.nix.in"
+    local ff_file="$TEMPLATE_DIR/form-factors/$form_factor.nix.in"
+    [ -f "$profile_file" ] || die "unknown GPU profile '$profile', expected one of: ${GPU_PROFILES[*]}"
+    [ -f "$ff_file" ] || die "unknown form factor '$form_factor', expected one of: ${FORM_FACTORS[*]}"
+    mkdir -p "$dest"
+    local name
+    for name in default.nix disko.nix display.nix hardware-configuration.nix; do
+        cp "$TEMPLATE_DIR/$name.in" "$dest/$name"
+    done
+    replace_block_token "$dest/default.nix" PROFILE_IMPORTS "$(template_section "$profile_file" imports)"
+    replace_block_token "$dest/default.nix" FORM_FACTOR_IMPORTS "$(template_section "$ff_file" imports)"
+    replace_block_token "$dest/default.nix" PROFILE "$(template_section "$profile_file" body)"
+    replace_block_token "$dest/display.nix" TOUCHPAD "$(template_section "$ff_file" touchpad)"
+    # GIT_NAME and GIT_EMAIL go last so a value can never feed a later token.
+    local sed_args=() pair key value
+    for pair in "HOST=$host" "USERNAME=$user" "PROFILE_NAME=$profile" "FORM_FACTOR=$form_factor" \
+        "KB_LAYOUT=$kb_layout" "KB_VARIANT=$kb_variant" "GIT_NAME=$git_name" "GIT_EMAIL=$git_email"; do
+        key="${pair%%=*}"
+        value="${pair#*=}"
+        sed_args+=(-e "s/@${key}@/$(sed_replacement_escape "$(nix_string_escape "$value")")/g")
+    done
+    for name in default.nix disko.nix display.nix hardware-configuration.nix; do
+        sed -i "${sed_args[@]}" "$dest/$name"
+    done
+    if grep -nE '@(HOST|USERNAME|GIT_NAME|GIT_EMAIL|PROFILE_NAME|FORM_FACTOR|KB_LAYOUT|KB_VARIANT|PROFILE_IMPORTS|FORM_FACTOR_IMPORTS|PROFILE|TOUCHPAD)@' "$dest"/*.nix >&2; then
+        die "unrendered @TOKEN@ left in $dest, see the lines above"
+    fi
+}
+
+# nix-instantiate --parse catches a template or substitution mistake before
+# anything lands in hosts/ or the disk is touched.
+parse_check_nix_dir() {
+    local file
+    for file in "$1"/*.nix; do
+        nix-instantiate --parse "$file" >/dev/null \
+            || die "rendered $(basename "$file") does not parse as Nix, see the error above"
+    done
 }
 
 # Excludes zram, device-mapper, MD-RAID and loop devices by name, since
@@ -1337,6 +1442,77 @@ if $SELF_TEST_CHECK_PRIME_SED; then
     exit 0
 fi
 
+# Renders every GPU profile x form factor from templates/host/ into a
+# throwaway dir with the real (non-dry-run) helpers and parse-checks each
+# result, the same checks scaffold_host runs before it writes hosts/<name>/.
+if $SELF_TEST_CHECK_SCAFFOLD; then
+    self_test_tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/krane-install-selftest.XXXXXX")
+    trap 'rc=$?; rm -rf "$self_test_tmpdir"; (exit $rc); on_exit' EXIT
+    DRY_RUN=false
+    command -v nix-instantiate >/dev/null 2>&1 || die "nix-instantiate not found, cannot parse-check the templates"
+    for st_profile in "${GPU_PROFILES[@]}"; do
+        for st_ff in "${FORM_FACTORS[@]}"; do
+            st_dir="$self_test_tmpdir/$st_profile-$st_ff"
+            render_host_templates "$st_dir" testhost tester "Test Er" tester@example.invalid \
+                "$st_profile" "$st_ff" at nodeadkeys
+            parse_check_nix_dir "$st_dir"
+            for st_file in default.nix disko.nix display.nix hardware-configuration.nix; do
+                [ -f "$st_dir/$st_file" ] || die "$st_profile/$st_ff: $st_file was not rendered"
+            done
+            grep -qF 'name = "tester";' "$st_dir/default.nix" \
+                || die "$st_profile/$st_ff: default.nix has no krane.user name line"
+            grep -qF 'system.stateVersion = "26.05";' "$st_dir/default.nix" \
+                || die "$st_profile/$st_ff: default.nix has no stateVersion 26.05"
+            grep -qF 'device = "/dev/CHANGE-ME";' "$st_dir/disko.nix" \
+                || die "$st_profile/$st_ff: disko.nix lost the CHANGE-ME placeholder patch_disko needs"
+            grep -qF 'kb_layout = "at";' "$st_dir/display.nix" \
+                || die "$st_profile/$st_ff: display.nix has no kb_layout line"
+            if [ "$st_ff" = laptop ]; then
+                grep -qF 'tap_to_click = true;' "$st_dir/display.nix" \
+                    || die "$st_profile/$st_ff: laptop display.nix has no touchpad block"
+            else
+                ! grep -qF 'touchpad' "$st_dir/display.nix" \
+                    || die "$st_profile/$st_ff: desktop display.nix has a touchpad block"
+            fi
+            # host_uses_cuda keys on this import.
+            if [ "$st_profile" = nvidia-desktop ]; then
+                grep -q 'gpu/nvidia-desktop' "$st_dir/default.nix" \
+                    || die "$st_profile/$st_ff: default.nix does not import gpu/nvidia-desktop.nix"
+            else
+                ! grep -q 'gpu/nvidia-desktop' "$st_dir/default.nix" \
+                    || die "$st_profile/$st_ff: default.nix imports gpu/nvidia-desktop.nix"
+            fi
+            # patch_prime keys on these two lines, with its own regex.
+            if [ "$st_profile" = intel-nvidia-prime ]; then
+                grep -qE '^[[:space:]]*krane\.prime\.intelBusId[[:space:]]*=[[:space:]]*"' "$st_dir/default.nix" \
+                    || die "$st_profile/$st_ff: no intelBusId line in the form patch_prime expects"
+                grep -qE '^[[:space:]]*krane\.prime\.nvidiaBusId[[:space:]]*=[[:space:]]*"' "$st_dir/default.nix" \
+                    || die "$st_profile/$st_ff: no nvidiaBusId line in the form patch_prime expects"
+                patch_prime_line "$st_dir/default.nix" intelBusId PCI:9:9:9
+                patch_prime_line "$st_dir/default.nix" nvidiaBusId PCI:8:8:8
+                parse_check_nix_dir "$st_dir"
+            else
+                ! grep -qE '^[[:space:]]*krane\.prime\.' "$st_dir/default.nix" \
+                    || die "$st_profile/$st_ff: non-PRIME profile has krane.prime lines"
+            fi
+        done
+    done
+    # sed's / & \ and Nix's " \ ${ must land as the same string, not break
+    # the sed expression or the Nix string.
+    st_dir="$self_test_tmpdir/escaping"
+    # shellcheck disable=SC2016 # the literal ${x} is the point of this value.
+    render_host_templates "$st_dir" testhost tester 'A/B & C\D "q" ${x}' 'a&b/c\d@example.invalid' \
+        amd-igpu laptop at nodeadkeys
+    parse_check_nix_dir "$st_dir"
+    # shellcheck disable=SC2016 # matches the escaped Nix text literally.
+    grep -qF 'gitName = "A/B & C\\D \"q\" \${x}";' "$st_dir/default.nix" \
+        || die "git name with / & \\ \" \${ was not escaped for Nix and sed"
+    grep -qF 'gitEmail = "a&b/c\\d@example.invalid";' "$st_dir/default.nix" \
+        || die "git email with & / \\ was not escaped for Nix and sed"
+    echo "self-test-check-scaffold: OK"
+    exit 0
+fi
+
 self_test() {
     echo "== self-test: run_sh honours pipefail ==" >&2
     local saved_dry_run="$DRY_RUN" rc=0
@@ -1412,6 +1588,17 @@ self_test() {
     else
         echo "FAIL: patch_prime_line sed check failed (rc=$rc4)" >&2
         echo "  captured output: $out4" >&2
+        SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
+    fi
+
+    echo "== self-test: new-host templates render and parse (real, non-dry-run) ==" >&2
+    local out7 rc7=0
+    out7=$(bash "$0" --self-test-check-scaffold 2>&1) || rc7=$?
+    if [ "$rc7" -eq 0 ] && printf '%s' "$out7" | grep -q "self-test-check-scaffold: OK"; then
+        echo "OK: every GPU profile x form factor renders, parses and keeps its install.sh hooks" >&2
+    else
+        echo "FAIL: new-host template check failed (rc=$rc7)" >&2
+        echo "  captured output: $out7" >&2
         SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
     fi
 

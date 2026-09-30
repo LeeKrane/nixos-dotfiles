@@ -1,0 +1,24 @@
+# GPU profile amd-igpu: AMD CPU with an integrated Radeon GPU and no dGPU, taractias's setup.
+# install.sh's render_host_templates splices "imports" into default.nix's imports list and
+# "body" after it. Each section keeps its own leading blank line.
+#== imports
+
+    # Sets hardware.cpu.amd.updateMicrocode = mkDefault enableRedistributableFirmware, already true.
+    inputs.nixos-hardware.nixosModules.common-cpu-amd
+
+    # Sets videoDrivers/hardware.graphics/amdgpu.initrd as mkDefault, matched below, no conflict.
+    inputs.nixos-hardware.nixosModules.common-gpu-amd
+#== body
+
+  # Explicit rather than left to common-gpu-amd's mkDefault, so this reads correctly standalone.
+  hardware.graphics = {
+    enable = true;
+    enable32Bit = true;
+  };
+
+  # VA-API decode goes through Mesa's radeonsi, not the NVIDIA hosts' shim.
+  environment.sessionVariables.LIBVA_DRIVER_NAME = "radeonsi";
+
+  # modules/nixos/hardware.nix sets hardware.cpu.intel.updateMicrocode = mkDefault true. This
+  # host is AMD, so plain `false` overrides it. AMD microcode uses common-cpu-amd's mkDefault.
+  hardware.cpu.intel.updateMicrocode = false;

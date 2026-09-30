@@ -1,0 +1,7 @@
+# Form factor desktop: nixos-hardware's SSD profile, no touchpad block.
+# install.sh's render_host_templates splices "imports" into default.nix.
+#== imports
+
+    # fstrim only, redundant with boot.nix's services.fstrim.enable = true.
+    inputs.nixos-hardware.nixosModules.common-pc-ssd
+#== touchpad

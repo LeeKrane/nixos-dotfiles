@@ -1,0 +1,64 @@
+# disko disk layout for @HOST@ (@FORM_FACTOR@): GPT + ESP + btrfs with subvolumes,
+# zstd-compressed, the same layout as the other hosts. See docs/INSTALL.md.
+{ ... }:
+{
+  disko.devices.disk.main = {
+    # CHANGE-ME: install.sh's patch_disko fills in the disk picked at install time, preferring
+    # a /dev/disk/by-id/ path so it survives disk reordering.
+    device = "/dev/CHANGE-ME";
+    type = "disk";
+    content = {
+      type = "gpt";
+      partitions = {
+        ESP = {
+          size = "1G";
+          type = "EF00";
+          priority = 1;
+          content = {
+            type = "filesystem";
+            format = "vfat";
+            mountpoint = "/boot";
+            mountOptions = [ "umask=0077" ];
+          };
+        };
+        root = {
+          size = "100%";
+          content = {
+            type = "btrfs";
+            extraArgs = [ "-f" ];
+            subvolumes = {
+              "@" = {
+                mountpoint = "/";
+                mountOptions = [
+                  "compress=zstd:1"
+                  "noatime"
+                ];
+              };
+              "@home" = {
+                mountpoint = "/home";
+                mountOptions = [
+                  "compress=zstd:1"
+                  "noatime"
+                ];
+              };
+              "@nix" = {
+                mountpoint = "/nix";
+                mountOptions = [
+                  "compress=zstd:1"
+                  "noatime"
+                ];
+              };
+              "@snapshots" = {
+                mountpoint = "/.snapshots";
+                mountOptions = [
+                  "compress=zstd:1"
+                  "noatime"
+                ];
+              };
+            };
+          };
+        };
+      };
+    };
+  };
+}
