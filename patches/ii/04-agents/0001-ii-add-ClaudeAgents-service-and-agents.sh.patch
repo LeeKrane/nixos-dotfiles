@@ -7,9 +7,17 @@ Problem: nothing in the shell shows which Claude Code sessions run, which are bu
 Port: new (no fork origin). services/ClaudeAgents.qml polls scripts/claude/agents.sh (claude agents --json plus pid ancestry and transcript mtime) only while active; services/claude-agents.js holds the testable matching and sorting; sidebar.agents.enable defaults to true.
 Drop when: the pinned ii ships an equivalent agents tab, or `claude agents --json` is removed.
 ---
+ .../quickshell/ii/modules/common/Config.qml   |   3 +
+ .../quickshell/ii/scripts/claude/agents.sh    |  46 ++++++
+ .../quickshell/ii/services/ClaudeAgents.qml   | 135 ++++++++++++++++
+ .../quickshell/ii/services/claude-agents.js   | 145 ++++++++++++++++++
+ 4 files changed, 329 insertions(+)
+ create mode 100755 dots/.config/quickshell/ii/scripts/claude/agents.sh
+ create mode 100644 dots/.config/quickshell/ii/services/ClaudeAgents.qml
+ create mode 100644 dots/.config/quickshell/ii/services/claude-agents.js
 
 diff --git a/dots/.config/quickshell/ii/modules/common/Config.qml b/dots/.config/quickshell/ii/modules/common/Config.qml
-index 30e8743..ac0851f 100644
+index 30e87439..ac0851f3 100644
 --- a/dots/.config/quickshell/ii/modules/common/Config.qml
 +++ b/dots/.config/quickshell/ii/modules/common/Config.qml
 @@ -504,6 +504,9 @@ Singleton {
@@ -24,7 +32,7 @@ index 30e8743..ac0851f 100644
                      property string defaultProvider: "yandere"
 diff --git a/dots/.config/quickshell/ii/scripts/claude/agents.sh b/dots/.config/quickshell/ii/scripts/claude/agents.sh
 new file mode 100755
-index 0000000..115e09b
+index 00000000..115e09bd
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/scripts/claude/agents.sh
 @@ -0,0 +1,46 @@
@@ -76,7 +84,7 @@ index 0000000..115e09b
 +    jq -c -s --slurpfile raw "$rawfile" '[$raw[0], .] | transpose | map(.[0] + .[1])'
 diff --git a/dots/.config/quickshell/ii/services/ClaudeAgents.qml b/dots/.config/quickshell/ii/services/ClaudeAgents.qml
 new file mode 100644
-index 0000000..b60d46b
+index 00000000..b60d46bb
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/services/ClaudeAgents.qml
 @@ -0,0 +1,135 @@
@@ -217,7 +225,7 @@ index 0000000..b60d46b
 +}
 diff --git a/dots/.config/quickshell/ii/services/claude-agents.js b/dots/.config/quickshell/ii/services/claude-agents.js
 new file mode 100644
-index 0000000..67c88a1
+index 00000000..67c88a1e
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/services/claude-agents.js
 @@ -0,0 +1,145 @@

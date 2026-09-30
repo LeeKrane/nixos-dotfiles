@@ -7,10 +7,16 @@ Problem: a Claude Code session blocked on a permission prompt in a window on ano
 Port: new (no fork origin). Agents.qml and agents/AgentRow.qml list ClaudeAgents.sessions; a click focuses the session's window or runs kitty -e claude attach <id>. SidebarLeftContent.qml adds the tab after Intelligence and turns polling on only while the tab is visible.
 Drop when: the pinned ii ships an equivalent agents tab, or `claude agents --json` is removed.
 ---
+ .../ii/modules/ii/sidebarLeft/Agents.qml      | 82 +++++++++++++++++++
+ .../ii/sidebarLeft/SidebarLeftContent.qml     | 22 ++++-
+ .../ii/sidebarLeft/agents/AgentRow.qml        | 76 +++++++++++++++++
+ 3 files changed, 179 insertions(+), 1 deletion(-)
+ create mode 100644 dots/.config/quickshell/ii/modules/ii/sidebarLeft/Agents.qml
+ create mode 100644 dots/.config/quickshell/ii/modules/ii/sidebarLeft/agents/AgentRow.qml
 
 diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Agents.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Agents.qml
 new file mode 100644
-index 0000000..0c60ac9
+index 00000000..0c60ac9d
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Agents.qml
 @@ -0,0 +1,82 @@
@@ -97,7 +103,7 @@ index 0000000..0c60ac9
 +    }
 +}
 diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/SidebarLeftContent.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/SidebarLeftContent.qml
-index 654b46d..381d667 100644
+index 654b46df..381d6673 100644
 --- a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/SidebarLeftContent.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/SidebarLeftContent.qml
 @@ -1,3 +1,4 @@
@@ -160,7 +166,7 @@ index 654b46d..381d667 100644
              Translator {}
 diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/agents/AgentRow.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/agents/AgentRow.qml
 new file mode 100644
-index 0000000..d797936
+index 00000000..d7979362
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/agents/AgentRow.qml
 @@ -0,0 +1,76 @@
