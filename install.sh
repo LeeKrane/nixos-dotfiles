@@ -129,9 +129,14 @@ NEW_HOST_MENU_ENTRY="+ new host"
 # SCAFFOLD_PREVIEW_DIR points host_dir at it under --dry-run, which never
 # writes hosts/<name>/. SCAFFOLD_PENDING is true only while hosts/$HOST/ and
 # .sops.yaml may be half-written, which is when on_exit rolls them back.
+# SCAFFOLD_SOPS_SNAPSHOT is a copy of .sops.yaml's exact on-disk content
+# (including any uncommitted edits) taken right before register_sops_host
+# runs, so a rollback restores that content instead of discarding those
+# edits; also removed on exit.
 SCAFFOLD_STAGING=""
 SCAFFOLD_PREVIEW_DIR=""
 SCAFFOLD_PENDING=false
+SCAFFOLD_SOPS_SNAPSHOT=""
 
 # Runs from run_install_mode after a successful install and from on_exit, so
 # an aborted run never leaves the swapfile inside the new root. Warns
@@ -151,10 +156,13 @@ teardown_install_swap() {
 }
 
 # Undoes a scaffold_host that did not finish: removes the new hosts/$HOST/
-# and restores .sops.yaml from the index. SCAFFOLD_PENDING is only true
-# between scaffold_host's "does not exist yet" check and its last step, and
-# never under --dry-run, so this can never touch an existing host. Warns
-# instead of dying, like teardown_install_swap.
+# and restores .sops.yaml from SCAFFOLD_SOPS_SNAPSHOT (its exact content
+# right before register_sops_host ran), never from git: a `git checkout`
+# would discard any uncommitted .sops.yaml edits the user already had on
+# disk before scaffold_host started. SCAFFOLD_PENDING is only true between
+# scaffold_host's "does not exist yet" check and its last step, and never
+# under --dry-run, so this can never touch an existing host. Warns instead
+# of dying, like teardown_install_swap.
 rollback_scaffold() {
     if ! $SCAFFOLD_PENDING || [ -z "$HOST" ]; then
         return 0
@@ -162,8 +170,12 @@ rollback_scaffold() {
     SCAFFOLD_PENDING=false
     log_warn "rolling back the partial hosts/$HOST scaffold"
     rm -rf "${REPO_ROOT:?}/hosts/$HOST" || log_warn "could not remove hosts/$HOST, delete it by hand"
-    git -C "$REPO_ROOT" checkout -- .sops.yaml \
-        || log_warn "could not restore .sops.yaml, run git checkout -- .sops.yaml"
+    if [ -n "$SCAFFOLD_SOPS_SNAPSHOT" ] && [ -f "$SCAFFOLD_SOPS_SNAPSHOT" ]; then
+        cat "$SCAFFOLD_SOPS_SNAPSHOT" >"$REPO_ROOT/.sops.yaml" \
+            || log_warn "could not restore .sops.yaml, its snapshot is at $SCAFFOLD_SOPS_SNAPSHOT"
+    else
+        log_warn "no .sops.yaml snapshot to restore from, check .sops.yaml by hand"
+    fi
 }
 
 banner() {
@@ -258,6 +270,9 @@ on_exit() {
     rollback_scaffold
     if [ -n "$SCAFFOLD_STAGING" ]; then
         rm -rf "$SCAFFOLD_STAGING"
+    fi
+    if [ -n "$SCAFFOLD_SOPS_SNAPSHOT" ]; then
+        rm -f "$SCAFFOLD_SOPS_SNAPSHOT"
     fi
 }
 trap on_exit EXIT
@@ -876,7 +891,7 @@ check_new_hostname() {
             return 1
         fi
     done
-    if [ -e "$REPO_ROOT/hosts/$name" ]; then
+    if [ -e "$REPO_ROOT/hosts/$name" ] || [ -L "$REPO_ROOT/hosts/$name" ]; then
         echo "hosts/$name already exists"
         return 1
     fi
@@ -1242,7 +1257,9 @@ scaffold_host() {
     log_step "Scaffolding hosts/$HOST ($NEW_PROFILE, $NEW_FORM_FACTOR, user $NEW_USER)"
     require nix-instantiate awk
     local dest="$REPO_ROOT/hosts/$HOST"
-    [ ! -e "$dest" ] || die "$dest already exists, rerun and pick $HOST from the host list instead"
+    if [ -e "$dest" ] || [ -L "$dest" ]; then
+        die "$dest already exists, rerun and pick $HOST from the host list instead"
+    fi
     SCAFFOLD_STAGING=$(mktemp -d "${TMPDIR:-/tmp}/krane-install-scaffold.XXXXXX")
     render_host_templates "$SCAFFOLD_STAGING" "$HOST" "$NEW_USER" "$NEW_GIT_NAME" "$NEW_GIT_EMAIL" \
         "$NEW_PROFILE" "$NEW_FORM_FACTOR" "$NEW_KB_LAYOUT" "$NEW_KB_VARIANT"
@@ -1250,15 +1267,26 @@ scaffold_host() {
     log_ok "rendered and parse-checked hosts/$HOST in $SCAFFOLD_STAGING"
     if $DRY_RUN; then
         # Nothing below writes under --dry-run, so later steps read the
-        # staging copy instead (host_dir).
+        # staging copy instead (host_dir). No snapshot either: there is
+        # nothing for rollback_scaffold to ever restore.
         SCAFFOLD_PREVIEW_DIR="$SCAFFOLD_STAGING"
     else
         SCAFFOLD_PENDING=true
+        # Snapshot .sops.yaml's exact current content, uncommitted edits
+        # included, before register_sops_host mutates it. Lives in TMPDIR,
+        # never inside the repo or SCAFFOLD_STAGING (which lands in
+        # hosts/$HOST/ below, and must not carry this file along).
+        SCAFFOLD_SOPS_SNAPSHOT=$(mktemp "${TMPDIR:-/tmp}/krane-install-sops-snapshot.XXXXXX")
+        cp -p "$REPO_ROOT/.sops.yaml" "$SCAFFOLD_SOPS_SNAPSHOT"
     fi
     run mkdir -p "$dest"
     run cp -a "$SCAFFOLD_STAGING/." "$dest/"
     run register_sops_host "$REPO_ROOT/.sops.yaml" "$HOST"
     SCAFFOLD_PENDING=false
+    if [ -n "$SCAFFOLD_SOPS_SNAPSHOT" ]; then
+        rm -f "$SCAFFOLD_SOPS_SNAPSHOT"
+        SCAFFOLD_SOPS_SNAPSHOT=""
+    fi
 }
 
 # grep -qF verifies the sed actually landed, factored out so --self-test
@@ -2480,6 +2508,8 @@ EOF
         echo "  captured output: $sb_out" >&2
         sb_ok=false
     fi
+    printf '%s' "$sb_out" | grep -q 'rolling back the partial hosts/rbhost scaffold' \
+        || { echo "FAIL: no rollback log line, .sops.yaml passing the diff check below would prove nothing" >&2; sb_ok=false; }
     [ ! -e "$sb_tmp/hosts/rbhost" ] || { echo "FAIL: hosts/rbhost survived the failed scaffold" >&2; sb_ok=false; }
     [ -f "$sb_tmp/hosts/taractias/default.nix" ] || { echo "FAIL: the rollback touched hosts/taractias" >&2; sb_ok=false; }
     git -C "$sb_tmp" diff --quiet -- .sops.yaml || { echo "FAIL: .sops.yaml was not restored" >&2; sb_ok=false; }
@@ -2506,6 +2536,87 @@ EOF
     rm -rf "$sb_tmp"
     if $sb_ok; then
         echo "OK: scaffold rolls back on failure, lands on success, refuses an existing host" >&2
+    else
+        SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
+    fi
+
+    echo "== self-test: rollback_scaffold restores .sops.yaml by content, not git checkout ==" >&2
+    local rb_ok=true rb_tmp rb_committed rb_edited rb_registered rb_got
+    local saved_repo_root="$REPO_ROOT" saved_host_rb="$HOST" \
+        saved_pending="$SCAFFOLD_PENDING" saved_snapshot="$SCAFFOLD_SOPS_SNAPSHOT"
+    rb_tmp=$(mktemp -d "${TMPDIR:-/tmp}/krane-install-selftest-rollback.XXXXXX")
+    mkdir -p "$rb_tmp/hosts/taractias" "$rb_tmp/hosts/rbhost"
+    : >"$rb_tmp/hosts/taractias/default.nix"
+    : >"$rb_tmp/hosts/rbhost/x.nix"
+    rb_committed='keys:
+  - &admin_taractias age1PLACEHOLDER_ADMIN_TARACTIAS_REPLACE_VIA_BOOTSTRAP_SOPS_SH
+'
+    # A pre-existing uncommitted edit, made before scaffold_host ever ran.
+    rb_edited='keys:
+  - &admin_taractias age1PLACEHOLDER_ADMIN_TARACTIAS_REPLACE_VIA_BOOTSTRAP_SOPS_SH
+  - &uncommitted_local_edit age1UNCOMMITTED_LOCAL_EDIT_MUST_SURVIVE_ROLLBACK
+'
+    # register_sops_host's own mutation, applied after the snapshot: the
+    # thing rollback_scaffold must undo.
+    rb_registered='keys:
+  - &admin_taractias age1PLACEHOLDER_ADMIN_TARACTIAS_REPLACE_VIA_BOOTSTRAP_SOPS_SH
+  - &uncommitted_local_edit age1UNCOMMITTED_LOCAL_EDIT_MUST_SURVIVE_ROLLBACK
+  - &host_rbhost age1PLACEHOLDER_HOST_RBHOST_REPLACE_VIA_BOOTSTRAP_SOPS_SH
+'
+    (
+        cd "$rb_tmp"
+        git init -q
+        printf '%s' "$rb_committed" >.sops.yaml
+        git add -A
+        git -c user.email=t@t -c user.name=t -c commit.gpgsign=false commit -q -m init
+    )
+    printf '%s' "$rb_edited" >"$rb_tmp/.sops.yaml"
+    SCAFFOLD_SOPS_SNAPSHOT=$(mktemp "${TMPDIR:-/tmp}/krane-install-selftest-snapshot.XXXXXX")
+    printf '%s' "$rb_edited" >"$SCAFFOLD_SOPS_SNAPSHOT"
+    printf '%s' "$rb_registered" >"$rb_tmp/.sops.yaml"
+    REPO_ROOT="$rb_tmp"
+    HOST=rbhost
+    SCAFFOLD_PENDING=true
+    rollback_scaffold
+    [ ! -e "$rb_tmp/hosts/rbhost" ] || { echo "FAIL: hosts/rbhost survived rollback_scaffold" >&2; rb_ok=false; }
+    [ -e "$rb_tmp/hosts/taractias/default.nix" ] || { echo "FAIL: rollback_scaffold touched hosts/taractias" >&2; rb_ok=false; }
+    # Command substitution strips trailing newlines on every side of this
+    # comparison, so run the expected strings through it too rather than
+    # let a newline count mismatch masquerade as a content mismatch.
+    rb_got=$(command cat "$rb_tmp/.sops.yaml")
+    if [ "$rb_got" != "$(printf '%s' "$rb_edited")" ]; then
+        echo "FAIL: .sops.yaml after rollback_scaffold does not match the pre-registration snapshot" >&2
+        if [ "$rb_got" = "$(printf '%s' "$rb_committed")" ]; then
+            echo "  it matches the git-committed content instead: the uncommitted edit was discarded" >&2
+        fi
+        rb_ok=false
+    fi
+    $SCAFFOLD_PENDING && { echo "FAIL: rollback_scaffold left SCAFFOLD_PENDING=true" >&2; rb_ok=false; }
+    rm -rf "$rb_tmp" "$SCAFFOLD_SOPS_SNAPSHOT"
+    REPO_ROOT="$saved_repo_root"
+    HOST="$saved_host_rb"
+    SCAFFOLD_PENDING="$saved_pending"
+    SCAFFOLD_SOPS_SNAPSHOT="$saved_snapshot"
+    if $rb_ok; then
+        echo "OK: rollback_scaffold restores .sops.yaml from its snapshot, keeping uncommitted edits" >&2
+    else
+        SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
+    fi
+
+    echo "== self-test: check_new_hostname refuses a dangling symlink at hosts/<name> ==" >&2
+    local dl_ok=true dl_tmp saved_repo_root2="$REPO_ROOT"
+    dl_tmp=$(mktemp -d "${TMPDIR:-/tmp}/krane-install-selftest-symlink.XXXXXX")
+    mkdir -p "$dl_tmp/hosts"
+    ln -s "$dl_tmp/hosts/nonexistent-target" "$dl_tmp/hosts/deadlink"
+    REPO_ROOT="$dl_tmp"
+    if check_new_hostname deadlink >/dev/null; then
+        echo "FAIL: check_new_hostname accepted a dangling symlink at hosts/deadlink" >&2
+        dl_ok=false
+    fi
+    REPO_ROOT="$saved_repo_root2"
+    rm -rf "$dl_tmp"
+    if $dl_ok; then
+        echo "OK: check_new_hostname refuses a dangling symlink" >&2
     else
         SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
     fi
