@@ -330,7 +330,8 @@ change a tracked file on every wallpaper change.
 
 - **Directory symlink.** `~/.config/illogical-impulse` becomes a symlink
   (`home.file` with `config.lib.file.mkOutOfStoreSymlink`) to
-  `/home/krane/.dotfiles/hosts/<host>/illogical-impulse`. The repo path comes
+  `~/.dotfiles/hosts/<host>/illogical-impulse` (`/home/<krane.user.name>/...`,
+  since the user is per host). The repo path comes
   from a new option, `krane.dotfilesDir`, defaulting to
   `${config.home.homeDirectory}/.dotfiles`, which `install.sh` and
   `modules/nixvim/options.nix` already assume.
@@ -360,6 +361,15 @@ change a tracked file on every wallpaper change.
 - **Ignore rules.** `hosts/<host>/illogical-impulse/.gitignore` ignores
   `*.tmp` and `ai/` (it may hold personal prompts). `actions/` is tracked
   (resolved decision 3).
+- **New hosts.** Hosts are the directories under `hosts/`, and
+  `install.sh --new-host` scaffolds one from `templates/host/`. The template
+  carries both per-host files, `illogical-impulse/.gitignore` and
+  `ii-settings.json` (`{}`), copied as is (no placeholders) by
+  `render_host_templates`. `install.sh --self-test-check-scaffold` and
+  `just check-new-host` check that both exist. Without them a new host's
+  first activation warns about a missing repo directory, and every
+  persistent Hyprland control fails, because the writer never creates
+  `ii-settings.json`.
 - **Privacy review before the first commit.** Before any host's `config.json`
   is committed for the first time, the user reads the whole file (not just a
   diff) for personal data, such as the weather city, a booru username, or
@@ -469,7 +479,9 @@ change a tracked file on every wallpaper change.
 
 4. **Load order.** `hypr-config.nix`'s `monitorsFile` renderer (Nix, at build
    time, on every host, even when the JSON is `{}`) appends this trailer to
-   the owned `monitors.lua`:
+   the owned `monitors.lua`, after the monitor rules and after
+   `krane.hypr.extraMonitorsLua` (which stays, for tarmantria's hotplug
+   scaling):
 
    ```lua
    if is_file_exists(HOME .. "/.config/hypr/custom/krane_gui.lua") then
@@ -710,8 +722,15 @@ standard-library only.
      validation, sparse write, no-op on unchanged content, refusal on bad
      JSON, locked key, unknown key, render golden files);
    - `ii-settings-render`: renders a fixture JSON with every schema key and
-     every monitor field against each host's manifest, then runs `luac -p`.
+     every monitor field against one fixed stock host's manifest
+     (`taractias`, reached as `home-manager.users.${cfg.krane.user.name}`
+     like `lua-syntax`), then runs `luac -p`. A fixed host, so a new host
+     that sorts first cannot break it.
 2. `nixos-rebuild dry-build --flake .#<host>` for all three hosts.
+   After the render commit and after the monitor-field commit, also
+   `just check-new-host` (committed work only: it tests a worktree of
+   `HEAD`), which evaluates a host scaffolded from `templates/host/` with a
+   catch-all `output = ""` monitor and a user other than `krane`.
 3. `nix eval` of the rendered `custom/krane_gui.lua` for all three hosts
    with `{}`. Each must contain only the header.
 
@@ -742,7 +761,8 @@ standard-library only.
 | Animation presets | Pick "fast": `krane_gui.lua` contains the require, and window-open animations change. There is no "add a require line" notice. Switch: it persists. | any host |
 | Idle | On a laptop, set lock 60 and suspend 0. `hypridle.conf` has one lock listener at 60 and no suspend listener. hypridle restarted (new PID). Idle 60 s locks. Switch twice: still so. On tariognatha, the idle controls are disabled with "Set in Nix". | tarmantria, tariognatha |
 | Displays: ownership | On any host, a Nix-declared output's resolution, scale and position are disabled ("Set in Nix"), and its HDR and color fields are editable. | any host |
-| Displays: revert | With an external monitor that is not in `display.nix`, change its position (on a laptop's Nix-declared eDP-1, change its transform instead: position is Nix-owned) and wait 15 s: it reverts and the repo has no diff. Change it again, then `pkill -f settings.qml` inside the window: it still reverts (the timer is outside the UI). Change it and confirm: the repo JSON has the entry with `bootConfirmed: false`. Reboot and unlock: the dialog appears. Keep clears the flag. Let a second change time out after reboot: it is removed from the repo. | tarmantria; any host with an extra display output beyond those in `display.nix` |
+| Displays: revert | With a monitor that is not in `display.nix` (tarmantria's `HDMI-A-1` and tariognatha's `DP-1` and `DP-2` are declared, so a further output), change its position (on a laptop's Nix-declared eDP-1, change its transform instead: position is Nix-owned) and wait 15 s: it reverts and the repo has no diff. Change it again, then `pkill -f settings.qml` inside the window: it still reverts (the timer is outside the UI). Change it and confirm: the repo JSON has the entry with `bootConfirmed: false`. Reboot and unlock: the dialog appears. Keep clears the flag. Let a second change time out after reboot: it is removed from the repo. | tarmantria; any host with an extra display output beyond those in `display.nix` |
+| Displays: hotplug | tarmantria's `extraMonitorsLua` (`scale_internal`) re-sends eDP-1's rule with only output, mode, position and scale on every monitor add or remove. With a kept GUI transform on eDP-1, unplug and replug `HDMI-A-1`: the scale follows, and the transform either stays or is lost until the next reload. If it is lost, `docs/II-INTEGRATION.md` records it as a known limitation. | tarmantria |
 | Displays: HDR | On an HDR-capable output, turn on HDR: `hyprctl monitors -j` shows `colorManagementPreset` `hdr` and a 10-bit format, or the change is reverted by the timer. If kept, it survives a cold boot (first-boot check confirmed). SDR brightness changes are visible. | any host with an HDR-capable display |
 | Displays: laptop | eDP-1 scale, mode and position are disabled ("Set in Nix"); a transform change and its revert work. HDR controls are hidden (no EDID HDR). | tarmantria; taractias once verified |
 | Parse error | Put a conflict marker in `ii-settings.json` and change gaps in the GUI. An error is shown, the file is untouched, and gaps are unchanged. | any host |
@@ -757,10 +777,12 @@ Planned structure for the implementation. The user commits by hand.
 1. Phase A: `patches/ii/05-settings/` (widgets, `Config.qml` subset, window
    list, one patch per page), `krane.dotfilesDir`, the directory symlink and
    migration entry, and the per-host `illogical-impulse/` directories
-   including their `.gitignore`. Each host's `config.json` is first committed
+   including their `.gitignore`, also in `templates/host/` (with the
+   `install.sh` and `check-new-host` changes). Each host's `config.json` is first committed
    only after the privacy review in Design A.
 2. Phase B:
-   - one commit adding `hosts/*/ii-settings.json` as `{}`, `pkgs/krane-ii-settings`
+   - one commit adding `hosts/*/ii-settings.json` and
+     `templates/host/ii-settings.json` as `{}`, `pkgs/krane-ii-settings`
      and its checks;
    - one for `modules/home/ii-settings.nix`, `guiLocked`, the `monitors.lua`
      trailer and the `krane_gui.lua` owned file;
@@ -774,8 +796,11 @@ Planned structure for the implementation. The user commits by hand.
    dropped control table. Its existing text that calls
    `~/.config/illogical-impulse` excluded, ii-owned state (the copy-step
    section and the `launchOnStartup` bullet under "Patched files") is updated
-   to say the directory is now a symlink into the repo. `docs/VERIFY.md` gets
-   the per-page checks.
+   to say the directory is now a symlink into the repo. It also records the
+   tarmantria hotplug limitation if the acceptance check finds one.
+   `docs/VERIFY.md` gets the per-page checks. `README.md` and `LICENSE`
+   credit pctrade/end4-pC for the `05-settings` port, next to the
+   `01-fixes` backports.
 
 ## Resolved decisions
 

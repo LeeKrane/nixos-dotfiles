@@ -20,7 +20,7 @@
   F=https://raw.githubusercontent.com/pctrade/end4-pC/$FORK
   II=~/src/dots-hyprland/dots/.config/quickshell/ii
   ```
-  A fork page `modules/ii/settings/pages/<Page>.qml` goes to `$II/modules/settings/<Page>.qml`. `gh` is not installed; use `curl`.
+  A fork page `modules/ii/settings/pages/<Page>.qml` goes to `$II/modules/settings/<Page>.qml`. Fetches use `curl` on raw URLs (no auth needed).
 - Clone: `~/src/dots-hyprland`, branch `krane`, `git rerere` on. Sub-projects 1, 2 and 4 have landed; sub-project 3 (the dock, `03-dock`) was dropped, so there is no `krane/03-dock` tag and no `patches/ii/03-dock`. Tags `krane/01-fixes`, `krane/02-translator` and `krane/04-agents` exist and `patches/ii/01-fixes`, `patches/ii/02-translator` and `patches/ii/04-agents` are committed. This plan's commits go after `krane/04-agents`. The end of the series is tagged `krane/05-settings`.
 - Export command, always exactly:
   ```bash
@@ -116,9 +116,11 @@ These were not settled by the spec or the resolved decisions. Each is the smalle
 | Path | Responsibility |
 |---|---|
 | `modules/home/ii-config-dir.nix` (new) | `krane.dotfilesDir`, the `~/.config/illogical-impulse` symlink, the `kraneIiConfigMigrate` entry |
-| `hosts/<host>/illogical-impulse/.gitignore` (new, ×3) | makes the per-host config dir exist in git, ignores `*.tmp` and `ai/` |
+| `hosts/<host>/illogical-impulse/.gitignore` (new, every host) | makes the per-host config dir exist in git, ignores `*.tmp` and `ai/` |
+| `templates/host/illogical-impulse/.gitignore`, `templates/host/ii-settings.json` (new) | the same two per-host files for hosts scaffolded by `install.sh --new-host` |
+| `install.sh`, `scripts/check-new-host.sh`, `docs/INSTALL.md` | render and check the two new template files |
 | `pkgs/krane-ii-settings/` (new) | the writer: `krane_ii_settings.py`, `schema.json`, `default.nix`, `tests/` |
-| `hosts/<host>/ii-settings.json` (new, ×3) | GUI-owned sparse deltas, committed as `{}` |
+| `hosts/<host>/ii-settings.json` (new, every host) | GUI-owned sparse deltas, committed as `{}` |
 | `modules/home/ii-settings.nix` (new) | manifest, host wrapper, build-time render into `custom/krane_gui.lua`, ownership assertions, idle activation, boot-check exec |
 | `modules/home/hypr-config.nix` | `monitors.lua` trailer, `_rendered` no longer read-only, `krane.hypr.idle`, new monitor fields |
 | `modules/home/illogical-impulse.nix` | `custom/krane_gui.lua` is owned; the hypridle sed entry goes |
@@ -159,7 +161,7 @@ echo "rerere: $(git config rerere.enabled)"
 command ls ~/.dotfiles/patches/ii/
 ```
 
-Expected: a clean tree, `branch: krane`, three `ok` tags, both `ok` lines, `rerere: true`, and `01-fixes 02-translator 04-agents` (no `03-dock`: sub-project 3 was dropped). If anything differs, stop and report: the spec makes sub-project 1 a hard prerequisite, and this plan assumes 2 and 4 have landed too.
+Expected: a clean tree, `branch: krane`, three `ok` tags, both `ok` lines, `rerere: true`, and `01-fixes 02-translator 04-agents LICENSE` (no `03-dock`: sub-project 3 was dropped; `LICENSE` is the GPL-3.0 text for `patches/ii/`). If anything differs, stop and report: the spec makes sub-project 1 a hard prerequisite, and this plan assumes 2 and 4 have landed too.
 
 Then ask the user to confirm that sub-project 1's workflow has been through at least one pin bump on the hosts (spec, "Prerequisites and effort"). Stop if not.
 
@@ -331,8 +333,9 @@ No commit.
 
 **Files:**
 - Create: `modules/home/ii-config-dir.nix`
-- Create: `hosts/tariognatha/illogical-impulse/.gitignore`, `hosts/tarmantria/illogical-impulse/.gitignore`, `hosts/taractias/illogical-impulse/.gitignore`
-- Modify: `modules/home/default.nix` (imports list)
+- Create: `hosts/<host>/illogical-impulse/.gitignore` for every host under `hosts/` (today `tariognatha`, `tarmantria`, `taractias`)
+- Create: `templates/host/illogical-impulse/.gitignore`
+- Modify: `modules/home/default.nix` (imports list), `install.sh` (`render_host_templates`, `--self-test-check-scaffold`), `scripts/check-new-host.sh`, `docs/INSTALL.md`
 - Create (tool, not committed): `~/src/ii-tools/migtest.sh`
 
 **Interfaces:**
@@ -425,7 +428,7 @@ in
 
 ```bash
 cd ~/.dotfiles
-for h in tariognatha tarmantria taractias; do
+for h in $(command ls hosts); do
   mkdir -p hosts/$h/illogical-impulse
   printf '%s\n' '# Written by ii at runtime (a symlink from ~/.config/illogical-impulse); reviewed and committed by hand.' '# See docs/II-INTEGRATION.md "Settings persistence".' '*.tmp' 'ai/' > hosts/$h/illogical-impulse/.gitignore
 done
@@ -465,8 +468,8 @@ set -u
 gen="$1"
 t=$(mktemp -d -p "$XDG_RUNTIME_DIR")
 body=$(sed -n '/"Activating %s" "kraneIiConfigMigrate"/,/"Activating %s" "writeBoundary"/p' "$gen/activate" | sed '1d;$d')
-body=${body//\/home\/krane\/.config\/illogical-impulse/$t\/src}
-body=$(printf '%s' "$body" | sed -E "s#/home/krane/\.dotfiles/hosts/[a-z]+/illogical-impulse#$t/dst#g")
+body=${body//"$HOME/.config/illogical-impulse"/$t/src}
+body=$(printf '%s' "$body" | sed -E "s#$HOME/\.dotfiles/hosts/[a-z][a-z0-9-]*/illogical-impulse#$t/dst#g")
 run() { ( DRY_RUN_CMD=""; eval "$body" ) >"$t/out" 2>&1; echo "$?"; }
 reset() { rm -rf "$t/src" "$t/dst"; }
 fail=0
@@ -516,7 +519,7 @@ jq '.bar.weather.enableGPS = (.bar.weather.enableGPS | not)' ~/.config/illogical
 HOME_MANAGER_BACKUP_EXT=hm-bak "$gen/activate"; echo "exit $?"
 ```
 
-(`HOME_MANAGER_BACKUP_EXT` is what the NixOS module's `home-manager-krane.service` sets from `backupFileExtension`; without it `checkLinkTargets` refuses first, which proves nothing.) Run it a second time with `DRY_RUN=1` in front: the same message (the spec's dry-run check). Expected, both times: `kraneIiConfigMigrate: ... differ.` naming both paths, a nonzero exit, and `~/.config/illogical-impulse` still a real directory (`test ! -L ~/.config/illogical-impulse && echo REAL`). Then remove the conflicting copy and switch:
+(`HOME_MANAGER_BACKUP_EXT` is what the NixOS module's `home-manager-$USER.service` (`home-manager-krane` on the stock hosts) sets from `backupFileExtension`; without it `checkLinkTargets` refuses first, which proves nothing.) Run it a second time with `DRY_RUN=1` in front: the same message (the spec's dry-run check). Expected, both times: `kraneIiConfigMigrate: ... differ.` naming both paths, a nonzero exit, and `~/.config/illogical-impulse` still a real directory (`test ! -L ~/.config/illogical-impulse && echo REAL`). Then remove the conflicting copy and switch:
 
 ```bash
 rm hosts/tarmantria/illogical-impulse/config.json
@@ -524,7 +527,7 @@ sudo nixos-rebuild switch --flake .#tarmantria
 readlink -f ~/.config/illogical-impulse
 test -d ~/.config/illogical-impulse.hm-bak && echo BACKUP
 git -C ~/.dotfiles status --short hosts/tarmantria/illogical-impulse
-journalctl -u home-manager-krane -b --no-pager | grep kraneIiConfigMigrate
+journalctl -u "home-manager-$USER" -b --no-pager | grep kraneIiConfigMigrate
 ```
 
 Expected: `/home/krane/.dotfiles/hosts/tarmantria/illogical-impulse`, `BACKUP`, untracked `config.json` (and `actions/`, if it existed), and the `copying ... into ...` log line. Then repeat on the other hosts as they are next used: switch each (`sudo nixos-rebuild switch --flake .#$host`) and run the same three checks against that host; taractias waits until its hardware is verified.
@@ -555,6 +558,69 @@ jq -r .background.wallpaperPath ~/.dotfiles/hosts/$(hostname)/illogical-impulse/
 ```
 
 Expected: `LINK` and the path of the wallpaper just picked (switchwall.sh's `mv` happened inside the repo directory).
+
+- [ ] **Step 9: New hosts get the directory too**
+
+`install.sh --new-host` scaffolds `hosts/<name>/` from `templates/host/`, and `render_host_templates` copies only the four `.nix` files. Without the directory, a new host's first activation takes `kraneIiConfigMigrate`'s "neither exists" branch (a misleading warning, and a stub directory with no `.gitignore`). The file has no `@TOKEN@` placeholders, so it is copied as is, without a `.in` suffix:
+
+```bash
+cd ~/.dotfiles
+mkdir -p templates/host/illogical-impulse
+command cp hosts/tarmantria/illogical-impulse/.gitignore templates/host/illogical-impulse/.gitignore
+```
+
+In `install.sh`, `render_host_templates`, after the loop that copies the four `.in` files:
+
+```bash
+    for name in default.nix disko.nix display.nix hardware-configuration.nix; do
+        cp "$TEMPLATE_DIR/$name.in" "$dest/$name"
+    done
+```
+
+add:
+
+```bash
+    # Not a template: no @TOKEN@ placeholders, so neither the sed pass nor the
+    # leftover-token grep below (both *.nix only) needs to see it.
+    mkdir -p "$dest/illogical-impulse"
+    cp "$TEMPLATE_DIR/illogical-impulse/.gitignore" "$dest/illogical-impulse/.gitignore"
+```
+
+`scaffold_host` copies the staging dir with `cp -a "$SCAFFOLD_STAGING/." "$dest/"` and `patch_disko` stages with `git add -A`, so both already carry the subdirectory into the `Add <name> host` commit.
+
+In `install.sh`, `--self-test-check-scaffold`, after the loop
+
+```bash
+            for st_file in default.nix disko.nix display.nix hardware-configuration.nix; do
+                [ -f "$st_dir/$st_file" ] || die "$st_profile/$st_ff: $st_file was not rendered"
+            done
+```
+
+add:
+
+```bash
+            [ -f "$st_dir/illogical-impulse/.gitignore" ] \
+                || die "$st_profile/$st_ff: illogical-impulse/.gitignore was not copied"
+```
+
+In `scripts/check-new-host.sh`, after the last `expect` line (`expect "disko" ...`), add:
+
+```bash
+# Per-host files that are copied, not rendered, checked on the last combination.
+test -f "$WT/hosts/$HOST/illogical-impulse/.gitignore" \
+    || fail "scaffold: hosts/$HOST/illogical-impulse/.gitignore is missing"
+```
+
+In `docs/INSTALL.md`, new-host step 4, replace ``(`default.nix`, `disko.nix`, `display.nix`, and a placeholder `hardware-configuration.nix`) and parse-checks every file.`` with ``(`default.nix`, `disko.nix`, `display.nix`, a placeholder `hardware-configuration.nix`, and `illogical-impulse/.gitignore` for the ii settings window's config directory) and parse-checks every `.nix` file.``
+
+```bash
+cd ~/.dotfiles
+bash -n install.sh && bash -n scripts/check-new-host.sh && echo SYNTAX-OK
+bash install.sh --self-test-check-scaffold 2>&1 | tail -1
+git add templates/host/illogical-impulse/.gitignore install.sh scripts/check-new-host.sh docs/INSTALL.md
+```
+
+Expected: `SYNTAX-OK` and `self-test-check-scaffold: OK`. `just check-new-host` runs in Task 15 Step 9, after the first commit that contains this.
 
 No commit (Phase A commits in Task 11).
 
@@ -1265,7 +1331,7 @@ Run the export command.
 
 **Files:**
 - Delete (clone, if unused): any Task 5 widget no page references
-- Commit (dotfiles): `patches/ii/05-settings/`, `lib/mk-host.nix`, `modules/home/ii-config-dir.nix`, `modules/home/default.nix`, `hosts/*/illogical-impulse/.gitignore`
+- Commit (dotfiles): `patches/ii/05-settings/`, `lib/mk-host.nix`, `modules/home/ii-config-dir.nix`, `modules/home/default.nix`, `hosts/*/illogical-impulse/.gitignore`, `templates/host/illogical-impulse/.gitignore`, `install.sh`, `scripts/check-new-host.sh`, `docs/INSTALL.md`
 
 - [ ] **Step 1: Drop ported widgets nothing uses**
 
@@ -1327,7 +1393,7 @@ Record pass, fail or not run for each:
 1. **Settings window:** `SUPER + I` opens it; every page in the rail (Quick, General, Bar, Background, Interface, Services, Profile, Advanced, About) loads; closing it leaves the bar running (`pgrep -f '[q]s-wrapped -c ii'`). All hosts.
 2. **config.json pages:** `config.json` stays untracked until Step 7, so compare against a snapshot instead of `git diff`. On each of Quick, General, Bar, Background, Interface and Services: `command cp ~/.dotfiles/hosts/<host>/illogical-impulse/config.json "$XDG_RUNTIME_DIR/cfg.json"`, change one control, then `diff <(jq -S . "$XDG_RUNTIME_DIR/cfg.json") <(jq -S . ~/.dotfiles/hosts/<host>/illogical-impulse/config.json)`. Expected: exactly that key. Switch, reboot: the value is still set. After Step 7 the same check is `git -C ~/.dotfiles diff hosts/<host>/illogical-impulse/config.json`.
 3. **General 12h clock (the host in use):** pick a 12h format, run `hyprlock` directly: AM/PM shows. Switch: `grep -c 'TIME12' ~/.config/hypr/hyprlock.conf` is `1` without opening settings.
-4. **About:** shows the pin revision (first 12 characters of `$PIN`), the patch count and `/home/krane/.dotfiles`; no update buttons. All hosts.
+4. **About:** shows the pin revision (first 12 characters of `$PIN`), the patch count and the repo path, `~/.dotfiles` resolved (`/home/$USER/.dotfiles`, where `$USER` is the host's `krane.user.name`); no update buttons. All hosts.
 5. **Profile (the host in use):** change the display name; `jq -r .profile.displayName ~/.dotfiles/hosts/$(hostname)/illogical-impulse/config.json` shows it; the hostname field is disabled and shows the current host's name (`$(hostname)`). Save a local preset: it appears under `hosts/$(hostname)/illogical-impulse/presets/`.
 6. **Phase A calibration:** compare now with `~/src/ii-tools/phase-a-start`. More than 10 working sessions: stop here and re-scope Phases B and C with the user.
 
@@ -1335,7 +1401,7 @@ Record pass, fail or not run for each:
 
 ```bash
 cd ~/.dotfiles
-git add patches/ii/05-settings lib/mk-host.nix modules/home/ii-config-dir.nix modules/home/default.nix hosts/*/illogical-impulse/.gitignore
+git add patches/ii/05-settings lib/mk-host.nix modules/home/ii-config-dir.nix modules/home/default.nix hosts/*/illogical-impulse/.gitignore templates/host/illogical-impulse/.gitignore install.sh scripts/check-new-host.sh docs/INSTALL.md
 git status --short
 git commit -m "Port the end4-pC settings pages into ii and keep ii's config directory in the repo"
 ```
@@ -2709,7 +2775,8 @@ cd ~/.dotfiles && git add pkgs/krane-ii-settings
 **Files:**
 - Create: `pkgs/krane-ii-settings/default.nix`
 - Modify: `pkgs/default.nix`, `flake.nix` (`checks`)
-- Create: `hosts/tariognatha/ii-settings.json`, `hosts/tarmantria/ii-settings.json`, `hosts/taractias/ii-settings.json`
+- Create: `hosts/<host>/ii-settings.json` for every host under `hosts/` (today `tariognatha`, `tarmantria`, `taractias`), `templates/host/ii-settings.json`
+- Modify: `install.sh` (`render_host_templates`, `--self-test-check-scaffold`), `scripts/check-new-host.sh`, `docs/INSTALL.md`
 
 **Interfaces:**
 - Produces: `pkgs.callPackage ./pkgs/krane-ii-settings { }`, a derivation with `bin/krane-ii-settings`; flake output `packages.x86_64-linux.krane-ii-settings`; check `checks.x86_64-linux.ii-settings-writer`.
@@ -2798,11 +2865,60 @@ In `checks.${system}`, before the `# NixVim's own startup test` comment:
 
 ```bash
 cd ~/.dotfiles
-for h in tariognatha tarmantria taractias; do printf '{}\n' > hosts/$h/ii-settings.json; done
+for h in $(command ls hosts); do printf '{}\n' > hosts/$h/ii-settings.json; done
 git add pkgs/default.nix pkgs/krane-ii-settings flake.nix hosts/*/ii-settings.json
 ```
 
-- [ ] **Step 5: Build and run (passing check)**
+- [ ] **Step 5: New hosts get `ii-settings.json` too**
+
+The writer never creates a missing `ii-settings.json` (it refuses with `not persisted: ... missing`), so a host scaffolded by `install.sh --new-host` without the file has no working persistent Hyprland control. Like the `.gitignore` in Task 2 Step 9, it has no `@TOKEN@` placeholders and is copied as is:
+
+```bash
+cd ~/.dotfiles
+printf '{}\n' > templates/host/ii-settings.json
+```
+
+In `install.sh`, `render_host_templates`, extend the block Task 2 Step 9 added:
+
+```bash
+    mkdir -p "$dest/illogical-impulse"
+    cp "$TEMPLATE_DIR/illogical-impulse/.gitignore" "$dest/illogical-impulse/.gitignore"
+```
+
+to:
+
+```bash
+    mkdir -p "$dest/illogical-impulse"
+    cp "$TEMPLATE_DIR/illogical-impulse/.gitignore" "$dest/illogical-impulse/.gitignore"
+    cp "$TEMPLATE_DIR/ii-settings.json" "$dest/ii-settings.json"
+```
+
+In `install.sh`, `--self-test-check-scaffold`, after the `illogical-impulse/.gitignore` check Task 2 Step 9 added, add:
+
+```bash
+            grep -qx '{}' "$st_dir/ii-settings.json" \
+                || die "$st_profile/$st_ff: ii-settings.json was not copied as {}"
+```
+
+In `scripts/check-new-host.sh`, after the `illogical-impulse/.gitignore` test Task 2 Step 9 added, add:
+
+```bash
+test -f "$WT/hosts/$HOST/ii-settings.json" \
+    || fail "scaffold: hosts/$HOST/ii-settings.json is missing"
+```
+
+In `docs/INSTALL.md`, new-host step 4, replace ``a placeholder `hardware-configuration.nix`, and `illogical-impulse/.gitignore` for the ii settings window's config directory)`` with ``a placeholder `hardware-configuration.nix`, `illogical-impulse/.gitignore`, and `ii-settings.json` as `{}`; the last two hold what the ii settings window saves)``.
+
+```bash
+cd ~/.dotfiles
+bash -n install.sh && bash -n scripts/check-new-host.sh && echo SYNTAX-OK
+bash install.sh --self-test-check-scaffold 2>&1 | tail -1
+git add templates/host/ii-settings.json install.sh scripts/check-new-host.sh docs/INSTALL.md
+```
+
+Expected: `SYNTAX-OK` and `self-test-check-scaffold: OK`.
+
+- [ ] **Step 6: Build and run (passing check)**
 
 ```bash
 cd ~/.dotfiles
@@ -2815,7 +2931,7 @@ nix build --no-link -L .#checks.x86_64-linux.ii-settings-writer 2>&1 | tail -3
 
 Expected: both constants are `/nix/store/...` paths (`hyprland-0.56.2/bin/hyprctl`, `...-schema.json`); `23`; `krane-ii-settings: no manifest: ...` and `exit 1`; the check ends with `Ran 23 tests` and `OK`.
 
-- [ ] **Step 6: Commit B1**
+- [ ] **Step 7: Commit B1**
 
 ```bash
 cd ~/.dotfiles
@@ -3077,18 +3193,23 @@ in
 3. `modules/home/hypr-config.nix`: replace
 
    ```nix
-     monitorsFile = header "monitors.lua" + "\n" + lib.concatMapStrings monitorLua cfg.monitors;
-   ```
-
-   with
-
-   ```nix
-     # The trailer loads the settings saved from the ii settings window (modules/home/ii-settings.nix)
-     # last, after every krane.hypr.* file, and before ii's transient shellOverrides.
      monitorsFile =
        header "monitors.lua"
        + "\n"
        + lib.concatMapStrings monitorLua cfg.monitors
+       + lib.optionalString (cfg.extraMonitorsLua != "") ("\n" + cfg.extraMonitorsLua + "\n");
+   ```
+
+   with the same block plus the trailer after the `extraMonitorsLua` line (keep that line: tarmantria's `scale_internal` hotplug hook lives there):
+
+   ```nix
+     # The trailer loads the settings saved from the ii settings window (modules/home/ii-settings.nix)
+     # last, after every krane.hypr.* file and extraMonitorsLua, and before ii's transient shellOverrides.
+     monitorsFile =
+       header "monitors.lua"
+       + "\n"
+       + lib.concatMapStrings monitorLua cfg.monitors
+       + lib.optionalString (cfg.extraMonitorsLua != "") ("\n" + cfg.extraMonitorsLua + "\n")
        + ''
 
          if is_file_exists(HOME .. "/.config/hypr/custom/krane_gui.lua") then
@@ -3113,13 +3234,13 @@ in
    ```nix
         # Every schema key and every monitor field, rendered against one host's real manifest
         # and parsed. Any host works here: this exercises the render machinery, not host-specific
-        # values, and checks.lua-syntax already checks every host's own JSON separately.
+        # values, and checks.lua-syntax already checks every host's own JSON separately. A fixed
+        # stock host, so a new host that sorts first cannot break this check.
         ii-settings-render =
           let
             writer = pkgs.callPackage ./pkgs/krane-ii-settings { };
-            manifest =
-              self.nixosConfigurations.${builtins.head (builtins.attrNames self.nixosConfigurations)}
-                .config.home-manager.users.krane.krane.iiSettings.manifestFile;
+            cfg = self.nixosConfigurations.taractias.config;
+            manifest = cfg.home-manager.users.${cfg.krane.user.name}.krane.iiSettings.manifestFile;
           in
           pkgs.runCommand "ii-settings-render" { } ''
             ${writer}/bin/krane-ii-settings --manifest ${manifest} \
@@ -3200,6 +3321,16 @@ Expected: the header only and no config errors; `krane-ii-settings: hyprland.inp
 cd ~/.dotfiles
 git commit -m "Render settings saved from the ii settings window into krane_gui.lua, with one owner per key"
 ```
+
+- [ ] **Step 9: A scaffolded new host still evaluates**
+
+`just check-new-host` scaffolds a throwaway host from `templates/host/` (user `tester`, one catch-all monitor with `output = ""`) in a detached worktree of `HEAD`, so it tests only committed work: run it after Step 8.
+
+```bash
+cd ~/.dotfiles && just check-new-host 2>&1 | tail -3
+```
+
+Expected: the last `ok   <profile>/<form-factor>  /nix/store/...drv` line line and `check-new-host: all 4x2 combinations evaluate`. A failure here means `ii-settings.nix` does not evaluate for an empty output key or for a user other than `krane`: fix it and amend B2.
 
 ---
 
@@ -4509,9 +4640,10 @@ Expected: the modified monitor's rule ends `bitdepth = 10,` / `cm = "hdr"`; the 
 ```bash
 nix flake check && for h in tariognatha tarmantria taractias; do nixos-rebuild dry-build --flake .#$h || echo "FAIL $h"; done
 git commit -m "Add color management and luminance fields to krane.hypr.monitors"
+just check-new-host 2>&1 | tail -3
 ```
 
-Expected: passes, no `FAIL`, one commit.
+Expected: passes, no `FAIL`, one commit; `check-new-host: all 4x2 combinations evaluate` (the recipe tests a worktree of `HEAD`, so it runs after the commit; the scaffolded host's monitor has none of the new fields set).
 
 ---
 
@@ -5057,7 +5189,7 @@ Hyprland page, Displays, select each monitor declared in the host's `display.nix
 
 - [ ] **Step 3: Revert (tarmantria's eDP-1, plus an output not in `display.nix` if one can be attached)**
 
-Every output in `display.nix` has Nix-owned `mode`, `position` and `scale` (resolved decision 4), so on eDP-1 the field to try is `transform` (Orientation, for example 180°: visible and harmless); position, mode and scale of eDP-1 are disabled with "Set in Nix". Position and the complete-rule check need an output Nix does not declare (an external monitor on tarmantria, or a third one on tariognatha); record "not run" if none is available.
+Every output in `display.nix` has Nix-owned `mode`, `position` and `scale` (resolved decision 4), so on eDP-1 the field to try is `transform` (Orientation, for example 180°: visible and harmless); position, mode and scale of eDP-1 are disabled with "Set in Nix". Position and the complete-rule check need an output Nix does not declare. tarmantria's `display.nix` declares `HDMI-A-1` and tariognatha's declares `DP-1` and `DP-2`, so that takes a monitor on a further connector (for example a USB-C/DisplayPort output on tarmantria, or a third output on tariognatha); check with `hyprctl monitors -j | jq -r '.[].name'` against `grep 'output = ' hosts/<host>/display.nix`. Run the non-Nix half of 1-5 only if such an output is attached; otherwise record "not run".
 
 1. Change the field; wait 15 s. Expected: it reverts, `git -C ~/.dotfiles diff --stat hosts/<host>/ii-settings.json` prints nothing, `systemctl --user is-active krane-ii-settings-revert.timer` is `inactive`.
 2. Change it again, then `pkill -f settings.qml`. Expected: it still reverts after 15 s (the timer is outside the UI).
@@ -5065,6 +5197,14 @@ Every output in `display.nix` has Nix-owned `mode`, `position` and `scale` (reso
 3a. Revert without the repo file: change the field, then within 15 s put `<<<<<<< HEAD` on the first line of `ii-settings.json`. Expected: after 15 s the display still reverts (the timer restores the live file saved at `try`), `systemctl --user is-active krane-ii-settings-revert.timer` is `inactive`, and the page shows `cannot parse ...`. Restore the file with `git checkout`.
 4. Reboot, unlock (typing the password blind works). Expected: the settings window opens on the Hyprland page with the keep banner. Keep: `bootConfirmed` is gone from the file.
 5. Change it again, Keep, reboot, unlock, and let the banner time out. Expected: the `monitors.<output>` entry is gone from the repo file and the display is back to its Nix or default rule.
+6. Hotplug on tarmantria. `extraMonitorsLua` (`scale_internal`) re-sends eDP-1's rule with only `output`, `mode`, `position` and `scale` on every `monitor.added` and `monitor.removed`. With `HDMI-A-1` plugged in, set eDP-1's transform to 180° and Keep, then unplug and replug `HDMI-A-1`, checking after each:
+
+   ```bash
+   hyprctl monitors all -j | jq '.[] | select(.name=="eDP-1") | {transform, scale}'
+   jq '.monitors."eDP-1"' ~/.dotfiles/hosts/tarmantria/ii-settings.json
+   ```
+
+   Expected: `scale` follows the plug state (`1` alone, `1.6` with HDMI-A-1) and the repo entry is unchanged. Record whether `transform` stays `2`. If it drops to `0`, `scale_internal` resets GUI-set eDP-1 fields on hotplug until the next `hyprctl reload` or switch: Task 25 Step 2 records that as a known limitation. Restore eDP-1 with `krane-ii-settings reset monitor eDP-1 transform`.
 
 - [ ] **Step 4: HDR (a monitor whose EDID reports HDR support; on tariognatha, DP-2)**
 
@@ -5091,7 +5231,7 @@ git commit -m "Add display settings with confirm-or-revert and a first-boot chec
 ### Task 25: Documentation
 
 **Files:**
-- Modify: `docs/II-INTEGRATION.md`, `docs/VERIFY.md`
+- Modify: `docs/II-INTEGRATION.md`, `docs/VERIFY.md`, `README.md`, `LICENSE`
 
 - [ ] **Step 1: Update the text that calls the config dir ii-owned**
 
@@ -5249,6 +5389,19 @@ presets.
 | Hyprland | Displays section of the fork's `monitors.lua` writer; "add a require line" notice | none | replaced by `krane-ii-settings` (Design B, C) |
 ````
 
+If Task 24 Step 3.6 found that eDP-1's transform drops on an HDMI-A-1 plug or unplug, add this subsection at the end of the section, after the table:
+
+```markdown
+### Known limitations
+
+- tarmantria: `scale_internal` in `hosts/tarmantria/display.nix`
+  (`extraMonitorsLua`) re-sends eDP-1's rule with only `output`, `mode`,
+  `position` and `scale` whenever a monitor is added or removed. Fields set
+  on eDP-1 from the settings window (transform, VRR, color management) are
+  lost at that point and come back at the next `hyprctl reload`,
+  `krane-ii-settings apply` or switch.
+```
+
 Check the table against the recorded lists: every line of `dropped.txt` has a row, and every row names a control that is gone from the ported page (`grep -c` of its key in `$II/modules/settings/<Page>.qml` is `0`).
 
 - [ ] **Step 3: `docs/VERIFY.md` per-page checks**
@@ -5269,10 +5422,32 @@ Append:
 - `systemctl --user is-active krane-ii-settings-revert.timer` is `inactive` when no change is pending.
 ```
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: Credit the port in `README.md` and `LICENSE`**
+
+`05-settings` ports much more pctrade/end4-pC code (pages, widgets, scripts) than the `01-fixes` backports, which are the only fork code the two files name today.
+
+1. `README.md`, section "Licence": replace ``The `01-fixes` backports come from [pctrade/end4-pC](https://github.com/pctrade/end4-pC).`` with ``The `01-fixes` backports and the `05-settings` settings pages come from [pctrade/end4-pC](https://github.com/pctrade/end4-pC).``
+2. `LICENSE`, the `patches/ii/` paragraph: replace the sentence ``The patches in `patches/ii/01-fixes/` that say "Backport of pctrade/end4-pC" are backported from pctrade's end4-pC (https://github.com/pctrade/end4-pC), also GPL-3.0, and remain copyright their original authors.`` (wrapped over four lines) with the following, wrapped at the paragraph's width (78 columns):
+
+   ```text
+   The patches in `patches/ii/01-fixes/` that say "Backport of pctrade/end4-pC"
+   are backported from pctrade's end4-pC (https://github.com/pctrade/end4-pC),
+   and the settings pages, widgets and scripts in `patches/ii/05-settings/` are
+   ported from it (at dc2ca2600ee6). Both are GPL-3.0 and remain copyright
+   their original authors.
+   ```
 
 ```bash
 cd ~/.dotfiles
-git add docs/II-INTEGRATION.md docs/VERIFY.md
+grep -c '05-settings' README.md LICENSE
+```
+
+Expected: `README.md:1` and `LICENSE:1`.
+
+- [ ] **Step 5: Commit**
+
+```bash
+cd ~/.dotfiles
+git add docs/II-INTEGRATION.md docs/VERIFY.md README.md LICENSE
 git commit -m "Document how the ii settings window persists its settings"
 ```
