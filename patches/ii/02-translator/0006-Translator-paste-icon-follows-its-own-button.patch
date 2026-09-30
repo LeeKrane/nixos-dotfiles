@@ -5,9 +5,12 @@ Subject: [PATCH] Translator: paste icon follows its own button
 
 Problem: the paste icon greyed out whenever the input was empty.
 
-Port: new, the paste icon uses a fixed colour since the button is always enabled.
+Port: the icon uses a fixed colOnLayer1, since pasteButton is always
+enabled. Upstream coloured it from deleteButton.enabled, which greyed
+it out on an empty input.
 
-Drop when: the pinned Translator.qml paste icon colour no longer depends on deleteButton.enabled.
+Drop when: the pinned Translator.qml paste icon colour no longer
+depends on deleteButton.enabled.
 ---
  .../.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
