@@ -11,14 +11,14 @@ Problem: every raw Hyprland event ran all five hyprctl queries; dragging a windo
 Port: hand-ported. Dropped the fork's WM.compositor guards (no compositor abstraction at the pin). Added a configreloaded branch that refreshes monitors and workspaces; 204f22f itself only changes a fork-only settings component. Widened the fork's routing so workspace and activespecial events also refresh monitors, fullscreen refreshes workspaces, and openlayer/closelayer refresh layers, since consumers read those. Also refreshes clients on moveworkspace and monitor hotplug, and matches Hyprland's minimized event name. Coalesces events into at most one round of queries every 60ms (leading-edge throttle) rather than debouncing until the stream goes quiet, so a continuous stream of events (a drag, a spinner title) cannot starve refreshes indefinitely.
 Drop when: the pinned services/HyprlandData.qml throttles onRawEvent.
 ---
- .../quickshell/ii/services/HyprlandData.qml   | 125 ++++++++++++++++--
- 1 file changed, 113 insertions(+), 12 deletions(-)
+ .../quickshell/ii/services/HyprlandData.qml   | 128 ++++++++++++++++--
+ 1 file changed, 116 insertions(+), 12 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/services/HyprlandData.qml b/dots/.config/quickshell/ii/services/HyprlandData.qml
-index 5dfedab6..b20c8c92 100644
+index 5dfedab6..0c22ef6a 100644
 --- a/dots/.config/quickshell/ii/services/HyprlandData.qml
 +++ b/dots/.config/quickshell/ii/services/HyprlandData.qml
-@@ -46,28 +46,94 @@ Singleton {
+@@ -46,28 +46,92 @@ Singleton {
  
      // Internals
  
@@ -33,37 +33,35 @@ index 5dfedab6..b20c8c92 100644
 +    // flush runs, the pending flag is left set and retried on the next
 +    // flush, instead of restarting a running query and truncating its
 +    // output. Only the queries an event can actually affect are re-run,
-+    // instead of all five on every event.
++    // instead of all five on every event. Besides the 60ms timer, each
++    // hyprctl Process also flushes on its own onExited, so a flag left
++    // pending because its query was still running gets picked up as soon as
++    // that query ends, instead of waiting out the rest of the 60ms poll.
 +    property bool _pendingClients: false
 +    property bool _pendingMonitors: false
 +    property bool _pendingLayers: false
 +    property bool _pendingWorkspaces: false
 +
++    // Table of { flag, procs } instead of four copy-pasted blocks: a flag
++    // flushes once none of its procs are running, restarting all of them
++    // together (relevant for workspaces, which is two queries in lockstep).
++    // Built by a function rather than a property, since it references the
++    // Process ids below, which do not exist yet at property-init time.
++    function _pendingTable() {
++        return [
++            { flag: "_pendingClients", procs: [getClients] },
++            { flag: "_pendingMonitors", procs: [getMonitors] },
++            { flag: "_pendingLayers", procs: [getLayers] },
++            { flag: "_pendingWorkspaces", procs: [getWorkspaces, getActiveWorkspace] },
++        ];
++    }
++
 +    function flushPending() {
-+        if (root._pendingClients) {
-+            if (!getClients.running) {
-+                getClients.running = true; // Fresh start: the process is not running
-+                root._pendingClients = false;
-+            } // else: still running, leave the flag set and retry next flush
-+        }
-+        if (root._pendingMonitors) {
-+            if (!getMonitors.running) {
-+                getMonitors.running = true;
-+                root._pendingMonitors = false;
-+            }
-+        }
-+        if (root._pendingLayers) {
-+            if (!getLayers.running) {
-+                getLayers.running = true;
-+                root._pendingLayers = false;
-+            }
-+        }
-+        if (root._pendingWorkspaces) {
-+            if (!getWorkspaces.running && !getActiveWorkspace.running) {
-+                getWorkspaces.running = true;
-+                getActiveWorkspace.running = true;
-+                root._pendingWorkspaces = false;
-+            } // else: either workspace query is still running, leave both pending
++        for (const entry of root._pendingTable()) {
++            if (!root[entry.flag]) continue; // Nothing pending for this entry
++            if (entry.procs.some(proc => proc.running)) continue; // Still running: leave the flag set and retry next flush
++            for (const proc of entry.procs) proc.running = true; // Fresh start: none of the procs are running
++            root[entry.flag] = false;
 +        }
 +    }
 +
@@ -122,7 +120,7 @@ index 5dfedab6..b20c8c92 100644
      }
  
      function biggestWindowForWorkspace(workspaceId) {
-@@ -80,7 +146,11 @@ Singleton {
+@@ -80,7 +144,11 @@ Singleton {
      }
  
      Component.onCompleted: {
@@ -135,7 +133,7 @@ index 5dfedab6..b20c8c92 100644
      }
  
      Connections {
-@@ -88,8 +158,39 @@ Singleton {
+@@ -88,14 +156,46 @@ Singleton {
  
          function onRawEvent(event) {
              // console.log("Hyprland raw event:", event.name);
@@ -177,3 +175,42 @@ index 5dfedab6..b20c8c92 100644
          }
      }
  
+     Process {
+         id: getClients
+         command: ["hyprctl", "clients", "-j"]
++        onExited: root.flushPending()
+         stdout: StdioCollector {
+             id: clientsCollector
+             onStreamFinished: {
+@@ -114,6 +214,7 @@ Singleton {
+     Process {
+         id: getMonitors
+         command: ["hyprctl", "monitors", "-j"]
++        onExited: root.flushPending()
+         stdout: StdioCollector {
+             id: monitorsCollector
+             onStreamFinished: {
+@@ -125,6 +226,7 @@ Singleton {
+     Process {
+         id: getLayers
+         command: ["hyprctl", "layers", "-j"]
++        onExited: root.flushPending()
+         stdout: StdioCollector {
+             id: layersCollector
+             onStreamFinished: {
+@@ -136,6 +238,7 @@ Singleton {
+     Process {
+         id: getWorkspaces
+         command: ["hyprctl", "workspaces", "-j"]
++        onExited: root.flushPending()
+         stdout: StdioCollector {
+             id: workspacesCollector
+             onStreamFinished: {
+@@ -156,6 +259,7 @@ Singleton {
+     Process {
+         id: getActiveWorkspace
+         command: ["hyprctl", "activeworkspace", "-j"]
++        onExited: root.flushPending()
+         stdout: StdioCollector {
+             id: activeWorkspaceCollector
+             onStreamFinished: {
