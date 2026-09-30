@@ -284,11 +284,16 @@ commit, the problem, how it was ported and when to drop it.
 | `0011` unterminated OSC in terminal sequences | `local` | local | pinned `sequences.txt` ends with `ESC \` |
 
 `0009` to `0011` are not fork backports. `0009`: ii's sidebar registers no
-BlueZ agent, so pairing needs one running in the session (the
-`bluetooth-agent` user service in `modules/nixos/bluetooth.nix`), and even
-then a paired-but-untrusted device makes BlueZ ask that agent to authorize
-every profile connection. `0009` sets `trusted` right after `pair()` so audio
-reconnects stop dropping. `0010`: `generate-thumbnails-magick.sh` hashed
+BlueZ agent, so pairing needs one running (the `bluetooth-agent` root system
+service in `modules/nixos/bluetooth.nix`, bound to `bluetooth.service`;
+check with `systemctl status bluetooth-agent`), and even then a
+paired-but-untrusted device makes BlueZ ask that agent to authorize every
+profile connection. `0009` sets `trusted` right after `pair()` so audio
+reconnects stop dropping. The agent has no pin file, so legacy PIN-only
+devices and pairings the remote device starts are refused; pairing started
+from ii (Just Works) still works.
+
+`0010`: `generate-thumbnails-magick.sh` hashed
 `realpath "$src"`, the symlink target, while the wallpaper selector's
 `ThumbnailImage` hashes the path as listed; home-manager's wallpaper symlinks
 into `/nix/store` made every thumbnail miss. `0010` hashes `realpath -s "$src"`
