@@ -7,6 +7,7 @@
   imports = [
     ./hypr-config.nix
     ./illogical-impulse.nix
+    ./ii-config-dir.nix
     ./git.nix
     ./cli.nix
     ./neovim.nix
