@@ -505,7 +505,7 @@ line instead of failing silently.
 
 The Agents tab only refreshes while open, so it cannot tell you that a
 session is blocked. Claude Code's own terminal notifications do that
-(checked 2026-09-30 from ii's notification history with `preferredNotifChannel` unset (`auto`) in
+(checked 2026-09-30 from ii's notification history (`~/.cache/quickshell/notifications/notifications.json`) with `preferredNotifChannel` unset (`auto`) in
 `~/.claude/settings.json`, the claude-dotfiles repo): a permission prompt in
 a kitty window on another workspace produces an ii notification popup. If it
 stops working, add a `Notification` hook that calls `notify-send`; see
