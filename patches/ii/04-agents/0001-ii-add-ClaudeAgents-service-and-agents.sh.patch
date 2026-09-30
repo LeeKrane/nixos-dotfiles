@@ -1,0 +1,343 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Wed, 30 Sep 2026 03:47:37 +0200
+Subject: [PATCH] ii: add ClaudeAgents service and agents.sh
+
+Problem: nothing in the shell shows which Claude Code sessions run, which are busy, or which wait on a permission prompt.
+Port: new (no fork origin). services/ClaudeAgents.qml polls scripts/claude/agents.sh (claude agents --json plus pid ancestry and transcript mtime) only while active; services/claude-agents.js holds the testable matching and sorting; sidebar.agents.enable defaults to true.
+Drop when: the pinned ii ships an equivalent agents tab, or `claude agents --json` is removed.
+---
+
+diff --git a/dots/.config/quickshell/ii/modules/common/Config.qml b/dots/.config/quickshell/ii/modules/common/Config.qml
+index 30e8743..ac0851f 100644
+--- a/dots/.config/quickshell/ii/modules/common/Config.qml
++++ b/dots/.config/quickshell/ii/modules/common/Config.qml
+@@ -504,6 +504,9 @@ Singleton {
+                 property JsonObject ai: JsonObject {
+                     property bool textFadeIn: false
+                 }
++                property JsonObject agents: JsonObject {
++                    property bool enable: true
++                }
+                 property JsonObject booru: JsonObject {
+                     property bool allowNsfw: false
+                     property string defaultProvider: "yandere"
+diff --git a/dots/.config/quickshell/ii/scripts/claude/agents.sh b/dots/.config/quickshell/ii/scripts/claude/agents.sh
+new file mode 100755
+index 0000000..3bb9cc4
+--- /dev/null
++++ b/dots/.config/quickshell/ii/scripts/claude/agents.sh
+@@ -0,0 +1,36 @@
++#!/usr/bin/env bash
++# Prints `claude agents --json` as one JSON array, each entry unchanged plus:
++#   ancestors     interactive sessions: pid chain from the session up to,
++#                 not including, init; [] for background sessions, whose
++#                 ancestry leads to the daemon supervisor, not a terminal
++#   lastActivity  transcript mtime in seconds, or null
++# Reads no transcript content. Exits 127 when claude is not on PATH.
++set -euo pipefail
++
++command -v claude >/dev/null 2>&1 || { echo "claude not found on PATH" >&2; exit 127; }
++
++raw=$(claude agents --json)
++jq -e 'type == "array"' >/dev/null <<<"$raw" || { echo "claude agents --json did not print an array" >&2; exit 2; }
++
++jq -r '.[] | "\(.sessionId // "-") \(.kind // "-") \(.pid // 0)"' <<<"$raw" |
++    while read -r sid kind pid; do
++        chain=()
++        if [[ $kind == interactive ]]; then
++            p=$pid
++            while [[ -n $p && $p != 0 && $p != 1 && ${#chain[@]} -lt 64 ]]; do
++                chain+=("$p")
++                p=$(awk '/^PPid:/{print $2}' "/proc/$p/status" 2>/dev/null || true)
++            done
++        fi
++        mtime=null
++        if [[ $sid != - ]]; then
++            for f in "$HOME"/.claude/projects/*/"$sid".jsonl; do
++                if [[ -e $f ]]; then
++                    mtime=$(stat -c %Y "$f")
++                    break
++                fi
++            done
++        fi
++        printf '{"ancestors":[%s],"lastActivity":%s}\n' "$(IFS=,; echo "${chain[*]}")" "$mtime"
++    done |
++    jq -c -s --argjson raw "$raw" '[$raw, .] | transpose | map(.[0] + .[1])'
+diff --git a/dots/.config/quickshell/ii/services/ClaudeAgents.qml b/dots/.config/quickshell/ii/services/ClaudeAgents.qml
+new file mode 100644
+index 0000000..b60d46b
+--- /dev/null
++++ b/dots/.config/quickshell/ii/services/ClaudeAgents.qml
+@@ -0,0 +1,135 @@
++pragma Singleton
++pragma ComponentBehavior: Bound
++
++import qs.modules.common
++import qs.modules.common.functions
++import QtQuick
++import Quickshell
++import Quickshell.Io
++import Quickshell.Hyprland
++import "claude-agents.js" as AgentsLogic
++
++/**
++ * Claude Code sessions on this machine, read from `claude agents --json`
++ * through scripts/claude/agents.sh. Polls only while `active` is true, which
++ * the left sidebar sets while its Agents tab is visible. Read-only: it never
++ * sends input to, approves, stops or deletes a session.
++ */
++Singleton {
++    id: root
++
++    property var sessions: []
++    property bool available: true
++    property string error: ""
++    property int headlessCount: 0
++    property bool loaded: false
++
++    property bool active: false
++    property bool stopped: false
++    property int failures: 0
++    property int pollInterval: 3000
++    property var lastEntries: []
++
++    readonly property string scriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/claude/agents.sh`)
++
++    onActiveChanged: {
++        if (root.active) {
++            root.stopped = false;
++            root.failures = 0;
++        }
++    }
++
++    function applyWindows() {
++        const result = AgentsLogic.annotate(root.lastEntries, HyprlandData.windowList);
++        root.sessions = result.sessions;
++        root.headlessCount = result.headlessCount;
++    }
++
++    function handleResult(exitCode, stdout, stderr, elapsedMs) {
++        const result = AgentsLogic.classifyResult(exitCode, stdout, stderr, root.failures);
++        if (result.kind === "ok") {
++            root.available = true;
++            root.error = "";
++            root.failures = 0;
++            root.loaded = true;
++            root.lastEntries = result.entries;
++            root.applyWindows();
++        } else if (result.kind === "missing") {
++            root.available = false;
++            root.error = result.message;
++            root.stopped = true;
++        } else {
++            // The script ran, so claude is on PATH; keep the last list visible.
++            root.available = true;
++            root.failures += 1;
++            root.error = result.message;
++            if (result.stop) root.stopped = true;
++        }
++        root.pollInterval = AgentsLogic.nextInterval(root.pollInterval, elapsedMs);
++    }
++
++    function focus(session) {
++        if (session?.window?.address) {
++            Hyprland.dispatch(`hl.dsp.focus({window = "address:${session.window.address}"})`);
++        } else if (session?.kind === "background" && session?.id) {
++            Quickshell.execDetached(AgentsLogic.attachCommand(session));
++        }
++    }
++
++    function statusOf(session) {
++        return AgentsLogic.effectiveStatus(session);
++    }
++
++    function subtitleOf(session) {
++        return AgentsLogic.subtitle(session, Date.now());
++    }
++
++    // Window titles change with the session spinner; re-match without re-running the script.
++    // Only while visible: a closed tab does no work, and the first tick on reopen re-matches.
++    Connections {
++        target: HyprlandData
++        function onWindowListChanged() {
++            if (root.loaded && root.active) root.applyWindows();
++        }
++    }
++
++    Timer {
++        id: pollTimer
++        interval: root.pollInterval
++        repeat: true
++        running: root.active && !root.stopped
++        triggeredOnStart: true
++        onTriggered: {
++            if (agentsProc.running) return;
++            agentsProc.pendingParts = 2;
++            agentsProc.startedAt = Date.now();
++            agentsProc.running = true;
++        }
++    }
++
++    Process {
++        id: agentsProc
++        // stdout closing and the exit can arrive in either order; handle the run once both are in.
++        // stderr is only used for the error line, so it is read as far as it has arrived.
++        property int pendingParts: 0
++        property int exitCode: 0
++        property real startedAt: 0
++        function partDone() {
++            agentsProc.pendingParts -= 1;
++            if (agentsProc.pendingParts === 0)
++                root.handleResult(agentsProc.exitCode, agentsOut.text, agentsErr.text, Date.now() - agentsProc.startedAt);
++        }
++        command: ["bash", root.scriptPath]
++        stdout: StdioCollector {
++            id: agentsOut
++            onStreamFinished: agentsProc.partDone()
++        }
++        stderr: StdioCollector {
++            id: agentsErr
++        }
++        onExited: (exitCode, exitStatus) => {
++            agentsProc.exitCode = exitCode;
++            agentsProc.partDone();
++        }
++    }
++}
+diff --git a/dots/.config/quickshell/ii/services/claude-agents.js b/dots/.config/quickshell/ii/services/claude-agents.js
+new file mode 100644
+index 0000000..5b7163c
+--- /dev/null
++++ b/dots/.config/quickshell/ii/services/claude-agents.js
+@@ -0,0 +1,130 @@
++// Pure helpers for services/ClaudeAgents.qml, kept free of QML types so
++// they can be tested with plain node (see the dotfiles repo's
++// scripts/ii-agents/test-logic.mjs).
++
++const BASE_INTERVAL = 3000;
++const MAX_INTERVAL = 15000;
++const SLOW_RUN_MS = 1000;
++const MAX_FAILURES = 3;
++
++// Claude Code sets the terminal title to "<spinner> <session name>":
++// ◐ ◑ ◒ ◓ while busy, ✳ otherwise. Braille frames are covered too.
++function stripSpinner(title) {
++    return String(title ?? "").replace(/^[◐-◓✳⠀-⣿]\s+/, "");
++}
++
++function titleMatches(win, name) {
++    return !!name && stripSpinner(win.title) === name;
++}
++
++function mostRecentlyFocused(wins) {
++    return wins.slice().sort((a, b) => (a.focusHistoryID ?? 1e9) - (b.focusHistoryID ?? 1e9))[0] ?? null;
++}
++
++// Returns the Hyprland client for a session, or null. nameIsUnique is false
++// when another listed session has the same name: a background session then
++// never matches by title, so it cannot land in the other session's window.
++function matchWindow(session, windows, nameIsUnique = true) {
++    const wins = windows ?? [];
++    if (session?.kind === "interactive") {
++        for (const pid of session.ancestors ?? []) {
++            const owned = wins.filter(w => w.pid === pid);
++            if (owned.length === 0) continue;
++            if (owned.length === 1) return owned[0];
++            const titled = owned.filter(w => titleMatches(w, session.name));
++            if (titled.length === 1) return titled[0];
++            return mostRecentlyFocused(titled.length > 1 ? titled : owned);
++        }
++        return null;
++    }
++    if (!nameIsUnique) return null;
++    const titled = wins.filter(w => titleMatches(w, session?.name));
++    return titled.length === 1 ? titled[0] : null;
++}
++
++// "waiting" | "busy" | "idle" | "done" | <raw unknown value> | "unknown"
++function effectiveStatus(session) {
++    if (session?.status) return session.status;
++    switch (session?.state) {
++    case "blocked": return "waiting";
++    case "working": return "busy";
++    case "done": case "failed": case "stopped": return "done";
++    default: return session?.state ?? "unknown";
++    }
++}
++
++function activityMs(session) {
++    if (typeof session?.lastActivity === "number") return session.lastActivity * 1000;
++    return typeof session?.startedAt === "number" ? session.startedAt : 0;
++}
++
++function rank(session) {
++    const s = effectiveStatus(session);
++    return s === "waiting" ? 0 : s === "busy" ? 1 : 2;
++}
++
++// entries: parsed agents.sh output. Returns { sessions, headlessCount }.
++function annotate(entries, windows) {
++    let headlessCount = 0;
++    const sessions = [];
++    const nameCounts = {};
++    for (const e of entries ?? []) nameCounts[e.name] = (nameCounts[e.name] ?? 0) + 1;
++    for (const e of entries ?? []) {
++        const s = Object.assign({}, e, { window: matchWindow(e, windows, nameCounts[e.name] === 1) });
++        if (s.kind === "interactive" && !s.window) {
++            headlessCount++;
++            continue;
++        }
++        sessions.push(s);
++    }
++    sessions.sort((a, b) => rank(a) - rank(b) || activityMs(b) - activityMs(a));
++    return { sessions: sessions, headlessCount: headlessCount };
++}
++
++// Returns { kind: "ok", entries } | { kind: "missing", message }
++//       | { kind: "error", message, stop }.
++function classifyResult(exitCode, stdout, stderr, failuresSoFar) {
++    if (exitCode === 127) return { kind: "missing", message: "Claude Code not found" };
++    let entries = null;
++    if (exitCode === 0) {
++        try {
++            entries = JSON.parse(stdout);
++        } catch (e) {
++            entries = null;
++        }
++    }
++    if (Array.isArray(entries)) return { kind: "ok", entries: entries };
++    const firstLine = String(stderr ?? "").trim().split("\n")[0];
++    const message = firstLine || (exitCode === 0 ? "Invalid output from claude agents --json" : `agents.sh exited with ${exitCode}`);
++    return { kind: "error", message: message, stop: failuresSoFar + 1 >= MAX_FAILURES };
++}
++
++function nextInterval(current, elapsedMs) {
++    if (elapsedMs > SLOW_RUN_MS) return Math.min(current * 2, MAX_INTERVAL);
++    return BASE_INTERVAL;
++}
++
++function basename(path) {
++    const parts = String(path ?? "").split("/").filter(p => p.length > 0);
++    return parts.length ? parts[parts.length - 1] : "/";
++}
++
++function relativeTime(ms, nowMs) {
++    const sec = Math.max(0, Math.floor((nowMs - ms) / 1000));
++    if (sec < 60) return "just now";
++    if (sec < 3600) return `${Math.floor(sec / 60)} min ago`;
++    if (sec < 86400) return `${Math.floor(sec / 3600)} h ago`;
++    return `${Math.floor(sec / 86400)} d ago`;
++}
++
++function subtitle(session, nowMs) {
++    const parts = [basename(session?.cwd)];
++    if (session?.kind === "background") parts.push("bg");
++    if (typeof session?.lastActivity === "number") parts.push(relativeTime(session.lastActivity * 1000, nowMs));
++    else if (typeof session?.startedAt === "number") parts.push(`started ${relativeTime(session.startedAt, nowMs)}`);
++    return parts.join(" · ");
++}
++
++function attachCommand(session) {
++    return ["kitty", "-e", "claude", "attach", String(session.id)];
++}

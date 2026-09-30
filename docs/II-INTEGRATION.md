@@ -357,6 +357,26 @@ bash -c 'f=~/.config/illogical-impulse/config.json; jq --indent 4 ".sidebar.tran
 Not ported: `9f63cce`, which hardcodes `trans -e bing`; Bing rejects the
 default `auto` source and target.
 
+### Agents (`04-agents`)
+
+New work, not from the fork: a left-sidebar Agents tab that lists Claude Code
+sessions (spec: `docs/superpowers/specs/2026-09-27-ii-agent-overview-design.md`;
+usage under "Claude Code" below).
+
+| Patch | Adds | Drop when |
+|---|---|---|
+| `0001` ClaudeAgents service | `services/ClaudeAgents.qml`, `services/claude-agents.js`, `scripts/claude/agents.sh`, config `sidebar.agents.enable` (default `true`) | pinned ii ships an equivalent agents tab, or `claude agents --json` is removed |
+
+Tests, runnable against the clone (default) or a built source:
+
+```sh
+bash scripts/ii-agents/test-agents-sh.sh [<ii root>]
+node scripts/ii-agents/test-logic.mjs [<ii root>]
+```
+
+`<ii root>` is `…/dots/.config/quickshell/ii`, for example inside the
+`dots-hyprland-patched` store path.
+
 ### Workflow
 
 The clone at `~/src/dots-hyprland` is a disposable workspace; the patch files
