@@ -354,7 +354,7 @@ git commit -m "Add a parallel eval and lint gate for pushes and pull requests"
 
 - [ ] **Step 1: Write the workflow**
 
-```yaml
+````yaml
 name: update
 
 on:
@@ -437,18 +437,26 @@ jobs:
           if [ "$RESULT" != success ]; then
             title="[gate failing] $title"
           fi
-          body=$(printf '%s\n\n```\n%s\n```\n\n%s\n\n%s\n' \
-            "Gate result: **$RESULT** ([run]($RUN_URL))" \
-            "$SUMMARY" \
-            'CI checks eval only. Before merging, run `gh pr checkout <n> && just switch <host>` on one machine.' \
-            'Checks do not appear on this pull request: it is opened with GITHUB_TOKEN, which triggers no workflows. Merging runs the gate on main.')
+          body="$RUNNER_TEMP/body.md"
+          {
+            echo "Gate result: **$RESULT** ([run]($RUN_URL))"
+            echo
+            echo '```'
+            printf '%s\n' "$SUMMARY"
+            echo '```'
+            echo
+            # shellcheck disable=SC2016 # literal backticks for Markdown
+            echo 'CI checks eval only. Before merging, run `gh pr checkout <n> && just switch <host>` on one machine.'
+            echo
+            echo 'Checks do not appear on this pull request: it is opened with GITHUB_TOKEN, which triggers no workflows. Merging runs the gate on main.'
+          } > "$body"
           number=$(gh pr list --head ci/flake-update --base main --state open --json number --jq '.[0].number // empty')
           if [ -n "$number" ]; then
-            gh pr edit "$number" --title "$title" --body "$body"
+            gh pr edit "$number" --title "$title" --body-file "$body"
           else
-            gh pr create --head ci/flake-update --base main --title "$title" --body "$body"
+            gh pr create --head ci/flake-update --base main --title "$title" --body-file "$body"
           fi
-```
+````
 
 - [ ] **Step 2: Lint the workflow**
 
@@ -471,11 +479,11 @@ Expected: `no-change path taken`, then `change path taken`. (`$CLAUDE_JOB_DIR/tm
 - [ ] **Step 4: Check the summary extraction against real output**
 
 ```bash
-nix flake update --output-lock-file "$CLAUDE_JOB_DIR/tmp/probe.lock" 2>&1 | tee "$CLAUDE_JOB_DIR/tmp/update.log" >/dev/null
+(cd "$tmp" && nix flake update > "$CLAUDE_JOB_DIR/tmp/update.log" 2>&1)   # in Step 3's throwaway clone
 grep -A2 "Updated input" "$CLAUDE_JOB_DIR/tmp/update.log" | head -9
 ```
 
-Expected: blocks of `• Updated input '<name>':` followed by the old and new `'github:…'` lines. If nix prints nothing (inputs already current), the grep prints nothing, and `|| true` in the workflow keeps that from failing. `--output-lock-file` keeps the repo's `flake.lock` untouched.
+Expected: blocks of `• Updated input '<name>':` followed by the old and new `'github:…'` lines. If nix prints nothing (inputs already current), the grep prints nothing, and `|| true` in the workflow keeps that from failing. Run it in the throwaway clone: with `--output-lock-file`, nix prints no `Updated input` summary.
 
 - [ ] **Step 5: Commit**
 

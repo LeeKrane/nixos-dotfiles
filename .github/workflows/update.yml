@@ -1,0 +1,101 @@
+name: update
+
+on:
+  schedule:
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+
+# A manual run queues behind a scheduled one instead of racing it on the branch.
+concurrency:
+  group: update
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      changed: ${{ steps.commit.outputs.changed }}
+      summary: ${{ steps.commit.outputs.summary }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+      - name: Update inputs and claude-code
+        run: |
+          set -o pipefail
+          nix flake update 2>&1 | tee "$RUNNER_TEMP/update.log"
+          scripts/update-claude-code.sh 2>&1 | tee -a "$RUNNER_TEMP/update.log"
+      - name: Commit and push
+        id: commit
+        run: |
+          if [ -z "$(git status --porcelain -- flake.lock pkgs/claude-code)" ]; then
+            echo "Nothing to update."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add flake.lock pkgs/claude-code
+          git commit -m 'Update flake inputs and claude-code'
+          git push --force origin HEAD:refs/heads/ci/flake-update
+          {
+            echo "changed=true"
+            echo "summary<<SUMMARY_EOF"
+            grep -A2 "Updated input" "$RUNNER_TEMP/update.log" || true
+            grep -E '^claude-code .* -> ' "$RUNNER_TEMP/update.log" || true
+            echo "SUMMARY_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+  check:
+    needs: update
+    if: needs.update.outputs.changed == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/check.yml
+    with:
+      ref: ci/flake-update
+      force-nvim: true
+
+  pr:
+    needs: [update, check]
+    if: always() && needs.update.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Create or update the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RESULT: ${{ needs.check.result }}
+          SUMMARY: ${{ needs.update.outputs.summary }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title='Update flake inputs'
+          if [ "$RESULT" != success ]; then
+            title="[gate failing] $title"
+          fi
+          body="$RUNNER_TEMP/body.md"
+          {
+            echo "Gate result: **$RESULT** ([run]($RUN_URL))"
+            echo
+            echo '```'
+            printf '%s\n' "$SUMMARY"
+            echo '```'
+            echo
+            # shellcheck disable=SC2016 # literal backticks for Markdown
+            echo 'CI checks eval only. Before merging, run `gh pr checkout <n> && just switch <host>` on one machine.'
+            echo
+            echo 'Checks do not appear on this pull request: it is opened with GITHUB_TOKEN, which triggers no workflows. Merging runs the gate on main.'
+          } > "$body"
+          number=$(gh pr list --head ci/flake-update --base main --state open --json number --jq '.[0].number // empty')
+          if [ -n "$number" ]; then
+            gh pr edit "$number" --title "$title" --body-file "$body"
+          else
+            gh pr create --head ci/flake-update --base main --title "$title" --body-file "$body"
+          fi
