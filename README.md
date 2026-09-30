@@ -1,5 +1,8 @@
 # nixos-dotfiles
 
+[![check](https://github.com/LeeKrane/nixos-dotfiles/actions/workflows/check.yml/badge.svg?branch=main)](https://github.com/LeeKrane/nixos-dotfiles/actions/workflows/check.yml?query=branch%3Amain)
+[![update](https://github.com/LeeKrane/nixos-dotfiles/actions/workflows/update.yml/badge.svg)](https://github.com/LeeKrane/nixos-dotfiles/actions/workflows/update.yml)
+
 A declarative NixOS + Hyprland flake for three hosts. Each runs end-4's illogical-impulse (ii) Hyprland shell, home-manager as a NixOS module, and sops-nix for secrets.
 
 ii ships its own installer logic, not a plain dotfiles checkout, so this repo pulls it in as the soymou module instead of reimplementing that logic. The soymou module's activation step overwrites most of `~/.config` on every switch, so the wrapper renders Hyprland config into place after it runs. Full mechanics are in [docs/II-INTEGRATION.md](docs/II-INTEGRATION.md). The fallback plan if the soymou module goes stale is [docs/FALLBACK-VENDORING.md](docs/FALLBACK-VENDORING.md).
@@ -21,6 +24,8 @@ just check
 ```
 
 `just check` evaluates the flake and dry-run-builds all three hosts' toplevel in a throwaway Docker sandbox, needing Docker but no local Nix. `just docker-build <host>` runs a real build. Both cache the Nix store in a persistent volume between runs.
+
+CI runs the same eval and lint gate on every push to `main` and every pull request (`.github/workflows/check.yml`), and a weekly job opens a pull request with updated flake inputs and claude-code (`.github/workflows/update.yml`). Both are eval-only, not builds.
 
 To install onto real hardware, boot a NixOS unstable minimal ISO, clone this repo, then preview the installer before running it for real:
 
