@@ -366,6 +366,7 @@ usage under "Claude Code" below).
 | Patch | Adds | Drop when |
 |---|---|---|
 | `0001` ClaudeAgents service | `services/ClaudeAgents.qml`, `services/claude-agents.js`, `scripts/claude/agents.sh`, config `sidebar.agents.enable` (default `true`) | pinned ii ships an equivalent agents tab, or `claude agents --json` is removed |
+| `0002` Agents tab | `modules/ii/sidebarLeft/Agents.qml`, `agents/AgentRow.qml`, tab and polling switch in `SidebarLeftContent.qml` | same as `0001` |
 
 Tests, runnable against the clone (default) or a built source:
 
