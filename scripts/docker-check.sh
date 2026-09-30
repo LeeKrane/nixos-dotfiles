@@ -139,11 +139,12 @@ case "$mode" in
     shellcheck)
         # install.sh's equivalent of check above, since it has no
         # build-time check of its own. --self-test proves run_sh honours
-        # pipefail, the ERR trap, and the disko/PRIME sed helpers. The
-        # three --dry-run runs cover install mode's plain and PRIME
-        # branches plus setup mode, exiting 0 with no real hardware via
-        # soft_fail. Wrapped in a git-state assertion: these must not
-        # leave a staged change or a new commit behind.
+        # pipefail, the ERR trap, the disko/PRIME sed helpers and the
+        # new-host templates. The four --dry-run runs cover install mode's
+        # plain and PRIME branches, a new host's scaffold, and setup mode,
+        # exiting 0 with no real hardware via soft_fail. Wrapped in a
+        # git-state assertion: these must not leave a staged change, a new
+        # commit or a hosts/newbox/ behind.
         git add -A
         before_status=$(git status --porcelain | sort | md5sum)
         before_head=$(git rev-parse HEAD)
@@ -157,6 +158,7 @@ case "$mode" in
                 ./install.sh --self-test
                 ./install.sh --mode install --host taractias --disk /dev/null --yes --dry-run
                 ./install.sh --mode install --host tarmantria --disk /dev/null --yes --dry-run
+                ./install.sh --mode install --new-host newbox --user alice --profile intel-nvidia-prime --form-factor laptop --disk /dev/null --yes --dry-run
                 ./install.sh --mode setup --host taractias --yes --dry-run
             '"'"'
         '

@@ -3,7 +3,7 @@
 [![check](https://github.com/LeeKrane/nixos-dotfiles/actions/workflows/check.yml/badge.svg?branch=main)](https://github.com/LeeKrane/nixos-dotfiles/actions/workflows/check.yml?query=branch%3Amain)
 [![update](https://github.com/LeeKrane/nixos-dotfiles/actions/workflows/update.yml/badge.svg)](https://github.com/LeeKrane/nixos-dotfiles/actions/workflows/update.yml)
 
-A declarative NixOS + Hyprland flake for three hosts. Each runs end-4's illogical-impulse (ii) Hyprland shell, home-manager as a NixOS module, and sops-nix for secrets.
+A declarative NixOS + Hyprland flake for three hosts, plus any new machine `install.sh` scaffolds from `templates/host/`. Each runs end-4's illogical-impulse (ii) Hyprland shell, home-manager as a NixOS module, and sops-nix for secrets.
 
 ii ships its own installer logic, not a plain dotfiles checkout, so this repo pulls it in as the soymou module instead of reimplementing that logic. The soymou module's activation step overwrites most of `~/.config` on every switch, so the wrapper renders Hyprland config into place after it runs. Full mechanics are in [docs/II-INTEGRATION.md](docs/II-INTEGRATION.md). The fallback plan if the soymou module goes stale is [docs/FALLBACK-VENDORING.md](docs/FALLBACK-VENDORING.md).
 
@@ -23,7 +23,7 @@ cd ~/.dotfiles
 just check
 ```
 
-`just check` evaluates the flake and dry-run-builds all three hosts' toplevel in a throwaway Docker sandbox, needing Docker but no local Nix. `just docker-build <host>` runs a real build. Both cache the Nix store in a persistent volume between runs.
+`just check` evaluates the flake and dry-run-builds every host's toplevel in a throwaway Docker sandbox, needing Docker but no local Nix. `just docker-build <host>` runs a real build. Both cache the Nix store in a persistent volume between runs.
 
 CI runs the same eval and lint gate on every push to `main` and every pull request (`.github/workflows/check.yml`), and a weekly job opens a pull request with updated flake inputs and claude-code (`.github/workflows/update.yml`). Both are eval-only, not builds.
 
@@ -47,6 +47,7 @@ See [docs/INSTALL.md](docs/INSTALL.md) for the full runbook.
 flake.nix  lib/mk-host.nix   flake entry point, shared host builder
 install.sh                   live-ISO installer, post-boot setup script
 hosts/<host>/                 hardware, disko layout, Hyprland monitor/input
+templates/host/               new-host templates install.sh renders into hosts/<name>/
 modules/nixos/                system config: boot, gpu, desktop, sops, ...
 modules/home/                 home-manager config: ii wrapper, neovim, ...
 overlays/  pkgs/              ii-fixes overlay, plymouth-lone theme
@@ -61,10 +62,10 @@ docs/                         INSTALL, VERIFY, MIGRATION-NOTES, II-INTEGRATION, 
 
 Left in because it is either meaningless to anyone else or needed for the config to work as shown:
 
-- `modules/home/git.nix` bakes in the git identity `krane <chris@krane.dev>`.
+- `modules/nixos/user.nix` defaults the git identity to `krane <chris@krane.dev>`; each host can override it through `krane.user`.
 - `modules/nixos/locale.nix` sets the `Europe/Vienna` time zone and the `at-nodeadkeys` keyboard layout.
 - The hostnames `tariognatha`, `tarmantria`, `taractias`.
-- The username `krane`, hardcoded throughout.
+- The default username `krane` (`krane.user.name`, overridable per host).
 
 No private keys, passwords, password hashes, API tokens, WireGuard/age/SSH key material, MAC addresses, or LAN/internal IP addresses appear in any tracked file or the published history.
 
@@ -74,7 +75,7 @@ If you fork this, change:
 
 - The git identity, locale, keyboard, and hostnames above.
 - Every `/dev/CHANGE-ME` disko placeholder, or run `./install.sh`, which does that for you.
-- The username `krane` in `modules/nixos/users.nix`, `lib/mk-host.nix`, `modules/home/default.nix`, `modules/nixos/nix-settings.nix`, `modules/nixos/sops.nix`, and `install.sh`.
+- The default username and git identity in `modules/nixos/user.nix`, or set `krane.user` per host. `./install.sh`'s new-host flow asks for both.
 - Run your own `scripts/bootstrap-sops.sh` and fill in your own `secrets/*.yaml`. The committed `age1PLACEHOLDER_*` recipients decrypt nothing without the matching private keys, never published.
 
 ## History
