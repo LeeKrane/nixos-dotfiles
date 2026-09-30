@@ -1,0 +1,51 @@
+{
+  "animationPreset": { "type": "enum", "values": ["fast", "niri", "normal"] },
+  "hyprland": {
+    "animations:enabled": { "type": "bool" },
+    "decoration:active_opacity": { "type": "float", "min": 0, "max": 1 },
+    "decoration:blur:enabled": { "type": "bool" },
+    "decoration:blur:passes": { "type": "int", "min": 0, "max": 10 },
+    "decoration:blur:size": { "type": "int", "min": 0, "max": 100 },
+    "decoration:inactive_opacity": { "type": "float", "min": 0, "max": 1 },
+    "decoration:rounding": { "type": "int", "min": 0, "max": 20 },
+    "decoration:shadow:enabled": { "type": "bool" },
+    "decoration:shadow:range": { "type": "int", "min": 0, "max": 100 },
+    "general:border_size": { "type": "int", "min": 0, "max": 20 },
+    "general:gaps_in": { "type": "int", "min": 0, "max": 100 },
+    "general:gaps_out": { "type": "int", "min": 0, "max": 200 },
+    "general:layout": { "type": "enum", "values": ["dwindle", "master", "scrolling"] },
+    "input:follow_mouse": { "type": "int", "min": 0, "max": 3 },
+    "input:kb_layout": { "type": "str", "pattern": "^[a-z]+(,[a-z]+)*$" },
+    "input:kb_variant": { "type": "str", "pattern": "^[a-z0-9_]*(,[a-z0-9_]*)*$" },
+    "input:numlock_by_default": { "type": "bool" },
+    "input:repeat_delay": { "type": "int", "min": 0, "max": 2000 },
+    "input:repeat_rate": { "type": "int", "min": 0, "max": 200 },
+    "input:touchpad:clickfinger_behavior": { "type": "bool" },
+    "input:touchpad:disable_while_typing": { "type": "bool" },
+    "input:touchpad:natural_scroll": { "type": "bool" },
+    "input:touchpad:scroll_factor": { "type": "float", "min": 0, "max": 2 }
+  },
+  "idle": {
+    "lock": { "type": "int", "min": 0, "max": 86400 },
+    "screenOff": { "type": "int", "min": 0, "max": 86400 },
+    "suspend": { "type": "int", "min": 0, "max": 86400 }
+  },
+  "monitor": {
+    "bitdepth": { "type": "enum", "values": [8, 10] },
+    "bootConfirmed": { "type": "bool", "internal": true },
+    "cm": { "type": "enum", "values": ["adobe", "auto", "dcip3", "dp3", "edid", "hdr", "hdredid", "srgb", "wide"] },
+    "disabled": { "type": "bool" },
+    "max_avg_luminance": { "type": "int", "min": -1, "max": 10000 },
+    "max_luminance": { "type": "int", "min": -1, "max": 10000 },
+    "min_luminance": { "type": "float", "min": -1, "max": 10 },
+    "mode": { "type": "str", "pattern": "^(preferred|highres|highrr|[0-9]+x[0-9]+(@[0-9]+(\\.[0-9]+)?)?)$" },
+    "position": { "type": "str", "pattern": "^(auto|auto-(left|right|up|down|center-left|center-right|center-up|center-down)|-?[0-9]+x-?[0-9]+)$" },
+    "scale": { "type": "float", "min": 0.25, "max": 4 },
+    "sdr_max_luminance": { "type": "int", "min": 0, "max": 10000 },
+    "sdr_min_luminance": { "type": "float", "min": 0, "max": 10 },
+    "sdrbrightness": { "type": "float", "min": 0.5, "max": 3 },
+    "sdrsaturation": { "type": "float", "min": 0, "max": 2 },
+    "transform": { "type": "int", "min": 0, "max": 7 },
+    "vrr": { "type": "int", "min": -1, "max": 3 }
+  }
+}

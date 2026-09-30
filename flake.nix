@@ -745,6 +745,17 @@
                 ''
             );
 
+        # pkgs/krane-ii-settings unit tests: schema validation, sparse writes, no-op on
+        # unchanged content, refusals (bad JSON, Nix-owned or unknown key), render goldens.
+        ii-settings-writer =
+          pkgs.runCommand "ii-settings-writer-tests" { nativeBuildInputs = [ pkgs.python3 ]; }
+            ''
+              export PYTHONDONTWRITEBYTECODE=1
+              cd ${./pkgs/krane-ii-settings}
+              python3 -m unittest discover -s tests -v
+              touch "$out"
+            '';
+
         # NixVim's own startup test: fails on errors or warnings at startup.
         nvim = nvimEval.config.build.test;
 

@@ -1,0 +1,51 @@
+{
+  "animationPreset": "fast",
+  "hyprland": {
+    "animations:enabled": true,
+    "decoration:active_opacity": 1.0,
+    "decoration:blur:enabled": true,
+    "decoration:blur:passes": 3,
+    "decoration:blur:size": 6,
+    "decoration:inactive_opacity": 0.9,
+    "decoration:rounding": 12,
+    "decoration:shadow:enabled": false,
+    "decoration:shadow:range": 8,
+    "general:border_size": 2,
+    "general:gaps_in": 4,
+    "general:gaps_out": 10,
+    "general:layout": "master",
+    "input:follow_mouse": 1,
+    "input:kb_layout": "us",
+    "input:kb_variant": "",
+    "input:numlock_by_default": true,
+    "input:repeat_delay": 250,
+    "input:repeat_rate": 35,
+    "input:touchpad:clickfinger_behavior": false,
+    "input:touchpad:disable_while_typing": true,
+    "input:touchpad:natural_scroll": true,
+    "input:touchpad:scroll_factor": 0.7
+  },
+  "idle": { "lock": 600, "screenOff": 900, "suspend": 0 },
+  "monitors": {
+    "DP-2": {
+      "bitdepth": 10,
+      "bootConfirmed": false,
+      "cm": "hdr",
+      "max_avg_luminance": 400,
+      "max_luminance": 1000,
+      "min_luminance": 0.05,
+      "sdr_max_luminance": 200,
+      "sdr_min_luminance": 0.2,
+      "sdrbrightness": 1.2,
+      "sdrsaturation": 1.0,
+      "transform": 0,
+      "vrr": 1
+    },
+    "HDMI-A-1": {
+      "disabled": true,
+      "mode": "1920x1080@60",
+      "position": "-1920x0",
+      "scale": 1
+    }
+  }
+}

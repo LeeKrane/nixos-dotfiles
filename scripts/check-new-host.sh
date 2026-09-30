@@ -105,6 +105,8 @@ expect "disko" "disko.devices.disk.main.device" "$FAKE_DISK"
 # Per-host files that are copied, not rendered, checked on the last combination.
 test -f "$WT/hosts/$HOST/illogical-impulse/.gitignore" \
     || fail "scaffold: hosts/$HOST/illogical-impulse/.gitignore is missing"
+test -f "$WT/hosts/$HOST/ii-settings.json" \
+    || fail "scaffold: hosts/$HOST/ii-settings.json is missing"
 
 if [ "$failures" -ne 0 ]; then
     echo "check-new-host: $failures failures" >&2

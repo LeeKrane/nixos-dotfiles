@@ -842,6 +842,7 @@ render_host_templates() {
     # leftover-token grep below (both *.nix only) needs to see it.
     mkdir -p "$dest/illogical-impulse"
     cp "$TEMPLATE_DIR/illogical-impulse/.gitignore" "$dest/illogical-impulse/.gitignore"
+    cp "$TEMPLATE_DIR/ii-settings.json" "$dest/ii-settings.json"
     replace_block_token "$dest/default.nix" PROFILE_IMPORTS "$(template_section "$profile_file" imports)"
     replace_block_token "$dest/default.nix" FORM_FACTOR_IMPORTS "$(template_section "$ff_file" imports)"
     replace_block_token "$dest/default.nix" PROFILE "$(template_section "$profile_file" body)"
@@ -2114,6 +2115,8 @@ if $SELF_TEST_CHECK_SCAFFOLD; then
             done
             [ -f "$st_dir/illogical-impulse/.gitignore" ] \
                 || die "$st_profile/$st_ff: illogical-impulse/.gitignore was not copied"
+            grep -qx '{}' "$st_dir/ii-settings.json" \
+                || die "$st_profile/$st_ff: ii-settings.json was not copied as {}"
             grep -qF 'name = "tester";' "$st_dir/default.nix" \
                 || die "$st_profile/$st_ff: default.nix has no krane.user name line"
             grep -qF 'system.stateVersion = "26.05";' "$st_dir/default.nix" \

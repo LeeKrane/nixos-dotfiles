@@ -11,6 +11,7 @@ in
   # Overrides nixpkgs' claude-code with the vendored copy, so its version
   # is set by pkgs/claude-code/manifest.zst.json rather than the nixpkgs pin.
   claude-code = pkgs.callPackage ./claude-code/package.nix { };
+  krane-ii-settings = pkgs.callPackage ./krane-ii-settings { };
 
   anydoc = pkgs.callPackage ./anydoc/package.nix { };
   flake-update-notify = pkgs.callPackage ./flake-update-notify { };
