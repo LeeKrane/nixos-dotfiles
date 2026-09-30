@@ -11,54 +11,72 @@ Problem: every raw Hyprland event ran all five hyprctl queries; dragging a windo
 Port: hand-ported. Dropped the fork's WM.compositor guards (no compositor abstraction at the pin). Added a configreloaded branch that refreshes monitors and workspaces; 204f22f itself only changes a fork-only settings component. Widened the fork's routing so workspace and activespecial events also refresh monitors, fullscreen refreshes workspaces, and openlayer/closelayer refresh layers, since consumers read those. Also refreshes clients on moveworkspace and monitor hotplug, and matches Hyprland's minimized event name. Coalesces events into at most one round of queries every 60ms (leading-edge throttle) rather than debouncing until the stream goes quiet, so a continuous stream of events (a drag, a spinner title) cannot starve refreshes indefinitely.
 Drop when: the pinned services/HyprlandData.qml throttles onRawEvent.
 ---
- .../quickshell/ii/services/HyprlandData.qml   | 104 ++++++++++++++++--
- 1 file changed, 92 insertions(+), 12 deletions(-)
+ .../quickshell/ii/services/HyprlandData.qml   | 125 ++++++++++++++++--
+ 1 file changed, 113 insertions(+), 12 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/services/HyprlandData.qml b/dots/.config/quickshell/ii/services/HyprlandData.qml
-index 5dfedab6..8f474e88 100644
+index 5dfedab6..b20c8c92 100644
 --- a/dots/.config/quickshell/ii/services/HyprlandData.qml
 +++ b/dots/.config/quickshell/ii/services/HyprlandData.qml
-@@ -46,28 +46,73 @@ Singleton {
+@@ -46,28 +46,94 @@ Singleton {
  
      // Internals
  
-+    // Coalesce bursts of raw Hyprland events (e.g. dragging a window fires
-+    // dozens of "movewindow" events per second) into at most one round of
-+    // hyprctl queries every 60ms, instead of debouncing until the stream goes
-+    // quiet (which a continuous stream, like a drag or a spinner title, would
-+    // starve indefinitely), and only re-run the queries an event can actually
-+    // affect instead of all five on every event.
++    // Leading-edge throttle for bursts of raw Hyprland events (e.g. dragging
++    // a window fires dozens of "movewindow" events per second): the first
++    // event runs its hyprctl queries immediately, and any events that follow
++    // within 60ms are coalesced into at most one more round when the window
++    // ends, instead of debouncing until the stream goes quiet (which a
++    // continuous stream, like a drag or a spinner title, would starve
++    // indefinitely). A query still in flight is never killed - if its
++    // Process (or, for workspaces, either Process) is still running when the
++    // flush runs, the pending flag is left set and retried on the next
++    // flush, instead of restarting a running query and truncating its
++    // output. Only the queries an event can actually affect are re-run,
++    // instead of all five on every event.
 +    property bool _pendingClients: false
 +    property bool _pendingMonitors: false
 +    property bool _pendingLayers: false
 +    property bool _pendingWorkspaces: false
 +
-+    Timer {
-+        id: eventDebounceTimer
-+        interval: 60
-+        repeat: false
-+        onTriggered: {
-+            if (root._pendingClients) {
-+                getClients.running = false;
-+                getClients.running = true;
++    function flushPending() {
++        if (root._pendingClients) {
++            if (!getClients.running) {
++                getClients.running = true; // Fresh start: the process is not running
 +                root._pendingClients = false;
-+            }
-+            if (root._pendingMonitors) {
-+                getMonitors.running = false;
++            } // else: still running, leave the flag set and retry next flush
++        }
++        if (root._pendingMonitors) {
++            if (!getMonitors.running) {
 +                getMonitors.running = true;
 +                root._pendingMonitors = false;
 +            }
-+            if (root._pendingLayers) {
-+                getLayers.running = false;
++        }
++        if (root._pendingLayers) {
++            if (!getLayers.running) {
 +                getLayers.running = true;
 +                root._pendingLayers = false;
 +            }
-+            if (root._pendingWorkspaces) {
-+                getWorkspaces.running = false;
++        }
++        if (root._pendingWorkspaces) {
++            if (!getWorkspaces.running && !getActiveWorkspace.running) {
 +                getWorkspaces.running = true;
-+                getActiveWorkspace.running = false;
 +                getActiveWorkspace.running = true;
 +                root._pendingWorkspaces = false;
++            } // else: either workspace query is still running, leave both pending
++        }
++    }
++
++    Timer {
++        id: eventThrottleTimer
++        interval: 60
++        repeat: false
++        onTriggered: {
++            root.flushPending();
++            // A retry left pending above, or events that arrived during this
++            // window, need another round.
++            if (root._pendingClients || root._pendingMonitors || root._pendingLayers || root._pendingWorkspaces) {
++                eventThrottleTimer.start();
 +            }
 +        }
 +    }
@@ -68,7 +86,10 @@ index 5dfedab6..8f474e88 100644
 +        if (workspaces) root._pendingWorkspaces = true;
 +        if (monitors) root._pendingMonitors = true;
 +        if (layers) root._pendingLayers = true;
-+        if (!eventDebounceTimer.running) eventDebounceTimer.start();
++        if (!eventThrottleTimer.running) {
++            root.flushPending(); // Leading edge: run the first event immediately
++            eventThrottleTimer.start();
++        }
 +    }
 +
      function updateWindowList() {
@@ -101,7 +122,7 @@ index 5dfedab6..8f474e88 100644
      }
  
      function biggestWindowForWorkspace(workspaceId) {
-@@ -80,7 +125,11 @@ Singleton {
+@@ -80,7 +146,11 @@ Singleton {
      }
  
      Component.onCompleted: {
@@ -114,7 +135,7 @@ index 5dfedab6..8f474e88 100644
      }
  
      Connections {
-@@ -88,8 +137,39 @@ Singleton {
+@@ -88,8 +158,39 @@ Singleton {
  
          function onRawEvent(event) {
              // console.log("Hyprland raw event:", event.name);
