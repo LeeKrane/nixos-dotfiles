@@ -2,7 +2,8 @@
 
 Sub-project 5 of 5 in bringing pctrade/end4-pC work into this repo's ii setup.
 The order is: fixes, translator, dock, AI/agent overview, settings pages (this
-spec). The fixes spec (`2026-09-27-ii-fork-fixes-design.md`) defines the patch
+spec). Sub-project 3, the dock, was dropped; 1, 2 and 4 have landed. The
+fixes spec (`2026-09-27-ii-fork-fixes-design.md`) defines the patch
 mechanism and the `patches/ii/NN-<name>/` layout this spec builds on. The
 patches-versus-fork decision for all five sub-projects, and the triggers for
 revisiting it, are made below.
@@ -107,7 +108,7 @@ The GUI never commits and never pushes. Committing stays manual.
 ## Delivery mechanism: stay with patch series (decision)
 
 The five sub-projects together carry well over 20 patches: this one alone adds
-about 15, on top of the fixes' 9 and whatever sub-projects 2 to 4 add.
+about 15, on top of the fixes' 9 and whatever sub-projects 2 and 4 add.
 **Decision: keep `git format-patch` series applied by `applyPatches`, in the
 layout described below. Do not switch the flake input to a private fork.**
 
@@ -149,11 +150,13 @@ be moved later:
 - **One local branch, one directory per sub-project.** A single branch
   `krane` in the disposable clone holds every sub-project's commits in order.
   Lightweight tags in the clone (`krane/01-fixes`, `krane/02-translator`,
-  `krane/03-dock`, `krane/04-agents`, `krane/05-settings`) mark where each
+  `krane/04-agents`, `krane/05-settings`) mark where each
   sub-project ends. Each range is exported to its own directory with
   `git format-patch --no-numbered -o patches/ii/<NN>-<name> <prev-tag>..<tag>` (the pin for
-  `01-fixes`): `01-fixes`, `02-translator`, `03-dock`, `04-agents`,
-  `05-settings`. The tags only need to exist in the clone and are rebuilt when
+  `01-fixes`): `01-fixes`, `02-translator`, `04-agents`,
+  `05-settings`. Sub-project 3 (the dock) was dropped, so there is no
+  `krane/03-dock` tag and no `patches/ii/03-dock`. The tags only need to
+  exist in the clone and are rebuilt when
   the series is re-applied.
 - **Wiring.** `lib/mk-host.nix` reads `patches/ii/`, sorts the
   sub-directories, sorts the `.patch` files within each, and concatenates
@@ -203,20 +206,21 @@ Hyprland ones are replaced by this design, so they are not a problem.
 ### Porting rule for controls
 
 A control is ported only if the feature it configures exists in the pin plus
-the landed series of sub-projects 1 to 4. Otherwise the control is dropped
+the landed series of sub-projects 1, 2 and 4. Otherwise the control is dropped
 and listed in the docs table as "fork-only feature". Examples of dropped
 controls: centered wallpaper, the dynamic island in the bar, and the
-visualizer styles. Dock controls on the Interface page are ported only if
-sub-project 3 has landed. This keeps the port to "all pages" and not "all fork
+visualizer styles. Sub-project 3 (the dock) was dropped, so the Interface
+page ports only the Dock controls for upstream's keys; the fork's
+`dock.showBackground`, `showPinButton`, `showAppsButton` and `showMedia`
+controls are dropped as fork-only. This keeps the port to "all pages" and not "all fork
 features". Fork-only features stay out (resolved decision 5).
 
-Two rules protect what sub-projects 2 to 4 already changed, because this
+Two rules protect what sub-projects 2 and 4 already changed, because this
 sub-project replaces pages and ports a `Config.qml` subset on top of them:
 
 - **`Config.qml`: no key twice.** The ported subset adds only keys that do not
-  exist after `04-agents`. It does not redeclare the dock keys from
-  `03-dock` (`dock.showBackground`, `showPinButton`, `showAppsButton`,
-  `showMedia`) or `sidebar.agents` from `04-agents`, since a second
+  exist after `04-agents`. It does not redeclare upstream's `dock.*` keys
+  or `sidebar.agents` from `04-agents`, since a second
   declaration of a property is a QML error. It does not revert the
   `sidebar.translator.enable: true` default from `02-translator`, and it
   leaves the `lock.launchOnStartup` line untouched, because the
@@ -224,8 +228,10 @@ sub-project replaces pages and ports a `Config.qml` subset on top of them:
   spec, "Patch series").
 - **Replaced pages keep earlier controls.** The replacement Interface page
   keeps the "Enable translator" switch (the translator's acceptance checks use
-  it) and the eight Dock switches: upstream's four plus the four from
-  `03-dock`, which the fork's page already has for the same keys.
+  it) and upstream's four Dock switches (`dock.enable`, `hoverToReveal`,
+  `pinnedOnStartup`, `monochromeIcons`). It also gains an "Agents tab" switch
+  for `sidebar.agents.enable` from `04-agents`, next to the translator switch
+  and in the same style (the fork's page has no control for it).
 
 ### Settings window: keep upstream's standalone window
 
@@ -250,7 +256,7 @@ Upstream's Advanced page, which the fork removed, stays.
   layout and wiring, and at least one pin bump done with its workflow, must be
   done and verified on the hosts before phase A starts. That bump is the
   first real measurement of what conflict resolution costs.
-- Sub-projects 2 to 4 do not block phase A. Controls for their features are
+- Sub-projects 2 and 4 do not block phase A. Controls for their features are
   added when they land, by the porting rule. If one lands after settings work
   has started, its commits still go ahead of the settings commits on the
   `krane` branch (rebase in the clone, move the tags, export again), so the

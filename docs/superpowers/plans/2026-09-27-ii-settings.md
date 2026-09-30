@@ -21,7 +21,7 @@
   II=~/src/dots-hyprland/dots/.config/quickshell/ii
   ```
   A fork page `modules/ii/settings/pages/<Page>.qml` goes to `$II/modules/settings/<Page>.qml`. `gh` is not installed; use `curl`.
-- Clone: `~/src/dots-hyprland`, branch `krane`, `git rerere` on. Sub-projects 1 to 4 have landed: tags `krane/01-fixes` to `krane/04-agents` exist and `patches/ii/01-fixes` to `patches/ii/04-agents` are committed. This plan's commits go after `krane/04-agents`. The end of the series is tagged `krane/05-settings`.
+- Clone: `~/src/dots-hyprland`, branch `krane`, `git rerere` on. Sub-projects 1, 2 and 4 have landed; sub-project 3 (the dock, `03-dock`) was dropped, so there is no `krane/03-dock` tag and no `patches/ii/03-dock`. Tags `krane/01-fixes`, `krane/02-translator` and `krane/04-agents` exist and `patches/ii/01-fixes`, `patches/ii/02-translator` and `patches/ii/04-agents` are committed. This plan's commits go after `krane/04-agents`. The end of the series is tagged `krane/05-settings`.
 - Export command, always exactly:
   ```bash
   mkdir -p ~/.dotfiles/patches/ii/05-settings
@@ -43,8 +43,8 @@
 - A script fetched with `curl` has no exec bit. `chmod +x` every `.py` and `.sh` before committing it in the clone, so the patch records mode 100755.
 - Dotfiles commits: subject line only, no body, no attribution lines. Never push, never open a PR. Commits follow the spec's "Commits" section, so tasks stage (`git add`) and only the tasks that end a commit group commit. **The executor never commits a `config.json`**: that is the user's own commit, after their privacy review (Task 11).
 - Porting rule (spec): a control is ported only if the feature it configures exists at the pin plus 01–04. Otherwise the control is removed and recorded as "fork-only feature" in the docs table (Task 25). In practice: a control whose `Config.options.*` key, type or service member `forkcheck.py` reports as missing is removed, unless a task below ports that key on purpose.
-- `Config.qml`: add no key that exists after `04-agents` (no second declaration of `dock.*` or `sidebar.agents`), do not touch `sidebar.translator.enable`'s default, and never edit the `property bool launchOnStartup: false` line (the `launchOnStartup` sed in `iiPatches` matches it exactly).
-- The replacement Interface page keeps the "Enable translator" switch and all eight Dock switches.
+- `Config.qml`: add no key that exists after `04-agents` (no second declaration of an upstream `dock.*` key or of `sidebar.agents`), do not touch `sidebar.translator.enable`'s default, and never edit the `property bool launchOnStartup: false` line (the `launchOnStartup` sed in `iiPatches` matches it exactly).
+- The replacement Interface page keeps the "Enable translator" switch and upstream's four Dock switches (`dock.enable`, `dock.hoverToReveal`, `dock.pinnedOnStartup`, `dock.monochromeIcons`), and gains an "Agents tab" switch for `sidebar.agents.enable` next to the translator switch (Task 8).
 - Hyprland keys the GUI may write are exactly those in `pkgs/krane-ii-settings/schema.json`, each checked against Hyprland 0.56.2's source (`src/config/values/ConfigValues.cpp`, and `src/config/lua/bindings/LuaBindingsConfigRules.cpp` for `hl.monitor` fields). Unknown keys are hard errors at Hyprland start.
 - No Niri code paths. Hosts: the host in use, then the others as they are used; taractias checks wait until its hardware is verified.
 - Scratch work: `mktemp -d -p "$XDG_RUNTIME_DIR"`. Porting tools that must survive a logout live in `~/src/ii-tools/` (outside both repos, never committed).
@@ -150,7 +150,7 @@ cd ~/src/dots-hyprland
 PIN=$(jq -r '.nodes."dots-hyprland".locked.rev' ~/.dotfiles/flake.lock)
 git status --short | head -5
 echo "branch: $(git rev-parse --abbrev-ref HEAD)"
-for t in krane/01-fixes krane/02-translator krane/03-dock krane/04-agents; do
+for t in krane/01-fixes krane/02-translator krane/04-agents; do
   git rev-parse -q --verify "refs/tags/$t" >/dev/null && echo "ok $t" || echo "MISSING $t"
 done
 git merge-base --is-ancestor "$PIN" krane && echo "ok based on the pin"
@@ -159,7 +159,7 @@ echo "rerere: $(git config rerere.enabled)"
 command ls ~/.dotfiles/patches/ii/
 ```
 
-Expected: a clean tree, `branch: krane`, four `ok` tags, both `ok` lines, `rerere: true`, and `01-fixes 02-translator 03-dock 04-agents`. If anything differs, stop and report: the spec makes sub-project 1 a hard prerequisite, and this plan assumes 2 to 4 have landed too.
+Expected: a clean tree, `branch: krane`, three `ok` tags, both `ok` lines, `rerere: true`, and `01-fixes 02-translator 04-agents` (no `03-dock`: sub-project 3 was dropped). If anything differs, stop and report: the spec makes sub-project 1 a hard prerequisite, and this plan assumes 2 and 4 have landed too.
 
 Then ask the user to confirm that sub-project 1's workflow has been through at least one pin bump on the hosts (spec, "Prerequisites and effort"). Stop if not.
 
@@ -319,7 +319,7 @@ python3 ~/src/ii-tools/forkcheck.py "$II" "$II"/modules/settings/*.qml > ~/src/i
 command cat ~/src/ii-tools/baseline/forkcheck.txt
 ```
 
-Expected: the same 7 findings as Step 5, unless 02–04 changed those pages. Any `dock.*` or `sidebar.translator` finding means 02 or 03 did not land as assumed: stop and report.
+Expected: the same 7 findings as Step 5, unless 02–04 changed those pages. Any `dock.*` or `sidebar.translator` finding means the clone is not the pin plus 01, 02 and 04 as assumed: stop and report.
 
 No commit.
 
@@ -1023,28 +1023,44 @@ for p in InterfaceConfig ServicesConfig; do curl -sfL "$F/modules/ii/settings/pa
 python3 ~/src/ii-tools/forkcheck.py "$II" "$II"/modules/settings/{InterfaceConfig,ServicesConfig}.qml | cut -d: -f3- | sort | uniq -c
 ```
 
-Expected: no `dock.*` finding (03-dock declared those keys). Interface findings include `lock.{blur.size,showMedia,showToolbars,showWidgets}`, `overview.style`, `settings.{borderColor,borderSize,style}`, `sidebar.{banner,bottomGroup,media.*,mediaPlayer}`, `sidebar.cornerOpen.{bottomLeftAction,bottomRightAction}`, `wallpaperSelector.{changeInterval,closeAfterSelection,columns,liveWallpapersPath,showBlurBackground,showHomePath,showSearchbar,userPath}`, `global: hotCornerOptions`, `type: Player` and two `WM`. Services: `search.prefix.keybinds`, `search.prefix.symbols`.
+Expected: Interface findings include `dock.{showAppsButton,showBackground,showMedia,showPinButton}` (fork-only: the dock sub-project that would have declared them was dropped), `lock.{blur.size,showMedia,showToolbars,showWidgets}`, `overview.style`, `settings.{borderColor,borderSize,style}`, `sidebar.{banner,bottomGroup,media.*,mediaPlayer}`, `sidebar.cornerOpen.{bottomLeftAction,bottomRightAction}`, `wallpaperSelector.{changeInterval,closeAfterSelection,columns,liveWallpapersPath,showBlurBackground,showHomePath,showSearchbar,userPath}`, `global: hotCornerOptions`, `type: Player` and two `WM`. Services: `search.prefix.keybinds`, `search.prefix.symbols`.
 
 - [ ] **Step 2: Adapt**
 
 1. `sed -i 's/Config\.options\.settings\.style === "minimal"/false/g; s/WM\.compositor !== "niri"/true/g; s/WM\.compositor === "niri"/false/g' "$II/modules/settings/InterfaceConfig.qml"`.
 2. Remove controls for every remaining finding, exactly as in Task 7, Step 2.3 and 2.5, recording them in `~/src/ii-tools/dropped.txt`. Guard cases on this page: the "Overview" section's "Default Settings" subsection, its rows/columns `GroupedList` and the direction selector are pin controls guarded by `visible: Config.options.overview.style !== "niri"`; replace each guard with `true` and delete only the "Style" selector (`overview.style`, the fork's niri-like overview). "Show media player info" configures `lock.showMedia` (fork-only), so it goes with its `lock.showToolbars` guard. In the "Right Sidebar" `GroupedList`, delete the "Banner", "Bottom Group" and "Media Player" switches and keep "Keep right sidebar loaded".
-3. Do not remove any control for `sidebar.translator.enable` or `dock.*`.
+3. Do not remove any control for `sidebar.translator.enable`, `sidebar.agents.enable` or upstream's four dock keys (`dock.enable`, `dock.hoverToReveal`, `dock.pinnedOnStartup`, `dock.monochromeIcons`). The fork's "Background", "Media Player", "Show Pin Button" and "Show Apps Button" Dock switches read fork-only keys and go by item 2.
+4. Add the Agents tab switch next to the translator switch. In the fork's translator card (the `ColumnLayout` with `id: translatorCol`), directly after the `RowLayout` that holds the "Enable Translator" `ConfigSwitch`, add:
+   ```qml
+                       RowLayout {
+                           spacing: 8
+                           ConfigSwitch {
+                               buttonIcon: "smart_toy"
+                               text: Translation.tr("Agents tab")
+                               checked: Config.options.sidebar.agents.enable
+                               onCheckedChanged: { Config.options.sidebar.agents.enable = checked }
+                               StyledToolTip {
+                                   text: Translation.tr("List Claude Code sessions in the left sidebar")
+                               }
+                           }
+                       }
+   ```
+   `sidebar.agents.enable` exists after `04-agents` (default `true`), so `forkcheck.py` reports nothing for it.
 
-- [ ] **Step 3: The translator and dock switches are still there**
+- [ ] **Step 3: The translator, agents and dock switches are there**
 
 ```bash
-for k in sidebar.translator.enable dock.enable dock.hoverToReveal dock.pinnedOnStartup dock.monochromeIcons dock.showBackground dock.showPinButton dock.showAppsButton dock.showMedia; do
+for k in sidebar.translator.enable sidebar.agents.enable dock.enable dock.hoverToReveal dock.pinnedOnStartup dock.monochromeIcons; do
   printf '%s %s\n' "$(grep -c "checked: Config.options.$k$" "$II/modules/settings/InterfaceConfig.qml")" "$k"
 done
 python3 ~/src/ii-tools/forkcheck.py "$II" "$II"/modules/settings/{InterfaceConfig,ServicesConfig}.qml; echo "exit $?"
 ```
 
-Expected: `1` for all nine keys, then `exit 0`.
+Expected: `1` for all six keys, then `exit 0`.
 
 - [ ] **Step 4: Smoke, commit (one per page), export**
 
-Smoke both pages as in Task 7, Step 3 (expected: only `==` lines). Subjects `feat(settings): port end4-pC's Interface page` and `feat(settings): port end4-pC's Services page`, same message form as Task 7. Run the export command.
+Smoke both pages as in Task 7, Step 3 (expected: only `==` lines). Subjects `feat(settings): port end4-pC's Interface page` and `feat(settings): port end4-pC's Services page`, same message form as Task 7; the Interface page's `Port:` line adds `; "Agents tab" switch added for sidebar.agents.enable` inside the parentheses. Run the export command.
 
 ---
 
@@ -5098,7 +5114,7 @@ In `docs/II-INTEGRATION.md`:
      the next switch.
    ```
 4. In "Patched files", in the `Config.qml` `launchOnStartup` bullet, replace ``` `config.json` stays ii-owned after that, the GUI can still flip it back off.``` with `After that the value lives in this host's config.json in the repo, and the settings window can still turn it off.`
-5. The subsections that sub-projects 3 and 4 added still call `config.json` ii's own state. In ``### Dock (`03-dock`)``, replace ``nothing in this repo turns it on: `config.json` is ii's own state.`` (wrapped over two lines) with ``Nix never turns it on; the setting lands in this host's `config.json` in the repo (see "Settings persistence").`` In `### Agents tab` (under `## Claude Code`), replace `(ii-owned, not written by Nix)` with `(this host's file in the repo, see "Settings persistence"; not written by Nix)`. The `jq` commands in the Translator and Dock subsections keep working: `mv` replaces the file inside the linked directory, and `*.tmp` is ignored.
+5. The subsection that sub-project 4 added still calls `config.json` ii's own state. In `### Agents tab` (under `## Claude Code`), replace ``To turn the tab off, add `"sidebar": {"agents": {"enable": false}}` to `~/.config/illogical-impulse/config.json` (ii-owned, not written by Nix).`` (wrapped over two lines) with ``To turn the tab off, use Settings, Interface, "Agents tab", or add `"sidebar": {"agents": {"enable": false}}` to `~/.config/illogical-impulse/config.json` (this host's file in the repo, see "Settings persistence"; not written by Nix).`` The `jq` command in the Translator subsection keeps working: `mv` replaces the file inside the linked directory, and `*.tmp` is ignored.
 6. Delete the `hypridle.conf` bullet under "Patched files" (the `idleTimeouts = false` sed) and add after the list: ``Idle timeouts are no longer a sed: `kraneIiIdle` (in `modules/home/ii-settings.nix`) runs ii's `hypridleconfigurator.py` with the values from `krane.hypr.idle`, `idleTimeouts = false` (all zeros) or the settings window. See "Settings persistence".``
 
 - [ ] **Step 2: Add the "Settings persistence" section**
@@ -5219,6 +5235,7 @@ presets.
 | Background | Image converter, Media, Resources, Calendar, World clock, User card, Notes, Todo, Timers, Sticker entries (Widgets) | `background.widgets.{images,media,resources,calendar,worldClock,userCard,notes,todo,timers,sticker}.enable` | fork-only feature |
 | Background | Show alignment grid while dragging, Show snap lines when dropping (Canvas) | `background.{showGrid,showSnapLines}` | fork-only feature |
 | Interface | Settings Panel (whole section: Style, Border width, Border Color) | `settings.{style,borderSize,borderColor}` | fork panel-style settings overlay not ported |
+| Interface | Background, Media Player, Show Pin Button, Show Apps Button (Dock) | `dock.{showBackground,showMedia,showPinButton,showAppsButton}` | fork-only feature |
 | Interface | Enable, Follow Album Colors (Left Sidebar media) | `sidebar.media.{enable,artColors}` | fork-only feature |
 | Interface | Banner, Bottom Group, Media Player (Right Sidebar) | `sidebar.{banner,bottomGroup,mediaPlayer}` | fork-only feature |
 | Interface | Bottom-left, Bottom-right (hot corners) | `sidebar.cornerOpen.{bottomLeftAction,bottomRightAction}` | fork-only feature |
