@@ -7,11 +7,11 @@ Problem: the swap button swapped only the languages, so the input kept the old s
 Port: new. Swap also moves the output into the input and the input into the output; while a translation is pending the swap waits for it (a second press cancels), and the swap button shows the queued state.
 Drop when: the pinned modules/ii/sidebarLeft/Translator.qml swap exchanges the texts.
 ---
- .../ii/modules/ii/sidebarLeft/Translator.qml  | 60 ++++++++++++++++++-
- 1 file changed, 58 insertions(+), 2 deletions(-)
+ .../ii/modules/ii/sidebarLeft/Translator.qml  | 59 ++++++++++++++++++-
+ 1 file changed, 57 insertions(+), 2 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
-index dfd28239..f0dea782 100644
+index ae3d416e..59de63cd 100644
 --- a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
 @@ -33,6 +33,7 @@ Item {
@@ -22,7 +22,7 @@ index dfd28239..f0dea782 100644
  
      function showLanguageSelectorDialog(isTargetLang: bool) {
          root.languageSelectorTarget = isTargetLang;
-@@ -40,6 +41,31 @@ Item {
+@@ -40,6 +41,22 @@ Item {
      }
  
      function swapLanguages() {
@@ -41,20 +41,11 @@ index dfd28239..f0dea782 100644
 +        const input = root.inputField.text;
 +        const output = root.translatedText.trim();
 +
-+        if (input.trim().length > 0 && output.length === 0) {
-+            // No translation to swap yet: re-translate in the original
-+            // direction instead of swapping languages, which would translate
-+            // the old text the wrong way once the languages flip.
-+            root.swapPending = true;
-+            translateTimer.restart();
-+            return;
-+        }
-+
 +        root.swapPending = false;
          let temp = root.targetLanguage;
          root.targetLanguage = root.sourceLanguage;
          root.sourceLanguage = temp;
-@@ -48,7 +74,13 @@ Item {
+@@ -48,7 +65,16 @@ Item {
          Config.options.language.translator.targetLanguage = root.targetLanguage;
          Config.options.language.translator.sourceLanguage = root.sourceLanguage;
  
@@ -64,12 +55,15 @@ index dfd28239..f0dea782 100644
 +            root.translatedText = input.trim();
 +            translateTimer.stop();
 +        } else {
++            // Nothing to swap texts with yet: flip the direction only. This is
++            // what the user wants, since the text was usually typed for the
++            // other direction.
 +            translateTimer.restart(); // Restart translation after swap
 +        }
      }
  
      onFocusChanged: (focus) => {
-@@ -64,11 +96,17 @@ Item {
+@@ -64,11 +90,17 @@ Item {
          onTriggered: () => {
              if (root.inputField.text.trim().length > 0) {
                  // console.log("Translating with command:", translateProc.command);
@@ -87,7 +81,7 @@ index dfd28239..f0dea782 100644
              }
          }
      }
-@@ -80,14 +118,31 @@ Item {
+@@ -80,14 +112,36 @@ Item {
              + ` -target '${StringUtils.shellSingleQuoteEscape(root.targetLanguage)}'`
              + ` '${StringUtils.shellSingleQuoteEscape((root.inputField?.text ?? "").trim())}'`]
          property string buffer: ""
@@ -98,36 +92,41 @@ index dfd28239..f0dea782 100644
              }
          }
          onExited: (exitCode, exitStatus) => {
++            // Quickshell clears `process` before emitting exited and only starts a
++            // queued restart afterwards, so a !translateProc.running check here is
++            // always true and cannot tell us anything new.
 +            if (translateProc.stale) {
 +                translateProc.stale = false;
 +                translateProc.buffer = ""; // SplitParser can still deliver the killed run's tail
 +                // The kill that made this run stale may have been the empty-input
 +                // branch abandoning it rather than a restart. Resolve any pending
 +                // swap here too, but only once nothing newer is in flight.
-+                if (root.swapPending && !translateProc.running && !translateTimer.running
++                if (root.swapPending && !translateTimer.running
 +                    && root.inputField.text.trim().length === 0) root.doSwap();
 +                return;
 +            }
              // With -brief mode, we get output with no metadata
              root.translatedText = translateProc.buffer.trim();
-+            // A failing or empty translation leaves the swap pending instead of
-+            // looping doSwap, which would just re-queue another retranslation.
-+            if (root.swapPending && !translateProc.running && !translateTimer.running
-+                && (root.translatedText.length > 0 || root.inputField.text.trim().length === 0)) {
++            // Resolve a pending swap once the run ends and nothing newer is
++            // queued. doSwap() falls back to a languages-only swap when there is
++            // nothing to swap texts with, so this is safe even for a failed or
++            // empty translation: it flips the languages instead of leaving the
++            // swap toggled forever.
++            if (root.swapPending && !translateTimer.running) {
 +                root.doSwap();
 +            }
          }
      }
  
-@@ -179,6 +234,7 @@ Item {
-             GroupButton { // Swap languages button
+@@ -180,6 +234,7 @@ Item {
                  id: swapButton
+                 implicitHeight: contentItem.implicitHeight + verticalPadding * 2
                  Layout.preferredWidth: height
 +                toggled: root.swapPending
                  colBackground: Appearance.colors.colTertiaryContainer
                  colBackgroundHover: Appearance.colors.colTertiaryContainerHover
                  buttonRadius: Appearance.rounding.full
-@@ -188,7 +244,7 @@ Item {
+@@ -188,7 +243,7 @@ Item {
                      horizontalAlignment: Text.AlignHCenter
                      iconSize: Appearance.font.pixelSize.larger
                      text: "autorenew"

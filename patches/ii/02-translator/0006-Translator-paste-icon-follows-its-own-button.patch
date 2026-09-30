@@ -3,18 +3,20 @@ From: krane <chris@krane.dev>
 Date: Wed, 30 Sep 2026 01:10:11 +0200
 Subject: [PATCH] Translator: paste icon follows its own button
 
-Problem: the paste icon greyed out whenever the input was empty, the moment paste is needed.
-Port: new
-Drop when: the pinned Translator.qml paste icon colour reads pasteButton.enabled
+Problem: the paste icon greyed out whenever the input was empty.
+
+Port: new, the paste icon uses a fixed colour since the button is always enabled.
+
+Drop when: the pinned Translator.qml paste icon colour no longer depends on deleteButton.enabled.
 ---
  .../.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
-index f0dea782..35bbc940 100644
+index 59de63cd..f018a8ba 100644
 --- a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
-@@ -191,7 +191,7 @@ Item {
+@@ -190,7 +190,7 @@ Item {
                      horizontalAlignment: Text.AlignHCenter
                      iconSize: Appearance.font.pixelSize.larger
                      text: "content_paste"

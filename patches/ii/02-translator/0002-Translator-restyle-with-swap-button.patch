@@ -16,7 +16,7 @@ Drop when: never (feature, not a fix); revisit if upstream restyles Translator.q
  3 files changed, 183 insertions(+), 106 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
-index 994880eb..dfd28239 100644
+index 994880eb..ae3d416e 100644
 --- a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
 @@ -39,6 +39,18 @@ Item {
@@ -144,13 +144,13 @@ index 994880eb..dfd28239 100644
 +                }
 +            }
 +
-+            GroupButton { // Swap languages button
++            RippleButton { // Swap languages button
 +                id: swapButton
++                implicitHeight: contentItem.implicitHeight + verticalPadding * 2
 +                Layout.preferredWidth: height
 +                colBackground: Appearance.colors.colTertiaryContainer
 +                colBackgroundHover: Appearance.colors.colTertiaryContainerHover
 +                buttonRadius: Appearance.rounding.full
-+                altAction: () => root.swapLanguages() // Long press also swaps
 +                contentItem: MaterialSymbol {
 +                    anchors.centerIn: parent
 +                    horizontalAlignment: Text.AlignHCenter
