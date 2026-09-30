@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Wed, 30 Sep 2026 17:19:14 +0200
+Subject: [PATCH] feat(settings): declare the config keys the ported settings
+ code reads
+
+Port of pctrade/end4-pC dc2ca2600ee6: modules/common/Config.qml (subset)
+https://github.com/pctrade/end4-pC/tree/dc2ca2600ee6d7852bf0ac91361db8e510f90a74
+Problem: the ported ContentSection stores collapsed sections in settings.collapsedSections, and the Profile page edits profile.*; neither exists at the pin.
+Port: hand-ported. Only these two objects; settings.style/borderColor/borderSize (fork panel styling) and profile.onlinePresets (online presets) are dropped.
+Drop when: the pinned Config.qml declares settings.collapsedSections and profile.displayName.
+---
+ .../.config/quickshell/ii/modules/common/Config.qml | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/dots/.config/quickshell/ii/modules/common/Config.qml b/dots/.config/quickshell/ii/modules/common/Config.qml
+index ac0851f3..48830dd0 100644
+--- a/dots/.config/quickshell/ii/modules/common/Config.qml
++++ b/dots/.config/quickshell/ii/modules/common/Config.qml
+@@ -80,6 +80,19 @@ Singleton {
+ 
+             property string panelFamily: "ii" // "ii", "waffle"
+ 
++            // Settings window state (patches/ii/05-settings): sections the user collapsed.
++            property JsonObject settings: JsonObject {
++                property list<string> collapsedSections: []
++            }
++
++            // Settings window Profile page (patches/ii/05-settings).
++            property JsonObject profile: JsonObject {
++                property string avatarPath: ""
++                property string avatarPicture: ""
++                property string descriptionText: "::distro::"
++                property string displayName: ""
++            }
++
+             property JsonObject policies: JsonObject {
+                 property int ai: 1 // 0: No | 1: Yes | 2: Local
+                 property int weeb: 1 // 0: No | 1: Open | 2: Closet

@@ -102,6 +102,10 @@ expect "autologin" "services.greetd.settings.initial_session.user" "$USER_NAME"
 expect "hostname" "networking.hostName" "$HOST"
 expect "disko" "disko.devices.disk.main.device" "$FAKE_DISK"
 
+# Per-host files that are copied, not rendered, checked on the last combination.
+test -f "$WT/hosts/$HOST/illogical-impulse/.gitignore" \
+    || fail "scaffold: hosts/$HOST/illogical-impulse/.gitignore is missing"
+
 if [ "$failures" -ne 0 ]; then
     echo "check-new-host: $failures failures" >&2
     exit 1

@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Wed, 30 Sep 2026 17:19:22 +0200
+Subject: [PATCH] feat(settings): open the page named by II_SETTINGS_PAGE first
+
+Port of pctrade/end4-pC dc2ca2600ee6: none (krane-only)
+https://github.com/pctrade/end4-pC/tree/dc2ca2600ee6d7852bf0ac91361db8e510f90a74
+Problem: krane-ii-settings boot-check must open the settings window on the Hyprland page, and page smoke tests need to start on one page.
+Port: krane-only. Unset or unknown names open the first page, as before.
+Drop when: the dotfiles repo no longer runs krane-ii-settings boot-check or the page smoke tests.
+---
+ dots/.config/quickshell/ii/settings.qml | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/dots/.config/quickshell/ii/settings.qml b/dots/.config/quickshell/ii/settings.qml
+index 65c64c16..a2fce2c9 100644
+--- a/dots/.config/quickshell/ii/settings.qml
++++ b/dots/.config/quickshell/ii/settings.qml
+@@ -65,7 +65,10 @@ ApplicationWindow {
+             component: "modules/settings/About.qml"
+         }
+     ]
+-    property int currentPage: 0
++    // II_SETTINGS_PAGE=<page file name without .qml> opens that page first. Used by
++    // krane-ii-settings boot-check and for smoke-testing single pages.
++    readonly property int initialPage: Math.max(0, root.pages.findIndex(p => p.component.endsWith(`/${Quickshell.env("II_SETTINGS_PAGE")}.qml`)))
++    property int currentPage: initialPage
+ 
+     visible: true
+     onClosing: Qt.quit()
+@@ -74,6 +77,7 @@ ApplicationWindow {
+     Component.onCompleted: {
+         MaterialThemeLoader.reapplyTheme()
+         Config.readWriteDelay = 0 // Settings app always only sets one var at a time so delay isn't needed
++        console.info(`[settings] initial page: ${root.pages[root.currentPage].component}`)
+     }
+ 
+     minimumWidth: 750
+@@ -240,7 +244,7 @@ ApplicationWindow {
+ 
+                     active: Config.ready
+                     Component.onCompleted: {
+-                        source = root.pages[0].component
++                        source = root.pages[root.currentPage].component
+                     }
+ 
+                     Connections {

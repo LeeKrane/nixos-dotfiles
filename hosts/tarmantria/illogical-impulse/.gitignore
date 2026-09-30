@@ -1,0 +1,4 @@
+# Written by ii at runtime (a symlink from ~/.config/illogical-impulse); reviewed and committed by hand.
+# See docs/II-INTEGRATION.md "Settings persistence".
+*.tmp
+ai/
