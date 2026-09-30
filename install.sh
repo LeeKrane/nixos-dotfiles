@@ -1644,9 +1644,14 @@ preflight_setup() {
     fi
     require git just sops age ssh-to-age
     HOST="${HOST:-$(hostname)}"
-    if [ ! -d "$REPO_ROOT/hosts/$HOST" ]; then
-        soft_fail "unknown host '$HOST', expected one of: ${AVAILABLE_HOSTS[*]}"
-    fi
+    # A die, not soft_fail: setup mode on a machine this flake never
+    # installed has no host config to bootstrap or switch to, and a new host
+    # can only be created from install mode.
+    local known=false h
+    for h in "${AVAILABLE_HOSTS[@]}"; do
+        [ "$h" != "$HOST" ] || known=true
+    done
+    $known || die "host '$HOST' not in hosts/ — install it via install mode, or pass --host"
     if [ "$REPO_ROOT" != "$HOME/.dotfiles" ]; then
         log_warn "checked out at $REPO_ROOT, not \$HOME/.dotfiles. The docs assume the latter"
     fi
@@ -2683,6 +2688,20 @@ EOF
     if $nc_ok; then
         echo "OK: host_uses_cuda true only for a new nvidia-desktop host" >&2
     else
+        SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
+    fi
+
+    echo "== self-test: setup mode refuses a hostname that is not in hosts/ ==" >&2
+    local sg_tmp sg_out sg_rc=0
+    sg_tmp=$(mktemp -d "${TMPDIR:-/tmp}/krane-install-selftest-hostname.XXXXXX")
+    printf '#!/bin/sh\necho bogushost\n' >"$sg_tmp/hostname"
+    chmod +x "$sg_tmp/hostname"
+    sg_out=$(PATH="$sg_tmp:$PATH" bash "$REPO_ROOT/install.sh" --mode setup --dry-run 2>&1) || sg_rc=$?
+    rm -rf "$sg_tmp"
+    if [ "$sg_rc" -ne 0 ] && printf '%s' "$sg_out" | grep -qF "host 'bogushost' not in hosts/"; then
+        echo "OK: setup mode on an unknown hostname dies even under --dry-run (rc=$sg_rc)" >&2
+    else
+        echo "FAIL: setup mode on hostname bogushost: rc=$sg_rc, no \"not in hosts/\" error" >&2
         SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
     fi
 
