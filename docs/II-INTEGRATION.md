@@ -330,7 +330,7 @@ the delete button's.
 | `0003` enable by default | none | new | upstream defaults `sidebar.translator.enable` to `true` |
 | `0004` selectable output | none | new | pinned `TextCanvas.qml` output area is selectable |
 | `0005` swap texts with languages | none | new | pinned `Translator.qml` swap exchanges the texts |
-| `0006` paste icon follows its own button | none | new | pinned `Translator.qml` paste icon colour reads `pasteButton.enabled` |
+| `0006` paste icon follows its own button | none | new | pinned `Translator.qml` paste icon colour no longer depends on `deleteButton.enabled` |
 
 The `0003` default only reaches hosts whose `config.json` has no
 `sidebar.translator.enable` key yet (a fresh host). ii saves its whole
