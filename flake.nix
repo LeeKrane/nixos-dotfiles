@@ -259,6 +259,13 @@
         # matched below. Errors raised inside a spec's own internal
         # vim.wait() window are also caught now, since :messages accumulates
         # for the whole nvim session rather than being reset per-window.
+        #
+        # Specs run with a 10 s format_on_save budget (vim.g.format_on_save_timeout_ms,
+        # read by modules/nixvim/lang/default.nix; interactive default 500 ms): a
+        # loaded CI runner once missed 500 ms for prettierd, and conform then saves
+        # unformatted without an error, failing a formatting assertion for a
+        # reason unrelated to the gating logic under test. A failing spec also
+        # prints :messages and conform.log, so the next failure shows its cause.
         nvim-specs =
           pkgs.runCommand "nvim-specs"
             {
@@ -277,7 +284,7 @@
                 echo "== $(basename "$spec")"
                 export XDG_STATE_HOME="$TMPDIR/state-$count"
                 mkdir -p "$XDG_STATE_HOME"
-                if ! timeout 120 nvim --headless -c "lua local ok, err = pcall(dofile, '$spec'); if not ok then io.stderr:write(tostring(err) .. '\n'); vim.cmd('cquit 1') end; vim.wait(200); local m = vim.api.nvim_exec2('messages', { output = true }).output; if m:find('callback:', 1, true) or m:find('E5108', 1, true) then io.stderr:write(m .. '\n'); vim.cmd('cquit 1') end; vim.cmd('qall!')"; then
+                if ! timeout 120 nvim --headless -c "lua vim.g.format_on_save_timeout_ms = 10000; local function messages() return vim.api.nvim_exec2('messages', { output = true }).output end; local ok, err = pcall(dofile, '$spec'); if not ok then io.stderr:write(tostring(err) .. '\n:messages:\n' .. messages() .. '\n'); local log = vim.fn.stdpath('log') .. '/conform.log'; if vim.fn.filereadable(log) == 1 then io.stderr:write('conform.log:\n' .. table.concat(vim.fn.readfile(log), '\n') .. '\n') end; vim.cmd('cquit 1') end; vim.wait(200); local m = messages(); if m:find('callback:', 1, true) or m:find('E5108', 1, true) then io.stderr:write(m .. '\n'); vim.cmd('cquit 1') end; vim.cmd('qall!')"; then
                   echo "nvim-specs: $(basename "$spec") failed or timed out after 120s" >&2
                   exit 1
                 fi

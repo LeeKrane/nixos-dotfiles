@@ -67,6 +67,12 @@
             local dir = vim.fs.dirname(vim.api.nvim_buf_get_name(bufnr))
             return vim.fs.find(gates[formatter], { upward = true, path = dir })[1] ~= nil
           end
+          -- A timed-out format still saves, unformatted, with only a notification.
+          -- nvim-specs raises this budget so a loaded CI runner can't flip a
+          -- formatting assertion; interactive saves keep the 500 ms default.
+          local function timeout_ms()
+            return vim.g.format_on_save_timeout_ms or 500
+          end
 
           return function(bufnr)
             if vim.g.disable_autoformat or vim.b[bufnr].disable_autoformat then
@@ -74,7 +80,7 @@
             end
             local listed = require("conform").formatters_by_ft[vim.bo[bufnr].filetype]
             if type(listed) ~= "table" then
-              return { timeout_ms = 500 }
+              return { timeout_ms = timeout_ms() }
             end
             local kept, gated = {}, false
             for _, name in ipairs(listed) do
@@ -85,12 +91,12 @@
               end
             end
             if not gated then
-              return { timeout_ms = 500 }
+              return { timeout_ms = timeout_ms() }
             end
             if #kept == 0 then
               return
             end
-            return { timeout_ms = 500, formatters = kept }
+            return { timeout_ms = timeout_ms(), formatters = kept }
           end
         end)()
       '';
