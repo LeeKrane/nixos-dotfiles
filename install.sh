@@ -1124,6 +1124,53 @@ sops_placeholder_present() {
         || grep -qF "$admin_placeholder" "$sops_yaml" 2>/dev/null
 }
 
+# Adds host $2's two age1PLACEHOLDER_* recipients to the sops config $1 as
+# the last `keys:` entries and appends a creation rule for secrets/$2.yaml:
+# the same shape the committed hosts had before scripts/bootstrap-sops.sh
+# replaced their placeholders, so setup mode's run_bootstrap_sops and
+# sops_placeholder_present work unchanged. No secrets/$2.yaml is created:
+# modules/nixos/sops.nix's pathExists gate handles its absence. A no-op when
+# either anchor already exists, matched whole so `tar` never hits
+# `&admin_taractias`.
+register_sops_host() {
+    local sops_yaml="$1" host="$2" host_upper tmp
+    [ -f "$sops_yaml" ] || die "$sops_yaml not found, cannot register sops placeholders for $host"
+    if grep -qE "&(admin|host)_${host}([[:space:]]|\$)" "$sops_yaml"; then
+        log_info "$sops_yaml already has anchors for $host, leaving it as is"
+        return 0
+    fi
+    grep -q '^creation_rules:' "$sops_yaml" \
+        || die "$sops_yaml has no top-level creation_rules:, cannot place $host's recipients"
+    host_upper=$(printf '%s' "$host" | tr '[:lower:]' '[:upper:]')
+    tmp=$(mktemp "${TMPDIR:-/tmp}/krane-install-sops.XXXXXX")
+    # Blank lines are held back until the next non-blank line, so the new keys
+    # go right after the last keys: entry and the gap stays before
+    # creation_rules:.
+    awk -v host="$host" -v upper="$host_upper" '
+        /^creation_rules:/ && !done {
+            printf "  - &admin_%s age1PLACEHOLDER_ADMIN_%s_REPLACE_VIA_BOOTSTRAP_SOPS_SH\n", host, upper
+            printf "  - &host_%s age1PLACEHOLDER_HOST_%s_REPLACE_VIA_BOOTSTRAP_SOPS_SH\n", host, upper
+            printf "%s", gap
+            gap = ""
+            done = 1
+            print
+            next
+        }
+        /^[[:space:]]*$/ && !done { gap = gap $0 "\n"; next }
+        { printf "%s", gap; gap = ""; print }
+        END {
+            printf "%s", gap
+            printf "\n  - path_regex: secrets/%s\\.yaml$\n", host
+            printf "    key_groups:\n      - age:\n          - *admin_%s\n          - *host_%s\n", host, host
+        }
+    ' "$sops_yaml" >"$tmp"
+    grep -qF "&host_${host} age1PLACEHOLDER_HOST_${host_upper}_REPLACE_VIA_BOOTSTRAP_SOPS_SH" "$tmp" \
+        || die "post-awk verification failed for $host in $sops_yaml"
+    # cat into the original, not mv, so the file keeps its mode and owner.
+    cat "$tmp" >"$sops_yaml"
+    rm -f "$tmp"
+}
+
 # True when $2, in the worktree of the git repo at $1, has no uncommitted
 # change at all -- modified, untracked, staged, or deleted. Reads the
 # worktree/index via `git status --porcelain` so callers can decide whether
@@ -1531,6 +1578,36 @@ if $SELF_TEST_CHECK_SCAFFOLD; then
         || die "git name with / & \\ \" \${ was not escaped for Nix and sed"
     grep -qF 'gitEmail = "a&b/c\\d@example.invalid";' "$st_dir/default.nix" \
         || die "git email with & / \\ was not escaped for Nix and sed"
+    # .sops.yaml: the new anchors land as the last keys: entries, a second
+    # run is a no-op, and a host whose name prefixes an existing one (tar vs
+    # taractias) is still added.
+    st_sops="$self_test_tmpdir/sops.yaml"
+    cp "$REPO_ROOT/.sops.yaml" "$st_sops"
+    register_sops_host "$st_sops" testhost
+    sops_placeholder_present "$st_sops" testhost \
+        || die "sops_placeholder_present missed testhost's new placeholders"
+    ! sops_placeholder_present "$st_sops" taractias \
+        || die "registering testhost made taractias read as not bootstrapped"
+    [ "$(grep -c '&admin_testhost ' "$st_sops")" = 1 ] || die "&admin_testhost is not in .sops.yaml exactly once"
+    st_rules_line=$(grep -n '^creation_rules:' "$st_sops" | cut -d: -f1)
+    st_key_line=$(grep -n '&host_testhost ' "$st_sops" | cut -d: -f1)
+    [ "$st_key_line" -lt "$st_rules_line" ] || die "&host_testhost landed after creation_rules:"
+    grep -qF 'path_regex: secrets/testhost\.yaml$' "$st_sops" || die "no creation rule for secrets/testhost.yaml"
+    if command -v yq >/dev/null 2>&1 && yq --version 2>&1 | grep -q mikefarah; then
+        [ "$(yq 'explode(.) | .creation_rules[-1].key_groups[0].age[1]' "$st_sops")" = age1PLACEHOLDER_HOST_TESTHOST_REPLACE_VIA_BOOTSTRAP_SOPS_SH ] \
+            || die "yq does not resolve testhost's creation rule to its host placeholder"
+    else
+        log_warn "mikefarah yq not found, skipping the YAML structure check"
+    fi
+    cp "$st_sops" "$st_sops.once"
+    register_sops_host "$st_sops" testhost
+    cmp -s "$st_sops" "$st_sops.once" || die "a second register_sops_host testhost changed .sops.yaml"
+    register_sops_host "$st_sops" tar
+    grep -qF '&admin_tar age1PLACEHOLDER_ADMIN_TAR_REPLACE_VIA_BOOTSTRAP_SOPS_SH' "$st_sops" \
+        || die "host 'tar' was treated as already registered because of &admin_taractias"
+    register_sops_host "$st_sops" my-box
+    sops_placeholder_present "$st_sops" my-box \
+        || die "sops_placeholder_present missed a dashed host's placeholders"
     echo "self-test-check-scaffold: OK"
     exit 0
 fi
