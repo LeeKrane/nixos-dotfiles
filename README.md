@@ -106,7 +106,7 @@ The public history starts at a single initial commit (2026-09-06). The developme
 
 The Plymouth boot theme under `pkgs/plymouth-lone/theme/` is a derivative of adi1090x's Plymouth themes and stays under its original GPLv3 licence: see `pkgs/plymouth-lone/theme/LICENSE`.
 
-The ii patches under `patches/ii/` modify [end-4/dots-hyprland](https://github.com/end-4/dots-hyprland) and are GPL-3.0 like upstream: see `patches/ii/LICENSE`. The `01-fixes` backports come from [pctrade/end4-pC](https://github.com/pctrade/end4-pC). The `patches/illogical-flake-*.patch` files quote [soymou/illogical-flake](https://github.com/soymou/illogical-flake), which has no licence. [LICENSE](LICENSE) has the full breakdown, including the LazyVim and powerlevel10k material.
+The ii patches under `patches/ii/` modify [end-4/dots-hyprland](https://github.com/end-4/dots-hyprland) and are GPL-3.0 like upstream: see `patches/ii/LICENSE`. The `01-fixes` backports and the `05-settings` settings pages come from [pctrade/end4-pC](https://github.com/pctrade/end4-pC). The `patches/illogical-flake-*.patch` files quote [soymou/illogical-flake](https://github.com/soymou/illogical-flake), which has no licence. [LICENSE](LICENSE) has the full breakdown, including the LazyVim and powerlevel10k material.
 
 ## Docs
 

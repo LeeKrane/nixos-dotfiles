@@ -131,3 +131,15 @@ makes the iwlwifi, rtw88 and Bluetooth adapters work on the laptop hosts.
 `nixos-generate-config` never turns it on by itself, so these two checks
 are the one thing docker verification cannot prove. On taractias,
 `rtw88` should show the in-kernel RTL8821CE adapter.
+
+## Settings window (after two consecutive switches)
+
+- `readlink -f ~/.config/illogical-impulse` is `~/.dotfiles/hosts/<host>/illogical-impulse`.
+- `krane-ii-settings render --json ~/.dotfiles/hosts/<host>/ii-settings.json | diff - ~/.config/hypr/custom/krane_gui.lua` prints nothing (the live file matches the repo file).
+- `hyprctl configerrors` is empty; `qs log -c ii` has no `[KraneSettings]` warning.
+- `SUPER + I` opens every page; closing it leaves the bar running.
+- One control per config.json page changes exactly one key in `git diff hosts/<host>/illogical-impulse/config.json`.
+- Hyprland page: gaps set to 12 shows in `hyprctl getoption general:gaps_in` within a second and in `git diff hosts/<host>/ii-settings.json`; reset removes the key and restores the value without a switch.
+- Keyboard layout (and on tariognatha idle) is disabled with "Set in Nix".
+- Displays: a change reverts after 15 s unless kept; a kept change asks again after the next reboot.
+- `systemctl --user is-active krane-ii-settings-revert.timer` is `inactive` when no change is pending.

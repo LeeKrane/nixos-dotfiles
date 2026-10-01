@@ -38,8 +38,9 @@ switch. Anything this repo writes before that step dies immediately.
 | `xdg-desktop-portal` | `zshrc.d` | | |
 
 `~/.local/share`: `icons`, `konsole`, `kxmlgui5`. Excluded:
-`~/.config/illogical-impulse`, whose `config.json` is the shell's own
-state and only seeded if absent.
+`~/.config/illogical-impulse`. It is a symlink into this repo,
+`hosts/<host>/illogical-impulse/` (see "Settings persistence"). The copy
+step's `mkdir -p` and its `config.json` seed check follow the link.
 
 Two consequences this repo already handles:
 
@@ -87,6 +88,7 @@ any `nix flake update` that moves `illogical-flake`.
 | `custom/rules.lua` | owned | Upstream ships it empty. |
 | `custom/env.lua` | appended | Truncated with `cat >` every switch. Our block must land after. |
 | `custom/general.lua` | appended | The soymou module appends its `hl.plugin` block. Our block must land after. |
+| `custom/krane_gui.lua` | owned | Rendered from `hosts/<host>/ii-settings.json` by `modules/home/ii-settings.nix`; rewritten live by the settings window. Required last by `monitors.lua`. |
 
 Recording binds (`custom/keybinds.lua`) come from `modules/home/desktop/recording.nix`,
 which also unbinds ii's upstream wf-recorder binds
@@ -155,10 +157,11 @@ Two things worth getting right:
   `browser` and the other Lua globals that hold shell command strings,
   not package paths.
 - There is no `custom/monitors.lua`. Monitor rules go in the top-level
-  `monitors.lua`, the same file `nwg-displays` writes. This repo owns
-  that file, so a layout set through the ii display GUI is discarded on
-  the next switch. Read the numbers back out of `monitors.lua` first and
-  move them into `hosts/<host>/display.nix`.
+  `monitors.lua`, which this repo owns and renders from
+  `krane.hypr.monitors`. Its last lines require `custom/krane_gui.lua`,
+  where display changes made in the ii settings window land. Do not use
+  `nwg-displays`: whatever it writes into `monitors.lua` is replaced on
+  the next switch.
 
 ## How to add an override
 
@@ -228,20 +231,19 @@ file is skipped rather than failing activation:
   default the first time ii's copy step runs. Every host autologins via
   greetd straight into Hyprland (`modules/nixos/desktop/desktop.nix`), so there's
   no session picker to lock behind; flip the default itself so ii locks
-  immediately on startup. `config.json` stays ii-owned after that, the GUI
-  can still flip it back off.
+  immediately on startup. After that the value lives in this host's
+  config.json in the repo, and the settings window can still turn it off.
 - `~/.config/quickshell/ii/scripts/colors/switchwall.sh`:
   `s#gsettings \(set\|get\) org.gnome.desktop.interface#GSETTINGS_SCHEMA_DIR=<schemas> <store gsettings> \1 org.gnome.desktop.interface#g`.
   ii's dark/light toggle writes `color-scheme` with gsettings, but the ii
   session has no schemas on `XDG_DATA_DIRS`, so every call failed with "No
   schemas installed" and the portal kept reporting no preference. The patch
   points each call at the `gsettings-desktop-schemas` directory directly.
-- `~/.config/hypr/hypridle.conf`, only when a host sets
-  `krane.hypr.idleTimeouts = false` (tariognatha): `/^listener {/,/^}/d`.
-  Strips ii's idle listeners (lock at 5 min, DPMS off at 10, suspend at 15)
-  and keeps the `general` block, so manual lock and lock-before-sleep still
-  work. hypridle only reads its config at start, so the change applies from
-  the next login or a hypridle restart.
+
+Idle timeouts are no longer a sed: `kraneIiIdle` (in
+`modules/home/ii-settings.nix`) runs ii's `hypridleconfigurator.py` with the
+values from `krane.hypr.idle`, `idleTimeouts = false` (all zeros) or the
+settings window. See "Settings persistence".
 
 `kraneIiHyprReload` (`entryAfter [ "kraneIiOverrides" "kraneIiPatches" ]`)
 runs `hyprctl reload config-only` once the `~/.config/hypr` tree and our
@@ -510,6 +512,169 @@ private fork of dots-hyprland as the flake input if:
 - upstream ii ships its own rewrite of settings that overlaps the settings
   port.
 
+## Settings persistence
+
+`patches/ii/05-settings` ports pctrade/end4-pC's settings pages (at
+`dc2ca2600ee6`) into ii's standalone settings window (`SUPER + I`). Every
+control either persists in this repo or was removed. The rule: persist
+choices, derive consequences.
+
+| Kind | Source of truth | Live apply |
+|---|---|---|
+| ii shell options | `hosts/<host>/illogical-impulse/config.json`, through the `~/.config/illogical-impulse` symlink | ii's own file watcher |
+| Hyprland options (`hl.config` keys) | `hosts/<host>/ii-settings.json`, `hyprland` | writer re-renders `custom/krane_gui.lua`, `hyprctl reload config-only` |
+| Monitor fields | `hosts/<host>/ii-settings.json`, `monitors` | same file, full reload, confirm-or-revert |
+| Idle timeouts | `hosts/<host>/ii-settings.json`, `idle`, or `krane.hypr.idle` | writer edits `hypridle.conf`, restarts hypridle |
+| Animation preset | `hosts/<host>/ii-settings.json`, `animationPreset` | `require("hyprland.animationPresets.<name>")` in `krane_gui.lua` |
+| Border colors | config.json, `hyprland.general.borderColor` (roles and opacity) | resolved from the palette into `shellOverrides/main.lua` |
+| Hyprlock 12h clock | config.json, `time.format` | `shell.qml` seds `hyprlock.conf` on ready, on change and on every reload |
+
+### One owner per key
+
+Nix owns every key it sets: each `krane.hypr.settings` leaf, every entry of
+`krane.hypr.guiLocked`, the non-null fields of each `krane.hypr.monitors`
+entry (`output`, `mode`, `position`, `scale` and `disabled` always), and
+`idle` when `krane.hypr.idle` or `idleTimeouts = false` is set. The settings
+window shows those controls disabled with "Set in Nix", and
+`krane-ii-settings` refuses them. Every other key in
+`pkgs/krane-ii-settings/schema.json` belongs to the GUI file. A key in
+both places fails evaluation, naming both files: delete it from one. To hand
+a key to the GUI, delete it from `display.nix` in the same commit that adds
+it to `ii-settings.json`. Keyboard layout stays in Nix because
+`qwertz-binds.nix` depends on it.
+
+Only keys in `schema.json` can be written; each was checked against
+Hyprland 0.56's source. Adding one means checking it the same way (Task 12
+of `docs/superpowers/plans/2026-09-27-ii-settings.md`).
+
+### The writer
+
+`krane-ii-settings` (`pkgs/krane-ii-settings`, on `PATH` with this host's
+manifest) is the only writer of `ii-settings.json`:
+
+- `set` / `reset <section> <key>`: validate, write the repo file atomically
+  under a lock, re-render the live file, reload. It never creates the repo
+  file and refuses to write one it cannot parse. If Hyprland reports an error
+  in `krane_gui.lua` after the reload, it restores both files.
+- `apply`: re-render the live file from the repo file, after a hand edit or a
+  `git checkout`. The settings window offers the same as "Apply now" when it
+  sees the file change; nothing is applied on its own.
+- `try monitor …` / `confirm`: a display change is live at once, and a
+  transient systemd timer (`krane-ii-settings-revert`, 15 s) reverts it
+  unless Keep is pressed. The previous live file is kept aside so the revert
+  never depends on the repo file being readable. While the timer is pending,
+  the Displays page disables every control until Keep or Revert. Kept
+  changes carry `bootConfirmed: false`; `boot-check` (run at login) waits
+  for the session to lock then unlock, re-arms the same timer and asks
+  again. If it is not kept before the timer runs out, `revert-unconfirmed`
+  deletes the whole `monitors.<output>` entry, not just the changed fields.
+  `confirm` validates the repo file and the merge before it stops the
+  timer, so a repo file it cannot read or a rejected merge leaves the timer
+  armed and the change still reverts.
+- `get`: the state the settings window shows.
+
+The GUI never commits. `config.json` changes on every wallpaper switch
+(`wallpaperPath`), so `git status` shows it often; commit selectively.
+`ai/` and `*.tmp` are ignored; `actions/` and `presets/` are tracked.
+Read a host's whole `config.json` before committing it for the first time:
+it can hold the weather city, a booru username and AI endpoints.
+
+### Hotplug and reload: KRANE_GUI_MONITORS
+
+A host's `display.nix` can define `extraMonitorsLua` to re-send a monitor
+rule outside the GUI's own `monitors.<output>` block, for example to keep a
+laptop panel scaled correctly as external monitors come and go. That Lua
+runs with only the fields `display.nix` itself knows: `output`, `mode`,
+`position` and `scale`. Fields the settings window owns (transform, VRR,
+color management, HDR) are not in scope there, so a naive re-send would
+silently drop them on every hotplug or `hyprctl reload`.
+
+The writer renders a `KRANE_GUI_MONITORS` Lua global into `custom/krane_gui.lua`
+alongside each `hl.monitor({...})` call, keyed by output name, holding the
+full rendered rule it just sent to Hyprland — `output`, `mode`, `position`
+and `scale` included, alongside every GUI-owned field. The `monitors.lua`
+trailer requires `custom/krane_gui.lua` last, then calls `krane_after_gui()`
+if the host defined one (`modules/home/hypr-config.nix`'s `monitorsFile`).
+A host that needs its `extraMonitorsLua` to survive hotplug sets
+`krane_after_gui` to a function that merges `KRANE_GUI_MONITORS[output]`
+into each rule it re-sends before calling `hl.monitor`, skipping `output`,
+`mode`, `position` and `scale` itself so Nix's own computed values for
+those fields are not clobbered by the GUI's last-rendered ones.
+`hosts/tarmantria/display.nix`'s `scale_internal` is the example: it merges
+eDP-1's GUI fields back in, filtering out those four keys, whenever a
+monitor is added or removed, so a transform or color change set from the
+settings window is not lost on the next hotplug.
+
+### Escape hatches
+
+- A display setting leaves a screen unusable: wait 15 s (the revert timer),
+  or unlock blind after a reboot and wait 15 s (the boot check).
+- That fails too: from a TTY, remove the `monitors.<output>` entry from
+  `hosts/<host>/ii-settings.json` and switch. Faster, until the next switch:
+  `rm ~/.config/hypr/custom/krane_gui.lua && hyprctl reload` drops every GUI
+  delta.
+- The repo file is broken (merge conflict): the settings window says so and
+  writes nothing. Fix the file, then `krane-ii-settings apply`.
+
+### Ported and dropped controls
+
+Ported pages: Quick, General, Bar, Background, Interface, Services, Profile,
+Hyprland, About (plus upstream's Advanced, kept). Fork widgets, models and
+services added: 15 (`AboutCard`, `AndroidClock`, `Carousel`,
+`ColorSelectionArray`, `ConfigComboBox`, `ConfigTextArea`, `GroupedList`,
+`WorldMap` with `WorldMapDots.js` and `WorldCities.js`, `PresetsCard`,
+`PresetPopup`, `AutostartApps`, `MonitorCanvas`, `MonitorRect`, the
+`MonitorConfigOption` model and the `Presets` service). Not taken: the fork's
+`MaterialSymbol`, `StyledImage` and `Fonts` (they need font files the pin does
+not ship, or only remove pin behaviour), and `ConfigSelectionShapeArray`,
+`LayoutSection` and `WidgetsMonitorSelector` (only dropped controls used them).
+Not ported: the Niri page, the fork's panel-style settings overlay, About's
+"Update dots" and "System update", Profile's hostname editing and online
+presets.
+
+| Page | Control (section) | Key | Reason |
+|---|---|---|---|
+| General | Show date (Time) | `time.showDate` | fork-only feature |
+| Bar | Bar layout (whole section) | `bar.layouts.{leftLayout,middleLayout,rightLayout}` | fork-only feature |
+| Bar | Group Color (Positioning & Styles) | `bar.groupColor` | fork-only feature |
+| Bar | Show Frame, Overlap windows when center-only, Follow Frame Color, Frame thickness, Frame Color (Positioning & Styles) | `bar.showFrame`, `bar.centerOnlyReserveFrame`, `bar.followFrameColor`, `bar.frameThickness`, `bar.frameColor` | fork-only feature |
+| Bar | Dynamic Island (whole section: Left widget, Right widget, Visualizer style, Show media controls) | `bar.dynamicIsland.*` | fork-only feature |
+| Bar | Popup position (Notifications) | `notifications.position` | fork-only feature |
+| Bar | Divider (whole section: Style, Space width) | `bar.divider.{style,spacing}` | fork-only feature |
+| Bar | Wallpapers Toggle (Utility buttons) | `bar.utilButtons.showWallpaperToggle` | fork-only feature |
+| Bar | Indicator style (Workspaces) | `bar.workspaces.indicatorStyle` | fork-only feature |
+| Bar | CPU Temperature, RAM, Disk, Style, Show Percentage (Resources) | `bar.resources.{alwaysShowCpuTemp,alwaysShowRam,alwaysShowDisk,style,showValue}` | fork-only feature |
+| Bar | Media (whole section: Preferred Player, Pin media controls, Show only title, Max media width) | `bar.media.*` | fork-only feature |
+| Bar | Tooltips (whole section: Enable, Click to show) | `bar.tooltips.enable` | fork-only feature |
+| Background | Lock-screen half of the wallpaper carousel, Use same wallpaper for both (Wallpaper) | `background.lockWall` | fork-only feature |
+| Background | Preview wallpaper, Blur wall, Blur Size, Split blur amount, Split blur side, Transitions (Wallpaper) | `background.{enableWallpaperPreview,showBlur,blurRadius,splitRatio,splitSide,wallpaperAnimation}` | fork-only feature |
+| Background | Wallpaper change interval (Wallpaper) | `wallpaperSelector.changeInterval` | fork-only feature |
+| Background | Centered wallpaper (whole subsection: Enable, Show only when locked, shape, Background Color, Size) | `background.centeredWallpaper*` | fork-only feature |
+| Background | Automatic colors, Color (Digital clock settings) | `background.widgets.clock.color` | fork-only feature |
+| Background | Pixel clock orientation (Pixel Clock Settings) | `background.widgets.clock.pixel.orientation` | fork-only feature |
+| Background | Follow Clock Font (Quote) | `background.widgets.clock.quote.followClock` | fork-only feature |
+| Background | Custom Image, Visualizer, Text (whole sections) | `background.widgets.{customImage,visualizer,customText}.*` | fork-only feature |
+| Background | Show widgets on (Widgets) | `background.screenList` | fork-only feature |
+| Background | Image converter, Media, Resources, Calendar, World clock, User card, Notes, Todo, Timers, Sticker entries (Widgets) | `background.widgets.{images,media,resources,calendar,worldClock,userCard,notes,todo,timers,sticker}.enable` | fork-only feature |
+| Background | Show alignment grid while dragging, Show snap lines when dropping (Canvas) | `background.{showGrid,showSnapLines}` | fork-only feature |
+| Interface | Settings Panel (whole section: Style, Border width, Border Color) | `settings.{style,borderSize,borderColor}` | fork panel-style settings overlay not ported |
+| Interface | Background, Media Player, Show Pin Button, Show Apps Button (Dock) | `dock.{showBackground,showMedia,showPinButton,showAppsButton}` | fork-only feature |
+| Interface | Enable, Follow Album Colors (Left Sidebar media) | `sidebar.media.{enable,artColors}` | fork-only feature |
+| Interface | Banner, Bottom Group, Media Player (Right Sidebar) | `sidebar.{banner,bottomGroup,mediaPlayer}` | fork-only feature |
+| Interface | Bottom-left, Bottom-right (hot corners) | `sidebar.cornerOpen.{bottomLeftAction,bottomRightAction}` | fork-only feature |
+| Interface | Style (Overview) | `overview.style` | fork-only feature (niri-like overview) |
+| Interface | Show Widgets, Show Toolbars, Show media player info (Lock screen) | `lock.{showWidgets,showToolbars,showMedia}` | fork-only feature |
+| Interface | Samples (Style: Blurred) | `lock.blur.size` | fork-only feature |
+| Interface | Show home directory in quick access, Close after selection, Show blur background, Columns in grid view, Wallpaper change interval, Always show search bar, Custom Wallpaper Folder, Live Wallpaper Folder (Wallpaper selector) | `wallpaperSelector.{showHomePath,closeAfterSelection,showBlurBackground,columns,changeInterval,showSearchbar,userPath,liveWallpapersPath}` | fork-only feature |
+| Services | Icons, Keybinds (Prefixes) | `search.prefix.{symbols,keybinds}` | fork-only feature |
+| About | Packages, Updates cards; Update Dots, System update buttons | none | pacman-only / out of scope (spec) |
+| Profile | Online presets; hostname editing (shown read-only) | `profile.onlinePresets` | out of scope (spec) |
+| Hyprland | Displays section of the fork's `monitors.lua` writer; "add a require line" notice | none | replaced by `krane-ii-settings` (Design B, C) |
+
+The writer's own test suite (`pkgs/krane-ii-settings/tests`) covers this
+behaviour: 53 tests across command validation, the displays confirm-or-revert
+flow and the Lua render output.
+
 ## Claude Code
 
 ### Agents tab
@@ -534,8 +699,10 @@ Sessions whose process has no terminal window (SDK sessions such as the
 claude-mem observer, tmux, SSH, TTYs) are hidden and counted as
 "headless hidden".
 
-To turn the tab off, add `"sidebar": {"agents": {"enable": false}}` to
-`~/.config/illogical-impulse/config.json` (ii-owned, not written by Nix).
+To turn the tab off, use Settings, Interface, "Agents tab", or add
+`"sidebar": {"agents": {"enable": false}}` to
+`~/.config/illogical-impulse/config.json` (this host's file in the repo, see
+"Settings persistence"; not written by Nix).
 
 `claude agents --json` belongs to agent view, a research preview. After
 every `just update-claude`, check its fields:
