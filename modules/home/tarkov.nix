@@ -5,7 +5,8 @@
 # umu-launcher runs the launcher with the Nix GE-Proton, so no Proton build is downloaded at
 # runtime. The prefix is live state, never declared here: `tarkov-setup <installer.exe>` builds
 # it once from the installer on the BSG account page (the download needs a login), then the
-# launcher downloads the game itself.
+# launcher downloads the game itself. The game also needs Steam's free Proton BattlEye Runtime
+# (app 1161040), installed once with `steam steam://install/1161040`.
 { pkgs, ... }:
 let
   env = ''
@@ -46,12 +47,19 @@ let
 
   tarkov = pkgs.writeShellApplication {
     name = "tarkov";
-    runtimeInputs = [
-      pkgs.umu-launcher
-      pkgs.gamemode
-    ];
+    # No gamemoderun: its preload runs inside umu's Steam Runtime container, which cannot see
+    # libgamemode.so in the Nix store, so gamemode never engaged and only spammed the log.
+    runtimeInputs = [ pkgs.umu-launcher ];
     text = ''
       ${env}
+      # Proton swaps the Windows BEClient for this runtime's Linux one. Without it the game
+      # loads the Windows client, which needs the BEService kernel service Wine cannot run, and
+      # quits with BATTLEYE_ServiceNotRunningProperly. Steam only installs it for Steam games.
+      export PROTON_BATTLEYE_RUNTIME="''${PROTON_BATTLEYE_RUNTIME:-$HOME/.local/share/Steam/steamapps/common/Proton BattlEye Runtime}"
+      if [ ! -d "$PROTON_BATTLEYE_RUNTIME" ]; then
+        echo "No BattlEye runtime in $PROTON_BATTLEYE_RUNTIME. Install it: steam steam://install/1161040" >&2
+        exit 1
+      fi
       drive_c="$WINEPREFIX/drive_c"
       launcher=$(find "$drive_c" -name BsgLauncher.exe -print -quit 2>/dev/null || true)
       if [ -z "$launcher" ]; then
@@ -75,7 +83,7 @@ let
       export __GLX_VENDOR_LIBRARY_NAME=nvidia
       export __VK_LAYER_NV_optimus=NVIDIA_only
       # The launcher is CEF-based and hangs on its software rasterizer under Proton.
-      exec gamemoderun umu-run "$launcher" --disable-software-rasterizer "$@"
+      exec umu-run "$launcher" --disable-software-rasterizer "$@"
     '';
   };
 in
