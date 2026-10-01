@@ -124,47 +124,67 @@ let
     -- Every `home-manager switch` overwrites (or re-appends) this content.
   '';
 
+  # Color management and luminance fields, in the order krane-ii-settings renders them. Each name
+  # was checked against Hyprland 0.56's Lua monitor parser (LuaBindingsConfigRules.cpp): an
+  # unknown hl.monitor field is a hard error at Hyprland start.
+  colorFields = [
+    "cm"
+    "sdrbrightness"
+    "sdrsaturation"
+    "sdr_min_luminance"
+    "sdr_max_luminance"
+    "min_luminance"
+    "max_luminance"
+    "max_avg_luminance"
+  ];
+
   monitorLua =
     m:
     "hl.monitor("
-    + luaFields "" [
-      {
-        name = "output";
-        value = m.output;
-      }
-      {
-        name = "mode";
-        value = m.mode;
-      }
-      {
-        name = "position";
-        value = m.position;
-      }
-      {
-        name = "scale";
-        value = m.scale;
-      }
-      {
-        name = "transform";
-        value = m.transform;
-      }
-      {
-        name = "vrr";
-        value = m.vrr;
-      }
-      {
-        name = "mirror";
-        value = m.mirror;
-      }
-      {
-        name = "bitdepth";
-        value = m.bitdepth;
-      }
-      {
-        name = "disabled";
-        value = if m.disabled then true else null;
-      }
-    ]
+    + luaFields "" (
+      [
+        {
+          name = "output";
+          value = m.output;
+        }
+        {
+          name = "mode";
+          value = m.mode;
+        }
+        {
+          name = "position";
+          value = m.position;
+        }
+        {
+          name = "scale";
+          value = m.scale;
+        }
+        {
+          name = "transform";
+          value = m.transform;
+        }
+        {
+          name = "vrr";
+          value = m.vrr;
+        }
+        {
+          name = "mirror";
+          value = m.mirror;
+        }
+        {
+          name = "bitdepth";
+          value = m.bitdepth;
+        }
+        {
+          name = "disabled";
+          value = if m.disabled then true else null;
+        }
+      ]
+      ++ map (f: {
+        name = f;
+        value = m.${f};
+      }) colorFields
+    )
     + ")\n";
 
   deviceLua =
@@ -314,6 +334,58 @@ let
         type = lib.types.bool;
         default = false;
         description = "Disable this output.";
+      };
+      cm = lib.mkOption {
+        type = lib.types.nullOr (
+          lib.types.enum [
+            "auto"
+            "srgb"
+            "wide"
+            "edid"
+            "hdr"
+            "hdredid"
+            "dcip3"
+            "dp3"
+            "adobe"
+          ]
+        );
+        default = null;
+        description = "Color management preset. `hdr` needs `bitdepth = 10`.";
+      };
+      sdrbrightness = lib.mkOption {
+        type = lib.types.nullOr lib.types.number;
+        default = null;
+        description = "SDR content brightness multiplier while in HDR mode.";
+      };
+      sdrsaturation = lib.mkOption {
+        type = lib.types.nullOr lib.types.number;
+        default = null;
+        description = "SDR content saturation multiplier while in HDR mode.";
+      };
+      sdr_min_luminance = lib.mkOption {
+        type = lib.types.nullOr lib.types.number;
+        default = null;
+        description = "SDR minimum luminance in nits, for SDR-to-HDR mapping.";
+      };
+      sdr_max_luminance = lib.mkOption {
+        type = lib.types.nullOr lib.types.int;
+        default = null;
+        description = "SDR maximum luminance in nits, for SDR-to-HDR mapping.";
+      };
+      min_luminance = lib.mkOption {
+        type = lib.types.nullOr lib.types.number;
+        default = null;
+        description = "Override the EDID minimum luminance, in nits.";
+      };
+      max_luminance = lib.mkOption {
+        type = lib.types.nullOr lib.types.int;
+        default = null;
+        description = "Override the EDID maximum luminance, in nits.";
+      };
+      max_avg_luminance = lib.mkOption {
+        type = lib.types.nullOr lib.types.int;
+        default = null;
+        description = "Override the EDID maximum average luminance, in nits.";
       };
     };
   };
