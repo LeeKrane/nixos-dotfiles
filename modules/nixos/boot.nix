@@ -58,4 +58,15 @@
     memoryPercent = lib.mkDefault 100;
     algorithm = "zstd";
   };
+
+  # Tuning for swap on zram, not disk (values from the Arch wiki's zram page). Swapping to
+  # compressed RAM is cheaper than re-reading evicted file cache, so prefer it (swappiness
+  # above 100). page-cluster 0: no readahead, since zram has no seek cost and each extra page
+  # read on a fault only adds decompression latency.
+  boot.kernel.sysctl = {
+    "vm.swappiness" = 180;
+    "vm.page-cluster" = 0;
+    "vm.watermark_boost_factor" = 0;
+    "vm.watermark_scale_factor" = 125;
+  };
 }

@@ -9,6 +9,10 @@
 
   system.stateVersion = "26.05";
 
+  # zram at twice the RAM size instead of boot.nix's 1:1 default: Tarkov alone keeps ~9 GiB
+  # resident plus swapped on this 16 GiB laptop, and its launcher another ~3 GiB.
+  zramSwap.memoryPercent = 200;
+
   # display.nix sets krane.hypr.*, a home-manager module, imported at the user level.
   # tarkov.nix is also home-manager, here and not in modules/home/default.nix: only this host.
   home-manager.users.${config.krane.user.name}.imports = [
