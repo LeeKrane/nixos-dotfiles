@@ -2,8 +2,13 @@
 # from hosts/tarmantria/default.nix, rendered to Lua by modules/home/hypr-config.nix.
 { ... }:
 let
+  # The panel is eDP-1 on the Intel iGPU in hybrid mode and eDP-2 on the NVIDIA dGPU once
+  # gpu-mux.nix's MUX is set to dgpu. A rule for the absent name matches nothing.
+  internalOutputs = [
+    "eDP-1"
+    "eDP-2"
+  ];
   internal = {
-    output = "eDP-1";
     mode = "2560x1440@240";
     position = "0x0";
   };
@@ -19,29 +24,43 @@ in
         position = "-2560x-360";
         scale = 1;
       }
-      # Internal panel, to the right of the external one. Scale 1 when it is the only
-      # output; extraMonitorsLua below raises it while an external monitor is attached.
-      (internal // { scale = 1; })
-    ];
+    ]
+    # Internal panel, to the right of the external one. Scale 1 when it is the only
+    # output; extraMonitorsLua below raises it while an external monitor is attached.
+    ++ map (
+      output:
+      internal
+      // {
+        inherit output;
+        scale = 1;
+      }
+    ) internalOutputs;
 
     # Scale the internal panel up only while another output is connected. Hyprland
     # needs a scale that divides the mode into whole logical pixels; 1.6 gives
     # 1600x900 logical.
-    # The external monitor sits at a negative x, so eDP-1 keeps its 0x0 origin.
+    # The external monitor sits at a negative x, so the panel keeps its 0x0 origin.
     extraMonitorsLua = ''
+      local function is_internal(name)
+          return name:match("^eDP%-") ~= nil
+      end
       local function scale_internal(removed)
           local external = false
           for _, m in ipairs(hl.get_monitors()) do
-              if m.name ~= "${internal.output}" and m.name ~= removed then
+              if not is_internal(m.name) and m.name ~= removed then
                   external = true
               end
           end
-          hl.monitor({
-              output = "${internal.output}",
-              mode = "${internal.mode}",
-              position = "${internal.position}",
-              scale = external and 1.6 or 1,
-          })
+          for _, m in ipairs(hl.get_monitors()) do
+              if is_internal(m.name) then
+                  hl.monitor({
+                      output = m.name,
+                      mode = "${internal.mode}",
+                      position = "${internal.position}",
+                      scale = external and 1.6 or 1,
+                  })
+              end
+          end
       end
 
       scale_internal()

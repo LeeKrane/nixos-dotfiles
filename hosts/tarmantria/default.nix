@@ -4,6 +4,7 @@
     ./hardware-configuration.nix
     ./disko.nix
     ./audio.nix
+    ./gpu-mux.nix
     ../../modules/nixos/gpu/nvidia-prime.nix
   ];
 
