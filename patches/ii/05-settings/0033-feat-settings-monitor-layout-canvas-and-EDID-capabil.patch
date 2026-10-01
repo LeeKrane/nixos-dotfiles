@@ -1,0 +1,540 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Thu, 1 Oct 2026 16:08:14 +0200
+Subject: [PATCH] feat(settings): monitor layout canvas and EDID capability
+ probe
+
+Port of pctrade/end4-pC dc2ca2600ee6: scripts/hyprland/monitor_caps.py, modules/common/widgets/MonitorRect.qml, modules/common/widgets/MonitorCanvas.qml
+https://github.com/pctrade/end4-pC/tree/dc2ca2600ee6d7852bf0ac91361db8e510f90a74
+Problem: the Displays section needs a draggable monitor layout canvas and per-output HDR/bit-depth capability data from EDID.
+Port: hand-ported (drag commits only the dragged monitor's position via updateMonitor+save, matching the Position spin boxes; dragging disabled for Nix-owned positions)
+Drop when: the Displays section is dropped.
+---
+ .../modules/common/widgets/MonitorCanvas.qml  | 149 ++++++++++++++
+ .../ii/modules/common/widgets/MonitorRect.qml | 181 ++++++++++++++++++
+ .../ii/scripts/hyprland/monitor_caps.py       | 170 ++++++++++++++++
+ 3 files changed, 500 insertions(+)
+ create mode 100644 dots/.config/quickshell/ii/modules/common/widgets/MonitorCanvas.qml
+ create mode 100644 dots/.config/quickshell/ii/modules/common/widgets/MonitorRect.qml
+ create mode 100755 dots/.config/quickshell/ii/scripts/hyprland/monitor_caps.py
+
+diff --git a/dots/.config/quickshell/ii/modules/common/widgets/MonitorCanvas.qml b/dots/.config/quickshell/ii/modules/common/widgets/MonitorCanvas.qml
+new file mode 100644
+index 00000000..75d4fd56
+--- /dev/null
++++ b/dots/.config/quickshell/ii/modules/common/widgets/MonitorCanvas.qml
+@@ -0,0 +1,149 @@
++import QtQuick
++import QtQuick.Layouts
++import qs.services
++import qs.modules.common
++import qs.modules.common.widgets
++
++Item {
++    id: root
++
++    property var monitorConfig
++    property real padding: 20
++    property int selectedIndex: 0
++    property var previewPositions: ({})
++    property bool dragHasOverlap: false
++    // Predicate name => bool: true when dragging that output should be disabled
++    // (its position is Nix-owned). null means nothing is locked.
++    property var isPositionLocked: null
++
++    implicitHeight: 220
++
++    property var bounds: {
++        let minX = Infinity, minY = Infinity
++        let maxX = -Infinity, maxY = -Infinity
++        const mons = monitorConfig.monitors
++        for (let i = 0; i < mons.length; i++) {
++            const m = mons[i]
++            if (m.disabled) continue
++            const w = monitorConfig.logicalWidth(m)
++            const h = monitorConfig.logicalHeight(m)
++            const px = previewPositions[m.name]?.x ?? m.x
++            const py = previewPositions[m.name]?.y ?? m.y
++            minX = Math.min(minX, px)
++            minY = Math.min(minY, py)
++            maxX = Math.max(maxX, px + w)
++            maxY = Math.max(maxY, py + h)
++        }
++        if (minX === Infinity) return { minX: 0, minY: 0, width: 1920, height: 1080 }
++        return { minX, minY, width: maxX - minX, height: maxY - minY }
++    }
++
++    property real scaleFactor: {
++        if (bounds.width === 0 || bounds.height === 0) return 0.1
++        const scaleX = (canvas.width  - padding * 2) / bounds.width
++        const scaleY = (canvas.height - padding * 2) / bounds.height
++        return Math.min(scaleX, scaleY)
++    }
++
++    property point offset: Qt.point(
++        (canvas.width  - bounds.width  * scaleFactor) / 2 - bounds.minX * scaleFactor,
++        (canvas.height - bounds.height * scaleFactor) / 2 - bounds.minY * scaleFactor
++    )
++
++    function checkOverlap(monitors, idx) {
++        const a = monitors[idx]
++        const aw = monitorConfig.logicalWidth(a)
++        const ah = monitorConfig.logicalHeight(a)
++        for (let i = 0; i < monitors.length; i++) {
++            if (i === idx) continue
++            if (monitors[i].disabled) continue
++            const b = monitors[i]
++            const bw = monitorConfig.logicalWidth(b)
++            const bh = monitorConfig.logicalHeight(b)
++            if (a.x < b.x + bw && a.x + aw > b.x &&
++                a.y < b.y + bh && a.y + ah > b.y) {
++                return true
++            }
++        }
++        return false
++    }
++
++    function computeNormalized(monitors, changedIdx, newX, newY) {
++        let m = monitors.slice().map(mon => Object.assign({}, mon))
++        m[changedIdx].x = newX
++        m[changedIdx].y = newY
++        let minX = Infinity, minY = Infinity
++        for (let i = 0; i < m.length; i++) {
++            if (m[i].disabled) continue
++            minX = Math.min(minX, m[i].x)
++            minY = Math.min(minY, m[i].y)
++        }
++        const offX = minX < 0 ? -minX : 0
++        const offY = minY < 0 ? -minY : 0
++        if (offX > 0 || offY > 0) {
++            for (let i = 0; i < m.length; i++) {
++                m[i].x += offX
++                m[i].y += offY
++            }
++        }
++        return m
++    }
++
++    function updatePreview(idx, newX, newY) {
++        const normalized = computeNormalized(monitorConfig.monitors, idx, newX, newY)
++        root.dragHasOverlap = checkOverlap(normalized, idx)
++        let preview = {}
++        for (let i = 0; i < normalized.length; i++) {
++            preview[normalized[i].name] = { x: normalized[i].x, y: normalized[i].y }
++        }
++        root.previewPositions = preview
++    }
++
++    // Writes only the dragged monitor's position, in real Hyprland coordinates.
++    // Other monitors are left untouched (no normalized positions written back),
++    // matching how the Position X/Y spin boxes write position.
++    function commitPosition(idx, newX, newY) {
++        monitorConfig.updateMonitor(idx, { x: newX, y: newY })
++        monitorConfig.save(idx)
++    }
++
++    Rectangle {
++        anchors.fill: parent
++        radius: Appearance.rounding.normal
++        color: Appearance.colors.colLayer1
++        border.width: 1
++        border.color: Appearance.colors.colLayer0Border
++
++        Item {
++            id: canvas
++            anchors.fill: parent
++
++            Repeater {
++                model: root.monitorConfig.monitors.length
++                delegate: MonitorRect {
++                    required property int index
++                    monitor: root.monitorConfig.monitors[index]
++                    monitorIndex: index
++                    monitorConfig: root.monitorConfig
++                    scaleFactor: root.scaleFactor
++                    canvasOffset: root.offset
++                    allMonitors: root.monitorConfig.monitors
++                    isSelected: index === root.selectedIndex
++                    previewPositions: root.previewPositions
++                    hasOverlap: root.dragHasOverlap && isDragging
++                    dragEnabled: !(root.isPositionLocked && root.isPositionLocked(monitor?.name ?? ""))
++
++                    onMonitorClicked: (idx) => root.selectedIndex = idx
++                    onPositionDragging: (idx, x, y) => root.updatePreview(idx, x, y)
++                    onPositionCommitted: (idx, x, y) => {
++                        const hadOverlap = root.dragHasOverlap
++                        root.previewPositions = {}
++                        root.dragHasOverlap = false
++                        if (!hadOverlap)
++                            root.commitPosition(idx, x, y)
++                    }
++                }
++            }
++        }
++    }
++}
+\ No newline at end of file
+diff --git a/dots/.config/quickshell/ii/modules/common/widgets/MonitorRect.qml b/dots/.config/quickshell/ii/modules/common/widgets/MonitorRect.qml
+new file mode 100644
+index 00000000..d2cd42ed
+--- /dev/null
++++ b/dots/.config/quickshell/ii/modules/common/widgets/MonitorRect.qml
+@@ -0,0 +1,181 @@
++import QtQuick
++import QtQuick.Layouts
++import qs.services
++import qs.modules.common
++import qs.modules.common.widgets
++
++Rectangle {
++    id: root
++
++    required property var monitor
++    required property int monitorIndex
++    required property var monitorConfig
++    required property real scaleFactor
++    required property point canvasOffset
++    required property var allMonitors
++    property bool isSelected: false
++    property var previewPositions: ({})
++    property bool hasOverlap: false
++    property bool dragEnabled: true
++
++    signal positionCommitted(int index, int x, int y)
++    signal monitorClicked(int index)
++    signal positionDragging(int index, int x, int y)
++
++    property bool isDragging: false
++    property real dragX: 0
++    property real dragY: 0
++    property int snappedX: 0
++    property int snappedY: 0
++    property real snapThreshold: 12
++    // scaleFactor/canvasOffset frozen at press time. previewPositions can shift
++    // the canvas's own bounds (and so scaleFactor/canvasOffset) mid-drag, once
++    // the layout is normalized to remove negative coordinates. Converting the
++    // dragged pixel position back to real coordinates with the live values
++    // would then save a shifted position instead of the monitor's real one.
++    property real dragStartScale: 1
++    property point dragStartOffset: Qt.point(0, 0)
++
++    property int logW: monitorConfig?.logicalWidth(monitor) ?? 0
++    property int logH: monitorConfig?.logicalHeight(monitor) ?? 0
++
++    x: isDragging ? dragX : (previewPositions[monitor.name]?.x ?? monitor.x) * scaleFactor + canvasOffset.x
++    y: isDragging ? dragY : (previewPositions[monitor.name]?.y ?? monitor.y) * scaleFactor + canvasOffset.y
++    width:  logW * scaleFactor
++    height: logH * scaleFactor
++
++    radius: Appearance.rounding.small
++    z: isDragging ? 100 : isSelected ? 2 : 1
++
++    color: {
++        if (monitor.disabled)             return Appearance.colors.colLayer2
++        if (isDragging && hasOverlap)     return Qt.alpha(Appearance.m3colors.m3error, 0.5)
++        if (isDragging)                   return Qt.alpha(Appearance.colors.colPrimaryContainer, 0.7)
++        if (isSelected)                   return Appearance.colors.colPrimaryContainer
++        if (hoverArea.containsMouse)      return Appearance.colors.colSecondaryContainerHover
++        return Appearance.colors.colSecondaryContainer
++    }
++
++    border.color: (isDragging && hasOverlap) ? Appearance.m3colors.m3error
++        : (isDragging || isSelected) ? Appearance.colors.colPrimary
++        : Appearance.colors.colLayer0Border
++    border.width: (isDragging || isSelected) ? 2 : 1
++
++    Behavior on x { enabled: !isDragging; NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
++    Behavior on y { enabled: !isDragging; NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
++    Behavior on color { ColorAnimation { duration: 150 } }
++
++    Rectangle {
++        visible: root.isDragging && !root.hasOverlap
++        x: root.snappedX * root.dragStartScale + root.dragStartOffset.x - root.x
++        y: root.snappedY * root.dragStartScale + root.dragStartOffset.y - root.y
++        width: root.width
++        height: root.height
++        radius: root.radius
++        color: "transparent"
++        border.color: Appearance.colors.colPrimary
++        border.width: 2
++        opacity: 0.6
++    }
++
++    Column {
++        anchors.centerIn: parent
++        spacing: 2
++
++        MaterialSymbol {
++            anchors.horizontalCenter: parent.horizontalCenter
++            text: monitor.disabled ? "desktop_access_disabled" : "desktop_windows"
++            iconSize: Math.min(20, Math.min(root.width * 0.25, root.height * 0.25))
++            color: monitor.disabled ? Appearance.colors.colSubtext
++                : isSelected ? Appearance.colors.colOnPrimaryContainer
++                : Appearance.colors.colPrimary
++        }
++
++        StyledText {
++            anchors.horizontalCenter: parent.horizontalCenter
++            text: monitor?.name ?? ""
++            font.pixelSize: Math.max(9, Math.min(13, root.width * 0.1))
++            font.weight: Font.Medium
++            color: monitor.disabled ? Appearance.colors.colSubtext
++                : isSelected ? Appearance.colors.colOnPrimaryContainer
++                : Appearance.colors.colOnSecondaryContainer
++            elide: Text.ElideMiddle
++            width: Math.min(implicitWidth, root.width - 8)
++            horizontalAlignment: Text.AlignHCenter
++        }
++
++        StyledText {
++            anchors.horizontalCenter: parent.horizontalCenter
++            text: `${root.logW}x${root.logH}`
++            font.pixelSize: Math.max(8, Math.min(10, root.width * 0.08))
++            color: Appearance.colors.colSubtext
++            horizontalAlignment: Text.AlignHCenter
++        }
++    }
++
++    function snapPosition(px, py) {
++        let sx = px, sy = py
++        const thresh = snapThreshold / scaleFactor
++        for (let i = 0; i < allMonitors.length; i++) {
++            if (i === monitorIndex) continue
++            const other = allMonitors[i]
++            if (other.disabled) continue
++            const ow = monitorConfig.logicalWidth(other)
++            const oh = monitorConfig.logicalHeight(other)
++            if (Math.abs(px - other.x) < thresh)                 sx = other.x
++            if (Math.abs(px - (other.x + ow)) < thresh)          sx = other.x + ow
++            if (Math.abs((px + logW) - other.x) < thresh)        sx = other.x - logW
++            if (Math.abs((px + logW) - (other.x + ow)) < thresh) sx = other.x + ow - logW
++            if (Math.abs(py - other.y) < thresh)                 sy = other.y
++            if (Math.abs(py - (other.y + oh)) < thresh)          sy = other.y + oh
++            if (Math.abs((py + logH) - other.y) < thresh)        sy = other.y - logH
++            if (Math.abs((py + logH) - (other.y + oh)) < thresh) sy = other.y + oh - logH
++        }
++        return Qt.point(sx, sy)
++    }
++
++    MouseArea {
++        id: hoverArea
++        anchors.fill: parent
++        hoverEnabled: true
++        enabled: !monitor.disabled
++        cursorShape: monitor.disabled ? Qt.ArrowCursor
++            : !root.dragEnabled ? Qt.ArrowCursor
++            : (root.isDragging ? Qt.ClosedHandCursor : Qt.OpenHandCursor)
++        drag.target: root.dragEnabled ? root : null
++        drag.axis: Drag.XAndYAxis
++        drag.threshold: 4
++
++        onPressed: {
++            root.snappedX = monitor.x
++            root.snappedY = monitor.y
++            if (!root.dragEnabled) return
++            root.dragStartScale = root.scaleFactor
++            root.dragStartOffset = root.canvasOffset
++            root.dragX = monitor.x * root.dragStartScale + root.dragStartOffset.x
++            root.dragY = monitor.y * root.dragStartScale + root.dragStartOffset.y
++            root.isDragging = true
++        }
++
++        onPositionChanged: {
++            if (!root.isDragging) return
++            root.dragX = root.x
++            root.dragY = root.y
++            const realX = Math.round((root.x - root.dragStartOffset.x) / root.dragStartScale)
++            const realY = Math.round((root.y - root.dragStartOffset.y) / root.dragStartScale)
++            const snapped = root.snapPosition(realX, realY)
++            root.snappedX = snapped.x
++            root.snappedY = snapped.y
++            root.positionDragging(root.monitorIndex, root.snappedX, root.snappedY)
++        }
++
++        onReleased: {
++            root.isDragging = false
++            if (root.snappedX === monitor.x && root.snappedY === monitor.y) {
++                root.monitorClicked(root.monitorIndex)
++                return
++            }
++            root.positionCommitted(root.monitorIndex, root.snappedX, root.snappedY)
++        }
++    }
++}
+\ No newline at end of file
+diff --git a/dots/.config/quickshell/ii/scripts/hyprland/monitor_caps.py b/dots/.config/quickshell/ii/scripts/hyprland/monitor_caps.py
+new file mode 100755
+index 00000000..0935d784
+--- /dev/null
++++ b/dots/.config/quickshell/ii/scripts/hyprland/monitor_caps.py
+@@ -0,0 +1,170 @@
++#!/usr/bin/env -S\_/bin/sh\_-c\_"source\_\$(eval\_echo\_\$ILLOGICAL_IMPULSE_VIRTUAL_ENV)/bin/activate&&exec\_python\_-E\_"\$0"\_"\$@""
++import argparse
++import glob
++import json
++import os
++
++# EDID byte 20, bits 6-4: supported color bit depth on digital displays.
++BPC_CODES = {1: 6, 2: 8, 3: 10, 4: 12, 5: 14, 6: 16}
++
++# CTA-861 extended data block tags.
++EXT_TAG_HDR_STATIC_METADATA = 0x06
++EXT_TAG_HDR_DYNAMIC_METADATA = 0x14
++EXT_TAG_HF_EEODB = 0x78
++
++# DisplayID 2.0 data block tag that wraps a CTA-861-style data block
++# collection (same tag/length encoding as the legacy CTA-861 extension).
++DISPLAYID_TAG_CTA861 = 0x81
++
++UNKNOWN_CAPS = {"digital": None, "maxBpc": None, "hdr": None, "hdrDynamic": None}
++
++
++def find_edid_path(output_name):
++    # st_size is always 0 for this sysfs attribute, so we can only check hat it exists. An empty read means disconnected.
++    matches = glob.glob(f"/sys/class/drm/card*-{output_name}/edid")
++    return matches[0] if matches else None
++
++
++def scan_cta_data_blocks(data, start, end):
++    """Walk a CTA-861-style data block collection (1-byte tag/length
++    headers, tag 7 meaning an extended tag follows) between [start, end)
++    and report which HDR-related blocks it contains. Used both for a
++    legacy standalone CTA-861 extension and for the CTA-861 block
++    DisplayID 2.0 nests inside its own data blocks."""
++    hdr = False
++    hdr_dynamic = False
++    pos = start
++    while pos < end and pos < len(data):
++        header = data[pos]
++        tag = header >> 5
++        length = header & 0x1F
++        if tag == 7 and length >= 1 and pos + 1 < len(data):
++            ext_tag = data[pos + 1]
++            if ext_tag == EXT_TAG_HDR_STATIC_METADATA:
++                hdr = True
++            elif ext_tag == EXT_TAG_HDR_DYNAMIC_METADATA:
++                hdr_dynamic = True
++        pos += length + 1
++    return hdr, hdr_dynamic
++
++
++def find_hf_eeodb_count(ext):
++    if len(ext) < 5:
++        return None
++    dtd_offset = ext[2]
++    pos = 4
++    end = min(dtd_offset, len(ext))
++    while pos < end:
++        header = ext[pos]
++        tag = header >> 5
++        length = header & 0x1F
++        if tag == 7 and length == 2 and pos + 2 < len(ext) and ext[pos + 1] == EXT_TAG_HF_EEODB:
++            return ext[pos + 2]
++        pos += length + 1
++    return None
++
++
++def scan_displayid_extension(ext):
++    """DisplayID 2.0 uses its own 3-byte-header data blocks (tag,
++    revision, length), unrelated to CTA-861's 1-byte header. Newer
++    panels report HDR support by nesting a full CTA-861-style block
++    collection inside one of these, tagged 0x81, instead of exposing a
++    standalone CTA-861 extension at all."""
++    hdr = False
++    hdr_dynamic = False
++    if len(ext) < 5:
++        return hdr, hdr_dynamic
++
++    section_bytes = ext[2]
++    pos = 5
++    end = min(5 + section_bytes, len(ext))
++    while pos + 3 <= end:
++        tag = ext[pos]
++        length = ext[pos + 2]
++        payload_start = pos + 3
++        payload_end = payload_start + length
++        if payload_end > len(ext):
++            break
++        if tag == DISPLAYID_TAG_CTA861:
++            block_hdr, block_hdr_dynamic = scan_cta_data_blocks(ext, payload_start, payload_end)
++            hdr = hdr or block_hdr
++            hdr_dynamic = hdr_dynamic or block_hdr_dynamic
++        pos = payload_end
++
++    return hdr, hdr_dynamic
++
++
++def parse_edid(data):
++    caps = {"digital": False, "maxBpc": None, "hdr": False, "hdrDynamic": False}
++
++    if len(data) < 128:
++        return caps
++
++    b20 = data[20]
++    caps["digital"] = bool(b20 & 0x80)
++    if caps["digital"]:
++        bpc_code = (b20 >> 4) & 0x7
++        caps["maxBpc"] = BPC_CODES.get(bpc_code)
++
++    n_ext = data[126]
++
++    for i in range(n_ext):
++        start = 128 + 128 * i
++        ext = data[start:start + 128]
++        if len(ext) >= 5 and ext[0] == 0x02:
++            real_count = find_hf_eeodb_count(ext)
++            if real_count is not None and real_count > n_ext:
++                n_ext = real_count
++            break
++
++    truncated = len(data) < 128 + 128 * n_ext
++
++    for i in range(n_ext):
++        start = 128 + 128 * i
++        ext = data[start:start + 128]
++        if len(ext) < 5:
++            continue
++
++        if ext[0] == 0x02:
++            dtd_offset = ext[2]
++            hdr, hdr_dynamic = scan_cta_data_blocks(ext, 4, min(dtd_offset, len(ext)))
++        elif ext[0] == 0x70:
++            hdr, hdr_dynamic = scan_displayid_extension(ext)
++        else:
++            continue
++
++        caps["hdr"] = caps["hdr"] or hdr
++        caps["hdrDynamic"] = caps["hdrDynamic"] or hdr_dynamic
++
++    if truncated and not caps["hdr"]:
++        caps["hdr"] = None
++    if truncated and not caps["hdrDynamic"]:
++        caps["hdrDynamic"] = None
++
++    return caps
++
++
++def get_caps(output_name):
++    path = find_edid_path(output_name)
++    if not path:
++        return {**UNKNOWN_CAPS, "source": "no-edid"}
++    try:
++        with open(path, "rb") as f:
++            data = f.read()
++    except OSError:
++        return {**UNKNOWN_CAPS, "source": "read-error"}
++
++    if not data:
++        return {**UNKNOWN_CAPS, "source": "empty-edid"}
++
++    caps = parse_edid(data)
++    caps["source"] = path
++    return caps
++
++
++if __name__ == "__main__":
++    p = argparse.ArgumentParser()
++    p.add_argument("outputs", nargs="+", help="Monitor output names, e.g. DP-1 HDMI-A-1")
++    args = p.parse_args()
++
++    print(json.dumps({name: get_caps(name) for name in args.outputs}))

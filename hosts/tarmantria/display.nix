@@ -53,12 +53,24 @@ in
           end
           for _, m in ipairs(hl.get_monitors()) do
               if is_internal(m.name) then
-                  hl.monitor({
+                  local rule = {
                       output = m.name,
                       mode = "${internal.mode}",
                       position = "${internal.position}",
                       scale = external and 1.6 or 1.25,
-                  })
+                  }
+                  -- Carry over whatever the GUI set for this panel (color management, HDR,
+                  -- transform, vrr, ...) so this reload does not clobber it. output,
+                  -- mode, position and scale stay Nix's: they depend on `external`.
+                  local gui = KRANE_GUI_MONITORS and KRANE_GUI_MONITORS[m.name]
+                  if gui then
+                      for k, v in pairs(gui) do
+                          if k ~= "output" and k ~= "mode" and k ~= "position" and k ~= "scale" then
+                              rule[k] = v
+                          end
+                      end
+                  end
+                  hl.monitor(rule)
               end
           end
       end
@@ -66,6 +78,10 @@ in
       scale_internal()
       hl.on("monitor.added", function() scale_internal() end)
       hl.on("monitor.removed", function(m) scale_internal(m and m.name) end)
+      -- custom/krane_gui.lua loads after this file and after the trailer's own
+      -- scale_internal() call; re-run it so GUI-owned fields are merged back in
+      -- instead of staying only on the rule custom/krane_gui.lua itself applied.
+      krane_after_gui = scale_internal
     '';
 
     settings.input = {

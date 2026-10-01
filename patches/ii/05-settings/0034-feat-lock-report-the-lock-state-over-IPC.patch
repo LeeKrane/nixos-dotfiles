@@ -1,0 +1,30 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Thu, 1 Oct 2026 16:09:30 +0200
+Subject: [PATCH] feat(lock): report the lock state over IPC
+
+Port of pctrade/end4-pC dc2ca2600ee6: none (krane-only)
+https://github.com/pctrade/end4-pC/tree/dc2ca2600ee6d7852bf0ac91361db8e510f90a74
+Problem: krane-ii-settings boot-check waits for the first unlock before asking to keep new display settings.
+Port: krane-only
+Drop when: the lock IPC handler reports its state upstream.
+---
+ .../quickshell/ii/modules/common/panels/lock/LockScreen.qml  | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/dots/.config/quickshell/ii/modules/common/panels/lock/LockScreen.qml b/dots/.config/quickshell/ii/modules/common/panels/lock/LockScreen.qml
+index cb78450b..fc1364fc 100644
+--- a/dots/.config/quickshell/ii/modules/common/panels/lock/LockScreen.qml
++++ b/dots/.config/quickshell/ii/modules/common/panels/lock/LockScreen.qml
+@@ -109,6 +109,11 @@ Scope {
+         function focus(): void {
+             lockContext.shouldReFocus();
+         }
++        // For krane-ii-settings boot-check, which waits for the first unlock
++        // before asking to keep new display settings.
++        function isLocked(): bool {
++            return GlobalStates.screenLocked;
++        }
+     }
+ 
+     GlobalShortcut {

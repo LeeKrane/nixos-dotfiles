@@ -54,6 +54,20 @@ class TestRender(RenderBase):
         self.assertIn('cm = "hdr"', out)
         self.assertNotIn("bootConfirmed", out)
 
+    def test_monitor_rule_is_stashed_in_krane_gui_monitors(self):
+        # hosts/<host>/display.nix's extraMonitorsLua (e.g. tarmantria's
+        # scale_internal) reads KRANE_GUI_MONITORS[output] back to merge
+        # GUI-owned fields into a rule it builds itself.
+        out = k.render({"monitors": {"DP-2": {"cm": "hdr"}}}, self.manifest, SCHEMA)
+        self.assertIn("KRANE_GUI_MONITORS = {}", out)
+        self.assertIn('KRANE_GUI_MONITORS["DP-2"] = {', out)
+        self.assertIn('hl.monitor(KRANE_GUI_MONITORS["DP-2"])', out)
+        self.assertNotIn("hl.monitor({", out)
+
+    def test_krane_gui_monitors_absent_without_monitors(self):
+        out = k.render({"hyprland": {"decoration:rounding": 12}}, self.manifest, SCHEMA)
+        self.assertNotIn("KRANE_GUI_MONITORS", out)
+
     def test_check_value_rejects_nan(self):
         with self.assertRaisesRegex(k.SettingsError, "not a finite number"):
             k.check_value(SCHEMA["hyprland"]["decoration:active_opacity"], float("nan"), "x")

@@ -203,6 +203,10 @@ in
     krane.iiSettings.manifestFile = manifestFile;
     home.packages = [ wrapped ];
 
+    # Display changes kept before this boot carry bootConfirmed = false. After the first
+    # unlock, ask again and revert them 15 s later unless kept (krane-ii-settings boot-check).
+    krane.hypr.execOnce = [ "${wrapped}/bin/krane-ii-settings boot-check" ];
+
     # Replaces the old hypridle.conf sed in illogical-impulse.nix. Runs ii's own
     # hypridleconfigurator.py (patches/ii/05-settings) with a pinned interpreter; the script is
     # standard-library only. hypridle reads its config at start: the change applies from the

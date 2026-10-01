@@ -23,6 +23,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 
 HYPRCTL = "@hyprctl@"
 SYSTEMD_RUN = "@systemdRun@"
@@ -219,7 +220,10 @@ def nest(flat):
     return tree
 
 
-def monitor_lua(rule):
+def monitor_lua(output, rule):
+    """Render one hl.monitor rule, also stashed in KRANE_GUI_MONITORS[output]
+    so a host's extraMonitorsLua (hosts/<host>/display.nix) can read back
+    what the GUI set and merge it into a rule it builds itself."""
     pad = "    "
     items = []
     for field in MONITOR_ORDER:
@@ -228,7 +232,11 @@ def monitor_lua(rule):
         if field == "disabled" and rule[field] is not True:
             continue
         items.append(pad + field + " = " + lua_value(rule[field], pad))
-    return "hl.monitor({\n" + ",\n".join(items) + "\n})\n"
+    ref = "KRANE_GUI_MONITORS[" + lua_str(output) + "]"
+    return (
+        ref + " = {\n" + ",\n".join(items) + "\n}\n"
+        + "hl.monitor(" + ref + ")\n"
+    )
 
 
 def render(data, manifest, schema):
@@ -242,13 +250,13 @@ def render(data, manifest, schema):
         out.append(f'\nrequire("hyprland.animationPresets.{preset}")\n')
     monitors = data.get("monitors", {})
     if monitors:
-        out.append("\n")
+        out.append("\nKRANE_GUI_MONITORS = {}\n\n")
         baselines = manifest.get("monitorBaselines", {})
         for output in sorted(monitors):
             rule = dict(baselines.get(output, {}))
             rule.update({k: v for k, v in monitors[output].items() if k != "bootConfirmed"})
             rule["output"] = output
-            out.append(monitor_lua(rule))
+            out.append(monitor_lua(output, rule))
     return "".join(out)
 
 
@@ -660,6 +668,100 @@ class Settings:
                 self.runtime.apply_idle(effective_idle(data, self.manifest))
             return "applied"
 
+    def try_monitor(self, output, pairs):
+        check_owner("monitor", output, [f for f, _ in pairs], self.manifest)
+        with locked():
+            data, _ = read_repo(self.repo)
+            proposed = edit_set(data, "monitor", output, pairs, self.schema)
+            proposed = complete_rule(proposed, output, self.manifest, self.runtime)
+            validate_data(proposed, self.schema)
+            check_ownership(proposed, self.manifest)
+            live = self.render(proposed)
+            # The live file from before the try goes into the pending file, so the
+            # revert never depends on the repo file still being readable.
+            write_pending({"kind": "try", "output": output,
+                           "fields": proposed["monitors"][output],
+                           "previousLive": self.runtime.read_live()})
+            # Timer first: if it cannot be started, nothing has been applied yet.
+            try:
+                self.runtime.start_revert_timer(["apply"])
+            except (OSError, subprocess.CalledProcessError) as e:
+                clear_pending()
+                raise SettingsError(f"cannot start the revert timer, nothing applied: {e}")
+            self.runtime.write_live(live)
+            self.runtime.reload(full=True)
+            return f"trying {output}; reverting in {REVERT_SECONDS}s unless confirmed"
+
+    def confirm(self):
+        with locked():
+            pending = read_pending()
+            if pending is None:
+                raise SettingsError("nothing to confirm")
+            data, text = read_repo(self.repo)
+            new = copy.deepcopy(data)
+            if pending["kind"] == "try":
+                entry = dict(pending["fields"])
+                entry["bootConfirmed"] = False
+                new.setdefault("monitors", {})[pending["output"]] = entry
+            else:
+                for entry in new.get("monitors", {}).values():
+                    entry.pop("bootConfirmed", None)
+            # Everything that can fail happens before the timer is stopped, so a
+            # broken repo file or a rejected merge leaves the revert timer armed.
+            validate_data(new, self.schema)
+            check_ownership(new, self.manifest)
+            self.runtime.stop_revert_timer()
+            new_text = dump(new)
+            if new_text != text:
+                atomic_write(self.repo, new_text)
+            live = self.render(new)
+            if live != self.runtime.read_live():
+                self.runtime.write_live(live)
+                self.runtime.reload(full=True)
+            clear_pending()
+            return "confirmed"
+
+    def revert_unconfirmed(self):
+        with locked():
+            data, text = read_repo(self.repo)
+            new = copy.deepcopy(data)
+            for output, entry in list(new.get("monitors", {}).items()):
+                if entry.get("bootConfirmed") is False:
+                    del new["monitors"][output]
+            if "monitors" in new and not new["monitors"]:
+                del new["monitors"]
+            new_text = dump(new)
+            if new_text != text:
+                atomic_write(self.repo, new_text)
+            self.runtime.write_live(self.render(new))
+            clear_pending()
+            self.runtime.reload(full=True)
+            return "reverted unconfirmed display settings"
+
+    def boot_check(self, wait_seconds=60, poll=1.0):
+        data, _ = read_repo(self.repo)
+        unconfirmed = sorted(
+            o for o, e in data.get("monitors", {}).items() if e.get("bootConfirmed") is False)
+        if not unconfirmed:
+            return "nothing to check"
+        # lock-on-start locks the session once ii's lock IPC is up. Wait for
+        # that lock (up to wait_seconds), then for the unlock, so the dialog
+        # and its timer start only once the user can see and answer them.
+        deadline = time.monotonic() + wait_seconds
+        while time.monotonic() < deadline and self.runtime.lock_state() != "true":
+            time.sleep(poll)
+        while self.runtime.lock_state() == "true":
+            time.sleep(poll)
+        with locked():
+            write_pending({"kind": "boot", "outputs": unconfirmed})
+            try:
+                self.runtime.start_revert_timer(["revert-unconfirmed"])
+            except (OSError, subprocess.CalledProcessError) as e:
+                clear_pending()
+                raise SettingsError(f"cannot start the revert timer: {e}")
+        self.runtime.open_settings()
+        return "asking to keep " + ", ".join(unconfirmed)
+
 
 def load_manifest(path):
     if not path:
@@ -692,6 +794,13 @@ def main(argv=None, runtime_factory=Runtime):
     sub.add_parser("apply")
     p_render = sub.add_parser("render")
     p_render.add_argument("--json", required=True)
+    p_try = sub.add_parser("try")
+    p_try.add_argument("section", choices=["monitor"])
+    p_try.add_argument("output")
+    p_try.add_argument("rest", nargs="+")
+    sub.add_parser("confirm")
+    sub.add_parser("boot-check")
+    sub.add_parser("revert-unconfirmed")
     sub.add_parser("schema")
     args = parser.parse_args(argv)
     schema = load_schema()
@@ -717,8 +826,16 @@ def main(argv=None, runtime_factory=Runtime):
             out = settings.set(args.section, args.key, pairs)
         elif args.cmd == "reset":
             out = settings.reset(args.section, args.key, args.fields)
-        else:
+        elif args.cmd == "apply":
             out = settings.apply()
+        elif args.cmd == "try":
+            out = settings.try_monitor(args.output, pairs_from(args.rest, "try monitor"))
+        elif args.cmd == "confirm":
+            out = settings.confirm()
+        elif args.cmd == "boot-check":
+            out = settings.boot_check()
+        else:
+            out = settings.revert_unconfirmed()
         print(out)
         return 0
     except SettingsError as e:

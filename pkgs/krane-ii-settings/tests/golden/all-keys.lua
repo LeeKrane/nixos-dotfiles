@@ -45,7 +45,9 @@ hl.config({
 
 require("hyprland.animationPresets.fast")
 
-hl.monitor({
+KRANE_GUI_MONITORS = {}
+
+KRANE_GUI_MONITORS["DP-2"] = {
     output = "DP-2",
     mode = "3840x2160@240",
     position = "0x0",
@@ -61,11 +63,13 @@ hl.monitor({
     min_luminance = 0.05,
     max_luminance = 1000,
     max_avg_luminance = 400
-})
-hl.monitor({
+}
+hl.monitor(KRANE_GUI_MONITORS["DP-2"])
+KRANE_GUI_MONITORS["HDMI-A-1"] = {
     output = "HDMI-A-1",
     mode = "1920x1080@60",
     position = "-1920x0",
     scale = 1,
     disabled = true
-})
+}
+hl.monitor(KRANE_GUI_MONITORS["HDMI-A-1"])

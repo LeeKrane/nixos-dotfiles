@@ -217,6 +217,9 @@ let
 
   # The trailer loads the settings saved from the ii settings window (modules/home/ii-settings.nix)
   # last, after every krane.hypr.* file and extraMonitorsLua, and before ii's transient shellOverrides.
+  # If extraMonitorsLua defined krane_after_gui (a hook that rebuilds its own hl.monitor rules from
+  # KRANE_GUI_MONITORS, e.g. hosts/tarmantria/display.nix's scale_internal), it runs after
+  # custom/krane_gui.lua so GUI-owned fields survive a reload or hotplug instead of being clobbered.
   monitorsFile =
     header "monitors.lua"
     + "\n"
@@ -226,6 +229,7 @@ let
 
       if is_file_exists(HOME .. "/.config/hypr/custom/krane_gui.lua") then
           require("custom.krane_gui")
+          if krane_after_gui then krane_after_gui() end
       end
     '';
 
