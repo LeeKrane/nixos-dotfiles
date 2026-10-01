@@ -1,0 +1,30 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Thu, 1 Oct 2026 03:05:21 +0200
+Subject: [PATCH] feat(settings): list the Hyprland page
+
+Port of pctrade/end4-pC dc2ca2600ee6: none (krane-only)
+https://github.com/pctrade/end4-pC/tree/dc2ca2600ee6d7852bf0ac91361db8e510f90a74
+Problem: new Hyprland page is unreachable without a nav entry.
+Port: krane-only
+Drop when: the Hyprland page is dropped.
+---
+ dots/.config/quickshell/ii/settings.qml | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/dots/.config/quickshell/ii/settings.qml b/dots/.config/quickshell/ii/settings.qml
+index 01d6e02b..028d4eac 100644
+--- a/dots/.config/quickshell/ii/settings.qml
++++ b/dots/.config/quickshell/ii/settings.qml
+@@ -54,6 +54,11 @@ ApplicationWindow {
+             icon: "settings",
+             component: "modules/settings/ServicesConfig.qml"
+         },
++        {
++            name: Translation.tr("Hyprland"),
++            icon: "desktop_windows",
++            component: "modules/settings/HyprlandConfig.qml"
++        },
+         {
+             name: Translation.tr("Profile"),
+             icon: "account_circle",

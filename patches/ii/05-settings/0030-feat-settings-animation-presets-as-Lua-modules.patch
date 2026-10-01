@@ -1,0 +1,86 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Thu, 1 Oct 2026 02:26:51 +0200
+Subject: [PATCH] feat(settings): animation presets as Lua modules
+
+Port of pctrade/end4-pC dc2ca2600ee6: scripts/hyprland/hyprconfigurator.py (ANIM_PRESETS)
+https://github.com/pctrade/end4-pC/tree/dc2ca2600ee6d7852bf0ac91361db8e510f90a74
+Problem: the fork kept presets as Python strings and asked the user to add a require line to hyprland.lua by hand.
+Port: hand-ported (moved to hypr/hyprland/animationPresets/*.lua, loaded from krane_gui.lua)
+Drop when: upstream ships animation presets.
+---
+ .../hypr/hyprland/animationPresets/fast.lua     | 16 ++++++++++++++++
+ .../hypr/hyprland/animationPresets/niri.lua     | 16 ++++++++++++++++
+ .../hypr/hyprland/animationPresets/normal.lua   | 17 +++++++++++++++++
+ 3 files changed, 49 insertions(+)
+ create mode 100644 dots/.config/hypr/hyprland/animationPresets/fast.lua
+ create mode 100644 dots/.config/hypr/hyprland/animationPresets/niri.lua
+ create mode 100644 dots/.config/hypr/hyprland/animationPresets/normal.lua
+
+diff --git a/dots/.config/hypr/hyprland/animationPresets/fast.lua b/dots/.config/hypr/hyprland/animationPresets/fast.lua
+new file mode 100644
+index 00000000..4875b7d9
+--- /dev/null
++++ b/dots/.config/hypr/hyprland/animationPresets/fast.lua
+@@ -0,0 +1,16 @@
++-- Animation preset "fast" for the ii settings window (patches/ii/05-settings).
++-- Loaded by custom/krane_gui.lua when hosts/<host>/ii-settings.json sets
++-- "animationPreset": "fast". Ported from pctrade/end4-pC hyprconfigurator.py.
++hl.curve("pc_wobble", { type = "bezier", points = { {0.15, 1.15}, {0.35, 1.0}  } })
++hl.curve("pc_decel",  { type = "bezier", points = { {0.05, 0.9},  {0.1,  1.05} } })
++hl.curve("pc_accel",  { type = "bezier", points = { {0.3,  0},    {0.8,  0.15} } })
++hl.animation({ leaf = "windowsIn",           enabled = true, speed = 5, bezier = "pc_wobble", style = "slide"     })
++hl.animation({ leaf = "windowsOut",          enabled = true, speed = 5, bezier = "pc_accel",  style = "slide"     })
++hl.animation({ leaf = "windowsMove",         enabled = true, speed = 5, bezier = "pc_decel",  style = "slide"     })
++hl.animation({ leaf = "fadeIn",              enabled = true, speed = 4, bezier = "pc_decel"                       })
++hl.animation({ leaf = "fadeOut",             enabled = true, speed = 4, bezier = "pc_accel"                       })
++hl.animation({ leaf = "layersIn",            enabled = true, speed = 4, bezier = "pc_decel",  style = "slide"     })
++hl.animation({ leaf = "layersOut",           enabled = true, speed = 4, bezier = "pc_accel",  style = "slide"     })
++hl.animation({ leaf = "workspaces",          enabled = true, speed = 6, bezier = "pc_decel",  style = "slide"     })
++hl.animation({ leaf = "specialWorkspaceIn",  enabled = true, speed = 2, bezier = "pc_wobble", style = "slidevert" })
++hl.animation({ leaf = "specialWorkspaceOut", enabled = true, speed = 2, bezier = "pc_accel",  style = "slidevert" })
+diff --git a/dots/.config/hypr/hyprland/animationPresets/niri.lua b/dots/.config/hypr/hyprland/animationPresets/niri.lua
+new file mode 100644
+index 00000000..3a0f8092
+--- /dev/null
++++ b/dots/.config/hypr/hyprland/animationPresets/niri.lua
+@@ -0,0 +1,16 @@
++-- Animation preset "niri" for the ii settings window (patches/ii/05-settings).
++-- Loaded by custom/krane_gui.lua when hosts/<host>/ii-settings.json sets
++-- "animationPreset": "niri". Ported from pctrade/end4-pC hyprconfigurator.py.
++hl.curve("niri_wobble", { type = "bezier", points = { {0.15, 1.15}, {0.35, 1.0}  } })
++hl.curve("niri_decel",  { type = "bezier", points = { {0.05, 0.9},  {0.1,  1.05} } })
++hl.curve("niri_accel",  { type = "bezier", points = { {0.3,  0},    {0.8,  0.15} } })
++hl.animation({ leaf = "windowsIn",           enabled = true, speed = 5, bezier = "niri_wobble", style = "slide"     })
++hl.animation({ leaf = "windowsOut",          enabled = true, speed = 5, bezier = "niri_accel",  style = "slide"     })
++hl.animation({ leaf = "windowsMove",         enabled = true, speed = 5, bezier = "niri_decel",  style = "slide"     })
++hl.animation({ leaf = "fadeIn",              enabled = true, speed = 4, bezier = "niri_decel"                       })
++hl.animation({ leaf = "fadeOut",             enabled = true, speed = 4, bezier = "niri_accel"                       })
++hl.animation({ leaf = "layersIn",            enabled = true, speed = 4, bezier = "niri_decel",  style = "slide"     })
++hl.animation({ leaf = "layersOut",           enabled = true, speed = 4, bezier = "niri_accel",  style = "slide"     })
++hl.animation({ leaf = "workspaces",          enabled = true, speed = 6, bezier = "niri_decel",  style = "slidevert" })
++hl.animation({ leaf = "specialWorkspaceIn",  enabled = true, speed = 4, bezier = "niri_wobble", style = "slidevert" })
++hl.animation({ leaf = "specialWorkspaceOut", enabled = true, speed = 4, bezier = "niri_accel",  style = "slidevert" })
+diff --git a/dots/.config/hypr/hyprland/animationPresets/normal.lua b/dots/.config/hypr/hyprland/animationPresets/normal.lua
+new file mode 100644
+index 00000000..615bef51
+--- /dev/null
++++ b/dots/.config/hypr/hyprland/animationPresets/normal.lua
+@@ -0,0 +1,17 @@
++-- Animation preset "normal" for the ii settings window (patches/ii/05-settings).
++-- Loaded by custom/krane_gui.lua when hosts/<host>/ii-settings.json sets
++-- "animationPreset": "normal". Ported from pctrade/end4-pC hyprconfigurator.py.
++-- Uses curves already defined in general.lua: emphasizedDecel, emphasizedAccel, menu_decel, menu_accel, stall.
++hl.animation({ leaf = "windowsIn",           enabled = true, speed = 3,   bezier = "emphasizedDecel", style = "popin 80%" })
++hl.animation({ leaf = "windowsOut",          enabled = true, speed = 2,   bezier = "emphasizedDecel", style = "popin 90%" })
++hl.animation({ leaf = "windowsMove",         enabled = true, speed = 3,   bezier = "emphasizedDecel", style = "slide"     })
++hl.animation({ leaf = "fadeIn",              enabled = true, speed = 3,   bezier = "emphasizedDecel"  })
++hl.animation({ leaf = "fadeOut",             enabled = true, speed = 2,   bezier = "emphasizedDecel"  })
++hl.animation({ leaf = "border",              enabled = true, speed = 10,  bezier = "emphasizedDecel"  })
++hl.animation({ leaf = "layersIn",            enabled = true, speed = 2.7, bezier = "emphasizedDecel", style = "popin 93%" })
++hl.animation({ leaf = "layersOut",           enabled = true, speed = 2.4, bezier = "menu_accel",      style = "popin 94%" })
++hl.animation({ leaf = "fadeLayersIn",        enabled = true, speed = 0.5, bezier = "menu_decel"       })
++hl.animation({ leaf = "fadeLayersOut",       enabled = true, speed = 2.7, bezier = "stall"            })
++hl.animation({ leaf = "workspaces",          enabled = true, speed = 7,   bezier = "menu_decel",      style = "slide"     })
++hl.animation({ leaf = "specialWorkspaceIn",  enabled = true, speed = 2.8, bezier = "emphasizedDecel", style = "slidevert" })
++hl.animation({ leaf = "specialWorkspaceOut", enabled = true, speed = 1.2, bezier = "emphasizedAccel", style = "slidevert" })

@@ -1,0 +1,351 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Thu, 1 Oct 2026 01:58:47 +0200
+Subject: [PATCH] feat(settings): autostart apps
+
+Port of pctrade/end4-pC dc2ca2600ee6: scripts/hyprland/autostart.py, modules/common/widgets/AutostartApps.qml, shell.qml (autostart launcher)
+https://github.com/pctrade/end4-pC/tree/dc2ca2600ee6d7852bf0ac91361db8e510f90a74
+Problem: apps to launch once per session are a shell choice kept in config.json (hyprland.autostartApps), so the shell needs its own launcher and lock instead of Hyprland's exec-once.
+Port: hand-ported (lock moved to $XDG_RUNTIME_DIR; venv shebang; launcher and the widget's manual run button call the script directly, not through python3 from PATH)
+Drop when: autostart apps are configured some other way.
+---
+ .../modules/common/widgets/AutostartApps.qml  | 238 ++++++++++++++++++
+ .../ii/scripts/hyprland/autostart.py          |  55 ++++
+ dots/.config/quickshell/ii/shell.qml          |  16 ++
+ 3 files changed, 309 insertions(+)
+ create mode 100644 dots/.config/quickshell/ii/modules/common/widgets/AutostartApps.qml
+ create mode 100755 dots/.config/quickshell/ii/scripts/hyprland/autostart.py
+
+diff --git a/dots/.config/quickshell/ii/modules/common/widgets/AutostartApps.qml b/dots/.config/quickshell/ii/modules/common/widgets/AutostartApps.qml
+new file mode 100644
+index 00000000..f239cccd
+--- /dev/null
++++ b/dots/.config/quickshell/ii/modules/common/widgets/AutostartApps.qml
+@@ -0,0 +1,238 @@
++import QtQuick
++import QtQuick.Layouts
++import Qt5Compat.GraphicalEffects
++import Quickshell
++import Quickshell.Io
++import Qt.labs.folderlistmodel
++import qs.services
++import qs.modules.common
++import qs.modules.common.widgets
++import qs.modules.common.functions
++import qs.modules.common.models
++
++ColumnLayout {
++    id: root
++    Layout.fillWidth: true
++    width: parent.width
++    spacing: 4
++
++    function addEntry() {
++        let list = []
++        for (let i = 0; i < Config.options.hyprland.autostartApps.apps.length; i++) {
++            let o = Config.options.hyprland.autostartApps.apps[i]
++            list.push({ cmd: o.cmd, workspace: o.workspace, delay: o.delay })
++        }
++        list.push({ cmd: "", workspace: 1, delay: 0 })
++        Config.options.hyprland.autostartApps.apps = list
++    }
++
++    function removeEntry(index) {
++        let list = []
++        for (let i = 0; i < Config.options.hyprland.autostartApps.apps.length; i++) {
++            if (i === index) continue
++            let o = Config.options.hyprland.autostartApps.apps[i]
++            list.push({ cmd: o.cmd, workspace: o.workspace, delay: o.delay })
++        }
++        Config.options.hyprland.autostartApps.apps = list
++    }
++
++    function updateEntry(index, key, value) {
++        let list = []
++        for (let i = 0; i < Config.options.hyprland.autostartApps.apps.length; i++) {
++            let o = Config.options.hyprland.autostartApps.apps[i]
++            list.push({ cmd: o.cmd, workspace: o.workspace, delay: o.delay })
++        }
++        list[index][key] = value
++        Config.options.hyprland.autostartApps.apps = list
++    }
++
++    RowLayout {
++        Layout.fillWidth: true
++        GroupedList {
++            Layout.fillWidth: true
++            ConfigSwitch {
++                buttonIcon: "check"
++                text: Translation.tr("Enable")
++                checked: Config.options.hyprland.autostartApps.enable
++                onCheckedChanged: {
++                    Config.options.hyprland.autostartApps.enable = checked
++                }
++            }
++        }
++
++        RippleButton {
++            Layout.preferredWidth: 36
++            Layout.preferredHeight: 36
++            visible: Config.options.hyprland.autostartApps.enable
++            buttonRadius: implicitWidth / 2
++            colBackground: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.85)
++            colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.6)
++            colRipple: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.5)
++            onClicked: {
++                Quickshell.execDetached([`${Directories.scriptPath}/hyprland/autostart.py`, "--manual"])
++            }
++            contentItem: MaterialSymbol {
++                anchors.centerIn: parent
++                horizontalAlignment: Text.AlignHCenter
++                text: "motion_play"
++                iconSize: Appearance.font.pixelSize.normal
++                color: Appearance.colors.colPrimary
++            }
++        }
++    }
++
++    Item {
++        Layout.fillWidth: true
++        Layout.bottomMargin: -4
++        height: 24
++        visible: Config.options.hyprland.autostartApps.apps.length > 0 && Config.options.hyprland.autostartApps.enable
++
++        Row {
++            id: headerRightGroup
++            anchors.right: parent.right
++            anchors.verticalCenter: parent.verticalCenter
++            spacing: 6
++
++            StyledText {
++                width: 118
++                horizontalAlignment: Text.AlignHCenter
++                text: Translation.tr("Workspace")
++                color: Appearance.colors.colSubtext
++                font.pixelSize: Appearance.font.pixelSize.small
++                font.weight: Font.Medium
++            }
++
++            StyledText {
++                width: 118
++                horizontalAlignment: Text.AlignHCenter
++                text: Translation.tr("Delay")
++                color: Appearance.colors.colSubtext
++                font.pixelSize: Appearance.font.pixelSize.small
++                font.weight: Font.Medium
++            }
++
++            Item { width: 36; height: 1 }
++        }
++
++        StyledText {
++            anchors.left: parent.left
++            anchors.right: headerRightGroup.left
++            anchors.rightMargin: 6
++            anchors.verticalCenter: parent.verticalCenter
++            text: Translation.tr("App or Command")
++            color: Appearance.colors.colSubtext
++            font.pixelSize: Appearance.font.pixelSize.small
++            font.weight: Font.Medium
++        }
++    }
++
++    Repeater {
++        id: appsRepeater
++        model: Config.options.hyprland.autostartApps.apps
++
++        delegate: Item {
++            id: entryRow
++            required property var modelData
++            required property int index
++            Layout.fillWidth: true
++            implicitHeight: cmdArea.implicitHeight
++            visible: Config.options.hyprland.autostartApps.enable
++
++            Row {
++                id: rightGroup
++                anchors.right: parent.right
++                anchors.verticalCenter: parent.verticalCenter
++                spacing: 6
++
++                ConfigSpinBox {
++                    width: 118
++                    value: entryRow.modelData.workspace ?? 1
++                    from: 1
++                    to: 20
++
++                    property bool ready: false
++                    Component.onCompleted: ready = true
++
++                    onValueChanged: {
++                        if (!ready) return
++                        root.updateEntry(entryRow.index, "workspace", value)
++                    }
++                }
++
++                ConfigSpinBox {
++                    width: 118
++                    value: entryRow.modelData.delay ?? 0
++                    from: 0
++                    to: 60
++                    stepSize: 1
++
++                    property bool ready: false
++                    Component.onCompleted: ready = true
++
++                    onValueChanged: {
++                        if (!ready) return
++                        root.updateEntry(entryRow.index, "delay", value)
++                    }
++                }
++
++                RippleButton {
++                    width: 36
++                    height: 36
++                    buttonRadius: width / 2
++                    colBackground: ColorUtils.transparentize(Appearance.colors.colError, 0.85)
++                    colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colError, 0.6)
++                    colRipple: ColorUtils.transparentize(Appearance.colors.colError, 0.5)
++                    onClicked: root.removeEntry(entryRow.index)
++                    contentItem: MaterialSymbol {
++                        anchors.centerIn: parent
++                        horizontalAlignment: Text.AlignHCenter
++                        text: "delete"
++                        iconSize: Appearance.font.pixelSize.normal
++                        color: Appearance.colors.colError
++                    }
++                }
++            }
++
++            MaterialTextArea {
++                id: cmdArea
++                anchors.left: parent.left
++                anchors.right: rightGroup.left
++                anchors.rightMargin: 6
++                placeholderText: Translation.tr("App (e.g. firefox)")
++                text: entryRow.modelData.cmd ?? ""
++                wrapMode: TextEdit.Wrap
++                font.pixelSize: Appearance.font.pixelSize.normal
++
++                property bool ready: false
++                Component.onCompleted: ready = true
++
++                onTextChanged: {
++                    if (!ready) return
++                    debounceTimer.restart()
++                }
++
++                Timer {
++                    id: debounceTimer
++                    interval: 3000
++                    repeat: false
++                    onTriggered: {
++                        root.updateEntry(entryRow.index, "cmd", cmdArea.text)
++                    }
++                }
++            }
++        }
++    }
++
++    RowLayout {
++        Layout.fillWidth: true
++        Layout.topMargin: 4
++
++        Item { Layout.fillWidth: true }
++
++        ToolbarPairedFab {
++            visible: Config.options.hyprland.autostartApps.enable
++            iconText: "add"
++            onClicked: root.addEntry()
++        }
++    }
++}
+\ No newline at end of file
+diff --git a/dots/.config/quickshell/ii/scripts/hyprland/autostart.py b/dots/.config/quickshell/ii/scripts/hyprland/autostart.py
+new file mode 100755
+index 00000000..ffc371bb
+--- /dev/null
++++ b/dots/.config/quickshell/ii/scripts/hyprland/autostart.py
+@@ -0,0 +1,55 @@
++#!/usr/bin/env -S\_/bin/sh\_-c\_"source\_\$(eval\_echo\_\$ILLOGICAL_IMPULSE_VIRTUAL_ENV)/bin/activate&&exec\_python\_-E\_"\$0"\_"\$@""
++import json, subprocess, sys, time, os
++
++
++# Same escaping as krane-ii-settings' lua_str: hyprctl dispatch evaluates this
++# as a Lua string literal, so cmd must never be spliced in unescaped.
++def lua_str(text):
++    escaped = text.replace("\\", "\\\\").replace('"', '\\"')
++    escaped = escaped.replace("\n", "\\n").replace("\t", "\\t").replace("\r", "\\r")
++    return '"' + escaped + '"'
++
++
++# --manual: the settings window's "run now" button. Skips the lock so it
++# works more than once per session; the boot-time run in shell.qml does not
++# pass it, so it still runs once per login via the lock in XDG_RUNTIME_DIR.
++manual = "--manual" in sys.argv[1:]
++
++if not manual:
++    lockfile = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}", "qs-autostart.lock")
++    if os.path.exists(lockfile):
++        exit(0)
++    open(lockfile, 'w').close()
++
++with open(f"{os.environ['HOME']}/.config/illogical-impulse/config.json") as f:
++    data = json.load(f)
++
++autostart = data.get('hyprland', {}).get('autostartApps', {})
++if not autostart.get('enable', False):
++    exit(0)
++
++for app in autostart.get('apps', []):
++    cmd = app.get('cmd', '').strip()
++    if not cmd:
++        continue
++
++    workspace = app.get('workspace', 1)
++    if not isinstance(workspace, int) or isinstance(workspace, bool):
++        print(f"autostart: skipping {cmd!r}, workspace is not an int: {workspace!r}", file=sys.stderr)
++        continue
++
++    delay = app.get('delay', 0)
++    if not isinstance(delay, (int, float)) or isinstance(delay, bool) or delay < 0:
++        delay = 0
++
++    subprocess.run(['hyprctl', 'dispatch', f'hl.dsp.focus({{workspace = {workspace}}})'])
++
++    expanded_cmd = os.path.expanduser(cmd)
++    subprocess.Popen(
++        ['hyprctl', 'dispatch', f'hl.dsp.exec_cmd({lua_str(expanded_cmd)})'],
++        stdout=subprocess.DEVNULL,
++        stderr=subprocess.DEVNULL,
++        close_fds=True
++    )
++
++    time.sleep(delay)
+diff --git a/dots/.config/quickshell/ii/shell.qml b/dots/.config/quickshell/ii/shell.qml
+index b9fe54f3..679fb5f3 100644
+--- a/dots/.config/quickshell/ii/shell.qml
++++ b/dots/.config/quickshell/ii/shell.qml
+@@ -46,6 +46,22 @@ ShellRoot {
+         function onReloaded() { root.syncHyprlockClock() }
+     }
+ 
++    // Autostart apps from the settings window's Hyprland page (config.json,
++    // hyprland.autostartApps). autostart.py keeps a lock in $XDG_RUNTIME_DIR, so
++    // this runs once per boot, not on every shell restart.
++    Process {
++        id: autostartProc
++        command: [Quickshell.shellPath("scripts/hyprland/autostart.py")]
++    }
++    Connections {
++        target: Config
++        function onReadyChanged() {
++            if (Config.ready && Config.options.hyprland.autostartApps.enable
++                    && Config.options.hyprland.autostartApps.apps.length > 0)
++                autostartProc.running = true;
++        }
++    }
++
+     Component.onCompleted: {
+         MaterialThemeLoader.reapplyTheme()
+         Hyprsunset.load()

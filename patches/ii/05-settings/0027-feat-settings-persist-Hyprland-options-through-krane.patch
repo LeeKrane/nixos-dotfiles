@@ -1,0 +1,278 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Thu, 1 Oct 2026 01:51:05 +0200
+Subject: [PATCH] feat(settings): persist Hyprland options through
+ krane-ii-settings
+
+Port of pctrade/end4-pC dc2ca2600ee6: none (krane-only)
+https://github.com/pctrade/end4-pC/tree/dc2ca2600ee6d7852bf0ac91361db8e510f90a74
+Problem: Hyprland options set from the settings window must survive switches; shellOverrides/main.lua is wiped by every switch.
+Port: krane-only (calls the dotfiles repo's writer)
+Drop when: the dotfiles repo drops krane-ii-settings.
+---
+ .../models/hyprland/HyprlandConfigOption.qml  |  27 ++-
+ .../quickshell/ii/services/KraneSettings.qml  | 190 ++++++++++++++++++
+ 2 files changed, 214 insertions(+), 3 deletions(-)
+ create mode 100644 dots/.config/quickshell/ii/services/KraneSettings.qml
+
+diff --git a/dots/.config/quickshell/ii/modules/common/models/hyprland/HyprlandConfigOption.qml b/dots/.config/quickshell/ii/modules/common/models/hyprland/HyprlandConfigOption.qml
+index 0422aab0..00f96cef 100644
+--- a/dots/.config/quickshell/ii/modules/common/models/hyprland/HyprlandConfigOption.qml
++++ b/dots/.config/quickshell/ii/modules/common/models/hyprland/HyprlandConfigOption.qml
+@@ -11,7 +11,22 @@ NestableObject {
+     required property string key
+     property alias fetching: fetchProc.running
+     property bool set
++    // True once the first getoption response has been processed (success,
++    // "no such option", or parse failure) — unlike `set` (hyprctl's own "this
++    // option was explicitly configured" field), this is the "safe to write
++    // now" signal, since a never-explicitly-set option (e.g. a
++    // decoration:*_opacity left at its compiled-in default) has `set: false`
++    // forever and would permanently block writes if gated on `set`.
++    property bool loaded: false
+     property var value
++    // Nix owns this key (krane.hypr.settings or krane.hypr.guiLocked): show the
++    // control disabled with lockedReason.
++    readonly property bool locked: KraneSettings.isLocked("hyprland", root.key)
++    readonly property string lockedReason: KraneSettings.nixReason
++    // hyprctl reports CSS-gap options (general:gaps_in, gaps_out) as a
++    // "top right bottom left" string and bools as true/false.
++    readonly property real number: typeof root.value === "string" ? Number(root.value.split(" ")[0]) : Number(root.value ?? 0)
++    readonly property bool boolean: root.value === true || Number(root.value) === 1
+ 
+     Component.onCompleted: fetch()
+ 
+@@ -27,12 +42,14 @@ NestableObject {
+         fetchProc.running = true;
+     }
+ 
++    // Persistent: written to hosts/<host>/ii-settings.json by krane-ii-settings.
++    // Transient overrides (game mode, anti-flashbang) call HyprlandConfig directly.
+     function setValue(newValue) {
+-        HyprlandConfig.set(root.key, newValue)
++        KraneSettings.set("hyprland", root.key, newValue)
+     }
+ 
+     function reset() {
+-        HyprlandConfig.reset(root.key)
++        KraneSettings.reset("hyprland", root.key)
+     }
+ 
+     Process {
+@@ -40,8 +57,10 @@ NestableObject {
+         property list<string> baseCommand: ["hyprctl", "getoption", "-j"]
+         stdout: StdioCollector {
+             onStreamFinished: {
+-                if (text == "no such option")
++                if (text == "no such option") {
++                    root.loaded = true;
+                     return;
++                }
+                 try {
+                     const obj = JSON.parse(text);
+                     // Note that the value is returned as "<data type>": <value>
+@@ -56,6 +75,8 @@ NestableObject {
+                     }
+                 } catch (e) {
+                     console.log(`[HyprlandConfigOption] Failed to fetch option "${root.key}":\n  - Output: ${text.trim()}\n  - Error: ${e}`);
++                } finally {
++                    root.loaded = true;
+                 }
+             }
+         }
+diff --git a/dots/.config/quickshell/ii/services/KraneSettings.qml b/dots/.config/quickshell/ii/services/KraneSettings.qml
+new file mode 100644
+index 00000000..57823ae5
+--- /dev/null
++++ b/dots/.config/quickshell/ii/services/KraneSettings.qml
+@@ -0,0 +1,190 @@
++pragma Singleton
++pragma ComponentBehavior: Bound
++
++import QtQuick
++import Quickshell
++import Quickshell.Io
++
++/**
++ * Persistent settings, through krane-ii-settings from the dotfiles repo
++ * (pkgs/krane-ii-settings). It validates each change against its schema,
++ * refuses keys Nix owns, writes hosts/<host>/ii-settings.json and reloads
++ * Hyprland. Transient overrides (game mode, anti-flashbang, border colors)
++ * stay on HyprlandConfig.
++ */
++Singleton {
++    id: root
++
++    // Output of `krane-ii-settings get`: host, repoFile, repo, error,
++    // nixOwned, monitorBaselines, idle, idleBaseline, pending, revertPending,
++    // unconfirmed.
++    property var state: ({})
++    // False until `get` has answered: the writer is missing from PATH (qs
++    // started before the switch that installed it) or failed.
++    property bool available: false
++    // stderr of the last failed command, shown by the pages.
++    property string lastError: ""
++    // The repo file changed outside the settings window (hand edit, git
++    // checkout). Nothing is applied until the user presses Apply.
++    property bool externalChange: false
++
++    readonly property string nixReason: Translation.tr("Set in Nix (%1)").arg(`hosts/${root.state.host ?? "<host>"}/display.nix or modules/home`)
++
++    function isLocked(section, key) {
++        const owned = root.state.nixOwned;
++        if (!owned)
++            return false;
++        if (section === "hyprland")
++            return owned.hyprland.includes(key);
++        if (section === "idle")
++            return owned.idle;
++        return false;
++    }
++
++    function isMonitorFieldLocked(output, field) {
++        return (root.state.nixOwned?.monitors?.[output] ?? []).includes(field);
++    }
++
++    function set(section, key, value) {
++        root._enqueue(["set", section, key, String(value)]);
++    }
++
++    // `field` only for section "monitor": one field of that output's entry.
++    function reset(section, key, field) {
++        const args = ["reset", section, key];
++        if (field !== undefined)
++            args.push(String(field));
++        root._enqueue(args);
++    }
++
++    function apply() {
++        root.externalChange = false;
++        root._enqueue(["apply"]);
++    }
++
++    // A refresh while a get is already in flight is not dropped: it sets
++    // _getPending so getProc reruns once the in-flight one exits, instead of
++    // leaving state stale from before whatever just changed it.
++    property bool _getPending: false
++
++    function refresh() {
++        if (getProc.running) {
++            root._getPending = true;
++            return;
++        }
++        getProc.running = true;
++    }
++
++    property list<var> _queue: []
++    property real _selfWriteUntil: 0
++
++    function _enqueue(args) {
++        // A newer value for the same setting replaces a queued older one, so a
++        // dragged slider ends on its final value without replaying every step.
++        const same = a => a[0] === "set" && args[0] === "set" && a[1] === args[1] && a[2] === args[2];
++        root._queue = root._queue.filter(a => !same(a)).concat([args]);
++        root._next();
++    }
++
++    function _next() {
++        if (runProc.busy || root._queue.length === 0)
++            return;
++        const args = root._queue[0];
++        root._queue = root._queue.slice(1);
++        root._selfWriteUntil = Date.now() + 3000;
++        runProc.busy = true;
++        runProc.exitedFlag = false;
++        runProc.stderrDone = false;
++        runProc.command = ["krane-ii-settings"].concat(args);
++        runProc.running = true;
++        startWatchdog.restart();
++    }
++
++    function _finish(code, errText) {
++        runProc.busy = false;
++        root.lastError = code === 0 ? "" : (errText.trim() || Translation.tr("krane-ii-settings failed (exit %1)").arg(code));
++        root.refresh();
++        Qt.callLater(root._next);
++    }
++
++    Process {
++        id: runProc
++        property bool busy: false
++        property bool exitedFlag: false
++        property bool stderrDone: false
++        property int code: 0
++        property string errText: ""
++        stderr: StdioCollector {
++            onStreamFinished: {
++                runProc.errText = text;
++                runProc.stderrDone = true;
++                if (runProc.exitedFlag)
++                    root._finish(runProc.code, runProc.errText);
++            }
++        }
++        onExited: (exitCode, exitStatus) => {
++            runProc.code = exitCode;
++            runProc.exitedFlag = true;
++            if (runProc.stderrDone)
++                root._finish(runProc.code, runProc.errText);
++        }
++    }
++
++    // A command that never started (not on PATH) emits nothing; do not wait forever.
++    Timer {
++        id: startWatchdog
++        interval: 5000
++        onTriggered: {
++            if (runProc.busy && !runProc.running && !runProc.exitedFlag)
++                root._finish(127, Translation.tr("krane-ii-settings is not on PATH. Switch, then restart the shell."));
++        }
++    }
++
++    Process {
++        id: getProc
++        command: ["krane-ii-settings", "get"]
++        stdout: StdioCollector {
++            onStreamFinished: {
++                try {
++                    root.state = JSON.parse(text);
++                    root.available = true;
++                } catch (e) {
++                    root.available = false;
++                }
++            }
++        }
++        onExited: {
++            if (root._getPending) {
++                root._getPending = false;
++                getProc.running = true;
++            }
++        }
++    }
++
++    FileView {
++        path: root.state.repoFile ?? ""
++        watchChanges: true
++        printErrors: false
++        onFileChanged: {
++            if (Date.now() > root._selfWriteUntil)
++                root.externalChange = true;
++            root.refresh();
++        }
++    }
++
++    // Say so in the log when the writer never answers (checked by the
++    // settings smoke tests and useful in `qs log`).
++    Timer {
++        id: availabilityCheck
++        interval: 5000
++        onTriggered: {
++            if (!root.available)
++                console.warn("[KraneSettings] krane-ii-settings get did not answer; persistent settings are unavailable");
++        }
++    }
++
++    Component.onCompleted: {
++        root.refresh();
++        availabilityCheck.start();
++    }
++}

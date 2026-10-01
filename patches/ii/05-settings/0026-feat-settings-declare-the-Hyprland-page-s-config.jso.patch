@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Thu, 1 Oct 2026 01:50:04 +0200
+Subject: [PATCH] feat(settings): declare the Hyprland page's config.json keys
+
+Port of pctrade/end4-pC dc2ca2600ee6: modules/common/Config.qml (hyprland.autostartApps, hyprland.general.borderColor)
+https://github.com/pctrade/end4-pC/tree/dc2ca2600ee6d7852bf0ac91361db8e510f90a74
+Problem: autostart apps and custom border colors are shell choices kept in config.json.
+Port: hand-ported (the rest of the fork's hyprland.* mirror is not ported: Hyprland options live in ii-settings.json)
+Drop when: the pinned Config.qml declares hyprland.autostartApps.
+---
+ .../quickshell/ii/modules/common/Config.qml   | 22 +++++++++++++++++++
+ 1 file changed, 22 insertions(+)
+
+diff --git a/dots/.config/quickshell/ii/modules/common/Config.qml b/dots/.config/quickshell/ii/modules/common/Config.qml
+index 48830dd0..77175248 100644
+--- a/dots/.config/quickshell/ii/modules/common/Config.qml
++++ b/dots/.config/quickshell/ii/modules/common/Config.qml
+@@ -85,6 +85,28 @@ Singleton {
+                 property list<string> collapsedSections: []
+             }
+ 
++            // Settings window Hyprland page (patches/ii/05-settings). Only the choices that
++            // stay in config.json: Hyprland options themselves go to
++            // hosts/<host>/ii-settings.json through krane-ii-settings.
++            property JsonObject hyprland: JsonObject {
++                property JsonObject autostartApps: JsonObject {
++                    property bool enable: false
++                    property list<var> apps: []
++                }
++                property JsonObject general: JsonObject {
++                    // Window border colors. Off by default so the colors matugen
++                    // writes to hyprland/colors.lua keep applying.
++                    property JsonObject borderColor: JsonObject {
++                        property bool enable: false
++                        // Palette roles, resolved by Appearance.getColorFromName()
++                        property string activeRole: "layer0Border"
++                        property string inactiveRole: "layer0Border"
++                        property real activeOpacity: 0.47
++                        property real inactiveOpacity: 0.2
++                    }
++                }
++            }
++
+             // Settings window Profile page (patches/ii/05-settings).
+             property JsonObject profile: JsonObject {
+                 property string avatarPath: ""

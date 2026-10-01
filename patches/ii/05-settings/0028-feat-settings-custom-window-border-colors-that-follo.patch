@@ -1,0 +1,197 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Thu, 1 Oct 2026 01:56:44 +0200
+Subject: [PATCH] feat(settings): custom window border colors that follow the
+ palette
+
+Port of pctrade/end4-pC dc2ca2600ee6: services/HyprlandConfig.qml, services/MaterialThemeLoader.qml, modules/common/Appearance.qml (getColorFromName)
+https://github.com/pctrade/end4-pC/tree/dc2ca2600ee6d7852bf0ac91361db8e510f90a74
+Problem: the Hyprland page's border colors are palette roles and must be re-resolved on every palette change and after every switch, which wipes shellOverrides/main.lua.
+Port: hand-ported (WM checks, setIdle and setAnimPreset dropped; scripts run through their venv shebang, not python3 from PATH; re-apply added on configreloaded; getColorFromName ported verbatim into Appearance.qml since this pin lacks it and the brief did not list this file)
+Drop when: upstream ii ships border colors from palette roles.
+---
+ .../ii/modules/common/Appearance.qml          |  18 +++
+ .../quickshell/ii/services/HyprlandConfig.qml | 109 +++++++++++++-----
+ .../ii/services/MaterialThemeLoader.qml       |   3 +
+ 3 files changed, 99 insertions(+), 31 deletions(-)
+
+diff --git a/dots/.config/quickshell/ii/modules/common/Appearance.qml b/dots/.config/quickshell/ii/modules/common/Appearance.qml
+index bedf01eb..892a6f94 100644
+--- a/dots/.config/quickshell/ii/modules/common/Appearance.qml
++++ b/dots/.config/quickshell/ii/modules/common/Appearance.qml
+@@ -34,6 +34,24 @@ Singleton {
+     property real backgroundTransparency: Config?.options.appearance.transparency.enable ? Config?.options.appearance.transparency.automatic ? autoBackgroundTransparency : Config?.options.appearance.transparency.backgroundTransparency : 0
+     property real contentTransparency: Config?.options.appearance.transparency.automatic ? autoContentTransparency : Config?.options.appearance.transparency.contentTransparency
+ 
++    // Palette roles (patches/ii/05-settings): used by HyprlandConfig.qml to
++    // resolve the settings window's border color role pickers.
++    function getColorFromName(name) {
++        switch (name) {
++            case "primary":            return colors.colPrimary
++            case "secondary":          return colors.colSecondary
++            case "tertiary":           return colors.colTertiary
++            case "primaryContainer":   return colors.colPrimaryContainer
++            case "secondaryContainer": return colors.colSecondaryContainer
++            case "tertiaryContainer":  return colors.colTertiaryContainer
++            case "layer0":             return colors.colLayer0
++            case "layer1":             return colors.colLayer1
++            case "layer0Border":       return colors.colLayer0Border
++            case "black":              return "black"
++            default:                   return colors.colPrimaryContainer
++        }
++    }
++
+     m3colors: QtObject {
+         property bool darkmode: true
+         property bool transparent: false
+diff --git a/dots/.config/quickshell/ii/services/HyprlandConfig.qml b/dots/.config/quickshell/ii/services/HyprlandConfig.qml
+index 0f2f3f2c..46b97b7a 100644
+--- a/dots/.config/quickshell/ii/services/HyprlandConfig.qml
++++ b/dots/.config/quickshell/ii/services/HyprlandConfig.qml
+@@ -9,46 +9,90 @@ import qs.modules.common
+ import qs.modules.common.functions
+ 
+ /**
+- * Configs Hyprland
++ * Transient Hyprland overrides: game mode, the anti-flashbang shader and
++ * custom window border colors. They go to hyprland/shellOverrides/main.lua,
++ * which loads last and which every switch wipes. Persistent settings go
++ * through KraneSettings (krane-ii-settings) instead.
+  */
+ Singleton {
+     id: root
+-    
++
+     signal reloaded()
+ 
+     readonly property string configuratorScriptPath: Quickshell.shellPath("scripts/hyprland/hyprconfigurator.py")
+     readonly property string shellOverridesPath: FileUtils.trimFileProtocol(`${Directories.config}/hypr/hyprland/shellOverrides/main.lua`)
+ 
+-    function set(key: string, value: var) {
+-        Quickshell.execDetached(["bash", "-c", //
+-            `${root.configuratorScriptPath} --file ${root.shellOverridesPath} --set "${key}" "${value}"` //
+-        ])
++    // The script runs through its own venv shebang; argv, not a shell string.
++    function _run(args: var): void {
++        Quickshell.execDetached([root.configuratorScriptPath, "--file", root.shellOverridesPath].concat(args));
+     }
+-    
+-    function setMany(entries: var) {
+-        let args = ""
+-        for (let key in entries) {
+-            args += `--set "${key}" "${entries[key]}" `
+-        }
+-        Quickshell.execDetached(["bash", "-c", //
+-            `${root.configuratorScriptPath} --file ${root.shellOverridesPath} ${args}` //
+-        ])
+-    }
+-    
+-    function reset(key: string) {
+-        Quickshell.execDetached(["bash", "-c", //
+-            `${root.configuratorScriptPath} --file ${root.shellOverridesPath} --reset "${key}"` //
+-        ])
+-    }
+-    
+-    function resetMany(keys: list<string>) {
+-        let args = ""
+-        for (let i = 0; i < keys.length; i++) {
+-            args += `--reset "${keys[i]}" `
++
++    function set(key: string, value: var): void {
++        root._run(["--set", key, String(value)]);
++    }
++
++    function setMany(entries: var): void {
++        let args = [];
++        for (let key in entries)
++            args.push("--set", key, String(entries[key]));
++        root._run(args);
++    }
++
++    function reset(key: string): void {
++        root._run(["--reset", key]);
++    }
++
++    function resetMany(keys: list<string>): void {
++        let args = [];
++        for (let i = 0; i < keys.length; i++)
++            args.push("--reset", keys[i]);
++        root._run(args);
++    }
++
++    readonly property string borderActiveKey: "general:col:active_border"
++    readonly property string borderInactiveKey: "general:col:inactive_border"
++
++    // Hyprland wants rgba(RRGGBBAA) without a leading '#'. Only the RGB of the
++    // palette color is kept: some Appearance colors carry an alpha that encodes
++    // a layer opacity inside the shell, which has nothing to do with a border.
++    function toHyprColor(color, opacity) {
++        const c = Qt.color(color);
++        const hex = v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, "0");
++        return `rgba(${hex(c.r)}${hex(c.g)}${hex(c.b)}${hex(opacity)})`;
++    }
++
++    // Custom window border colors, or {} when the option is off so the colors
++    // matugen writes to hyprland/colors.lua keep applying. Roles are resolved
++    // here rather than stored as colors, so the borders follow the wallpaper.
++    function borderColorEntries() {
++        const opts = Config.options?.hyprland?.general?.borderColor;
++        if (!Config.ready || !opts?.enable)
++            return ({});
++        let entries = ({});
++        entries[root.borderActiveKey] = root.toHyprColor(Appearance.getColorFromName(opts.activeRole), opts.activeOpacity);
++        entries[root.borderInactiveKey] = root.toHyprColor(Appearance.getColorFromName(opts.inactiveRole), opts.inactiveOpacity);
++        return entries;
++    }
++
++    // Also called by MaterialThemeLoader on every palette change.
++    function applyBorderColors(): void {
++        const entries = root.borderColorEntries();
++        if (Object.keys(entries).length > 0)
++            root.setMany(entries);
++    }
++
++    function resetBorderColors(): void {
++        root.resetMany([root.borderActiveKey, root.borderInactiveKey]);
++    }
++
++    // The palette can be loaded before the config, in which case the first
++    // apply from MaterialThemeLoader was skipped.
++    Connections {
++        target: Config
++        function onReadyChanged() {
++            if (Config.ready)
++                root.applyBorderColors();
+         }
+-        Quickshell.execDetached(["bash", "-c", //
+-            `${root.configuratorScriptPath} --file ${root.shellOverridesPath} ${args}` //
+-        ])
+     }
+ 
+     Connections {
+@@ -56,7 +100,10 @@ Singleton {
+ 
+         function onRawEvent(event) {
+             if (event.name == "configreloaded") {
+-                root.reloaded()
++                root.reloaded();
++                // A switch wipes shellOverrides/main.lua and ends with a reload.
++                // hyprconfigurator.py skips unchanged writes, so this cannot loop.
++                root.applyBorderColors();
+             }
+         }
+     }
+diff --git a/dots/.config/quickshell/ii/services/MaterialThemeLoader.qml b/dots/.config/quickshell/ii/services/MaterialThemeLoader.qml
+index 6012566d..e5ac92f5 100644
+--- a/dots/.config/quickshell/ii/services/MaterialThemeLoader.qml
++++ b/dots/.config/quickshell/ii/services/MaterialThemeLoader.qml
+@@ -31,6 +31,9 @@ Singleton {
+         }
+         
+         Appearance.m3colors.darkmode = (Appearance.m3colors.m3background.hslLightness < 0.5)
++        // Custom window border colors are stored as palette roles, so they
++        // have to be pushed to Hyprland again whenever the palette changes.
++        HyprlandConfig.applyBorderColors()
+     }
+ 
+     function resetFilePathNextTime() {

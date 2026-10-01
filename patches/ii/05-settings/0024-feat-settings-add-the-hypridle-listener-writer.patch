@@ -15,11 +15,11 @@ Drop when: hypridle.conf is generated from config values upstream.
 
 diff --git a/dots/.config/quickshell/ii/scripts/hyprland/hypridleconfigurator.py b/dots/.config/quickshell/ii/scripts/hyprland/hypridleconfigurator.py
 new file mode 100755
-index 00000000..a67e7ed1
+index 00000000..15046b74
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/scripts/hyprland/hypridleconfigurator.py
 @@ -0,0 +1,147 @@
-+#!/usr/bin/env -S /bin/sh -c "source $(eval echo $ILLOGICAL_IMPULSE_VIRTUAL_ENV)/bin/activate&&exec python -E \"$0\" \"$@\""
++#!/usr/bin/env -S\_/bin/sh\_-c\_"source\_\$(eval\_echo\_\$ILLOGICAL_IMPULSE_VIRTUAL_ENV)/bin/activate&&exec\_python\_-E\_"\$0"\_"\$@""
 +import argparse
 +import os
 +import re
