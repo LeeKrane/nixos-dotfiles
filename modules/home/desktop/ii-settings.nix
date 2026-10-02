@@ -224,6 +224,24 @@ in
       ''
     );
 
+    # home-manager re-runs activation at every boot (home-manager-krane.service wants
+    # multi-user.target), but krane.hypr._rendered above is a build-time render of the repo
+    # file as it stood at the last `nixos-rebuild switch`. Any GUI change made since then
+    # (krane-ii-settings set/try/confirm) would otherwise be silently lost on reboot, until
+    # the next switch. Re-render from the live repo file at every activation instead; `activate`
+    # itself never fails (a missing/unparseable/rejected repo file just warns and leaves the
+    # build-time render above in place), and `|| true` is belt-and-braces for anything else.
+    # entryAfter kraneIiIdle: kraneIiIdle is wrapped in lib.mkIf above and may not exist in the
+    # activation DAG at all; home-manager's dag.topoSort silently ignores an unknown name in
+    # `after` (only a cycle fails the build), so naming it here is safe whether or not it's
+    # present. Ordering keeps idle ownership exactly as today: when idle is Nix-owned,
+    # kraneIiIdle (not this step) wrote hypridle.conf from the Nix value, and activate's own
+    # idle write below reads that same Nix value back out (effective_idle prefers the Nix
+    # baseline when nixOwned), so it leaves hypridle.conf as kraneIiIdle set it.
+    home.activation.kraneIiActivate = lib.hm.dag.entryAfter [ "kraneIiOverrides" "kraneIiIdle" ] ''
+      $DRY_RUN_CMD ${wrapped}/bin/krane-ii-settings activate || true
+    '';
+
     assertions = [
       {
         assertion = unknownKeys == [ ];

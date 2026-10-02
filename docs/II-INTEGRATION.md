@@ -559,6 +559,16 @@ manifest) is the only writer of `ii-settings.json`:
 - `apply`: re-render the live file from the repo file, after a hand edit or a
   `git checkout`. The settings window offers the same as "Apply now" when it
   sees the file change; nothing is applied on its own.
+- `activate`: run at every home-manager activation (`home.activation.kraneIiActivate`
+  in `modules/home/ii-settings.nix`), not just at login. home-manager re-runs
+  activation at every boot from the last `nixos-rebuild switch`'s build-time
+  render, so without this step any GUI change made since that switch would be
+  lost on reboot; `activate` re-renders the live file and the idle config from
+  the current repo file instead. It never calls `hyprctl`, never reloads,
+  never restarts hypridle and never touches the pending file or the revert
+  timer, because it runs before Hyprland is up. It must never fail activation:
+  a missing, unparseable or ownership-rejected repo file just prints a
+  warning and leaves the existing build-time render in place.
 - `try monitor …` / `confirm`: a display change is live at once, and a
   transient systemd timer (`krane-ii-settings-revert`, 15 s) reverts it
   unless Keep is pressed. The previous live file is kept aside so the revert
@@ -570,7 +580,13 @@ manifest) is the only writer of `ii-settings.json`:
   deletes the whole `monitors.<output>` entry, not just the changed fields.
   `confirm` validates the repo file and the merge before it stops the
   timer, so a repo file it cannot read or a rejected merge leaves the timer
-  armed and the change still reverts.
+  armed and the change still reverts. `boot-check` only asks about outputs
+  Hyprland currently reports connected; an output that is disconnected at
+  boot keeps `bootConfirmed: false` untouched and is asked about again once
+  it is reconnected. `confirm` and `revert-unconfirmed` only act on the
+  outputs the pending boot check actually listed, never on every
+  `bootConfirmed: false` entry, so a still-disconnected output is never
+  swept up by either.
 - `get`: the state the settings window shows.
 
 The GUI never commits. `config.json` changes on every wallpaper switch

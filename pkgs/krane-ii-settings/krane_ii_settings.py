@@ -390,11 +390,27 @@ class Runtime:
                 }
         return None
 
-    def apply_idle(self, values):
+    def connected_outputs(self):
+        """Output names Hyprland currently reports connected, or None if
+        hyprctl is unreadable (no instance answers, or its output cannot be
+        parsed)."""
+        out = hyprctl(["monitors", "all", "-j"])
+        if out is None:
+            return None
+        try:
+            return {mon["name"] for mon in json.loads(out)}
+        except (ValueError, TypeError, KeyError):
+            return None
+
+    def write_idle_conf(self, values):
+        """Run the idle configurator against hypridleFile. Returns True if
+        its content changed. Never restarts hypridle or touches Hyprland:
+        callers that need the live timers to pick up the change call
+        apply_idle instead."""
         conf = self.manifest["hypridleFile"]
         script = self.manifest["idleConfigurator"]
         if not (os.path.isfile(conf) and os.path.isfile(script)):
-            return
+            return False
         try:
             with open(conf) as f:
                 before = f.read()
@@ -411,10 +427,12 @@ class Runtime:
                 after = f.read()
         except FileNotFoundError:
             after = None
-        if after == before:
-            return
-        subprocess.run([PKILL, "-x", "hypridle"], capture_output=True)
-        hyprctl(["dispatch", 'hl.dsp.exec_cmd("hypridle")'])
+        return after != before
+
+    def apply_idle(self, values):
+        if self.write_idle_conf(values):
+            subprocess.run([PKILL, "-x", "hypridle"], capture_output=True)
+            hyprctl(["dispatch", 'hl.dsp.exec_cmd("hypridle")'])
 
     def start_revert_timer(self, command):
         units = [f"{REVERT_UNIT}.timer", f"{REVERT_UNIT}.service"]
@@ -704,8 +722,14 @@ class Settings:
                 entry["bootConfirmed"] = False
                 new.setdefault("monitors", {})[pending["output"]] = entry
             else:
-                for entry in new.get("monitors", {}).values():
-                    entry.pop("bootConfirmed", None)
+                # Only the outputs the pending boot check actually listed, not
+                # every bootConfirmed=false entry: an output that was still
+                # disconnected at boot keeps bootConfirmed=false untouched.
+                monitors = new.get("monitors", {})
+                for output in pending.get("outputs", []):
+                    entry = monitors.get(output)
+                    if entry is not None:
+                        entry.pop("bootConfirmed", None)
             # Everything that can fail happens before the timer is stopped, so a
             # broken repo file or a rejected merge leaves the revert timer armed.
             validate_data(new, self.schema)
@@ -723,25 +747,45 @@ class Settings:
 
     def revert_unconfirmed(self):
         with locked():
+            # Only the outputs the pending boot check listed, not every
+            # bootConfirmed=false entry (I1): an output absent at boot was
+            # never added to pending, so it keeps bootConfirmed=false and
+            # gets another boot check next time it is connected.
+            pending = read_pending()
+            outputs = pending.get("outputs", []) if pending else []
             data, text = read_repo(self.repo)
             new = copy.deepcopy(data)
-            for output, entry in list(new.get("monitors", {}).items()):
-                if entry.get("bootConfirmed") is False:
-                    del new["monitors"][output]
+            monitors = new.get("monitors", {})
+            for output in outputs:
+                monitors.pop(output, None)
             if "monitors" in new and not new["monitors"]:
                 del new["monitors"]
             new_text = dump(new)
             if new_text != text:
                 atomic_write(self.repo, new_text)
             self.runtime.write_live(self.render(new))
+            self.runtime.stop_revert_timer()
             clear_pending()
             self.runtime.reload(full=True)
             return "reverted unconfirmed display settings"
 
     def boot_check(self, wait_seconds=60, poll=1.0):
         data, _ = read_repo(self.repo)
-        unconfirmed = sorted(
+        unconfirmed_all = sorted(
             o for o, e in data.get("monitors", {}).items() if e.get("bootConfirmed") is False)
+        if not unconfirmed_all:
+            return "nothing to check"
+        # Only outputs Hyprland currently reports connected: boot-check runs
+        # after unlock (Hyprland is up by then), so a monitor missing from
+        # this list is physically disconnected, not just slow to settle.
+        # Outputs absent here are left alone and keep bootConfirmed=false
+        # until a boot where they are connected.
+        connected = self.runtime.connected_outputs()
+        if connected is None:
+            print("krane-ii-settings: boot-check: hyprctl is unreadable; "
+                  "checking nothing", file=sys.stderr)
+            return "nothing to check"
+        unconfirmed = [o for o in unconfirmed_all if o in connected]
         if not unconfirmed:
             return "nothing to check"
         # lock-on-start locks the session once ii's lock IPC is up. Wait for
@@ -761,6 +805,36 @@ class Settings:
                 raise SettingsError(f"cannot start the revert timer: {e}")
         self.runtime.open_settings()
         return "asking to keep " + ", ".join(unconfirmed)
+
+    def activate(self):
+        """Re-render the live GUI config from the repo file at every
+        home-manager activation (C1): home-manager re-runs activation at
+        every boot from the last switch's build-time render, so without
+        this, any GUI change made since the last switch is lost on reboot.
+        Must never fail activation: on a missing, unparseable or rejected
+        repo file (or any other error), warn and leave the existing
+        build-time render in place. Never touches hyprctl, reload, the
+        revert timer or the pending file — this runs long before Hyprland
+        or the GUI are up."""
+        with locked():
+            try:
+                data, _ = read_repo(self.repo)
+                validate_data(data, self.schema)
+                check_ownership(data, self.manifest)
+                live = self.render(data)
+                idle = effective_idle(data, self.manifest)
+            except SettingsError as e:
+                print(f"krane-ii-settings: activate: {e}; leaving the "
+                      "build-time render in place", file=sys.stderr)
+                return "activation skipped"
+            try:
+                self.runtime.write_live(live)
+                self.runtime.write_idle_conf(idle)
+            except (OSError, subprocess.CalledProcessError) as e:
+                print(f"krane-ii-settings: activate: {e}; leaving the "
+                      "build-time render in place", file=sys.stderr)
+                return "activation skipped"
+            return "activated"
 
 
 def load_manifest(path):
@@ -801,6 +875,7 @@ def main(argv=None, runtime_factory=Runtime):
     sub.add_parser("confirm")
     sub.add_parser("boot-check")
     sub.add_parser("revert-unconfirmed")
+    sub.add_parser("activate")
     sub.add_parser("schema")
     args = parser.parse_args(argv)
     schema = load_schema()
@@ -834,6 +909,8 @@ def main(argv=None, runtime_factory=Runtime):
             out = settings.confirm()
         elif args.cmd == "boot-check":
             out = settings.boot_check()
+        elif args.cmd == "activate":
+            out = settings.activate()
         else:
             out = settings.revert_unconfirmed()
         print(out)

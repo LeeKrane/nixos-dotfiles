@@ -2,3 +2,4 @@
 # See docs/II-INTEGRATION.md "Settings persistence".
 *.tmp
 ai/
+presets/*.zip

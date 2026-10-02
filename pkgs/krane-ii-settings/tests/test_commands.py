@@ -19,6 +19,18 @@ FIXTURES = HERE / "fixtures"
 SCHEMA = k.load_schema()
 
 
+class _AllConnected:
+    """Sentinel `in`-container standing in for "hyprctl reports every output
+    connected", so tests that never set FakeRuntime.connected keep their
+    existing behavior (I1 does not filter anything out for them)."""
+
+    def __contains__(self, item):
+        return True
+
+
+ALL_CONNECTED = _AllConnected()
+
+
 class FakeRuntime:
     """Records side effects instead of touching Hyprland, systemd or hypridle."""
 
@@ -31,6 +43,9 @@ class FakeRuntime:
         self.timer = False
         self.lock_states = []
         self.installed_idle = installed_idle
+        # None means "hyprctl unreadable" (I1); set to a set of output names,
+        # or leave as ALL_CONNECTED to mean every output is connected.
+        self.connected = ALL_CONNECTED
 
     def read_live(self):
         try:
@@ -51,6 +66,18 @@ class FakeRuntime:
 
     def live_monitor(self, output):
         return self.live_monitors.get(output)
+
+    def connected_outputs(self):
+        self.calls.append(("connected_outputs",))
+        return self.connected
+
+    def write_idle_conf(self, values):
+        values = dict(values)
+        changed = values != self.installed_idle
+        if changed:
+            self.installed_idle = values
+        self.calls.append(("write_idle_conf", values))
+        return changed
 
     def apply_idle(self, values):
         values = dict(values)
