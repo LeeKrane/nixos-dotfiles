@@ -14,6 +14,10 @@
   # resident plus swapped on this 16 GiB laptop, and its launcher another ~3 GiB.
   zramSwap.memoryPercent = 200;
 
+  # nvidia-powerd: without it the RTX 4060 Laptop GPU stays at its 80 W base limit; Dynamic
+  # Boost lets it borrow CPU headroom up to the 140 W nvidia-smi reports as its maximum.
+  hardware.nvidia.dynamicBoost.enable = true;
+
   # display.nix sets krane.hypr.*, a home-manager module, imported at the user level.
   # tarkov.nix is also home-manager, here and not in modules/home/default.nix: only this host.
   home-manager.users.${config.krane.user.name}.imports = [

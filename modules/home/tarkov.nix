@@ -48,8 +48,13 @@ let
   tarkov = pkgs.writeShellApplication {
     name = "tarkov";
     # No gamemoderun: its preload runs inside umu's Steam Runtime container, which cannot see
-    # libgamemode.so in the Nix store, so gamemode never engaged and only spammed the log.
-    runtimeInputs = [ pkgs.umu-launcher ];
+    # libgamemode.so in the Nix store, so gamemode never engaged and only spammed the log. The
+    # game is registered from outside the container by PID instead, below.
+    runtimeInputs = [
+      pkgs.umu-launcher
+      pkgs.procps
+      pkgs.gamemode
+    ];
     text = ''
       ${env}
       # Proton swaps the Windows BEClient for this runtime's Linux one. Without it the game
@@ -82,8 +87,49 @@ let
       export __NV_PRIME_RENDER_OFFLOAD_PROVIDER=NVIDIA-G0
       export __GLX_VENDOR_LIBRARY_NAME=nvidia
       export __VK_LAYER_NV_optimus=NVIDIA_only
-      # The launcher is CEF-based and hangs on its software rasterizer under Proton.
-      exec umu-run "$launcher" --disable-software-rasterizer "$@"
+
+      # FPS counter, top right like Steam's. pressure-vessel imports the host's MangoHud Vulkan
+      # layer (gaming.nix) into umu's container, so the variable alone enables it for DXVK. The
+      # blacklist keeps it off the launcher, which DXVK also renders.
+      export MANGOHUD=1
+      export MANGOHUD_CONFIG="''${MANGOHUD_CONFIG:-fps_only,position=top-right,blacklist=BsgLauncher.exe}"
+      # gsr-ui's replay buffer (recording.nix) holds ~220 MiB of VRAM and keeps NVENC busy, and
+      # Tarkov fills the 8 GiB of VRAM on its own. Pause it for the session, and resume it only
+      # if it was on. The replay recorder is the gpu-screen-recorder process run with -r.
+      replay_on() {
+        local pid
+        for pid in $(pgrep -x gpu-screen-reco || true); do
+          tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | grep -q -- ' -r ' && return 0
+        done
+        return 1
+      }
+      paused_replay=0
+      if command -v gsr-ui-cli >/dev/null && replay_on; then
+        gsr-ui-cli toggle-replay
+        paused_replay=1
+      fi
+
+      # Register each game process with gamemoded as the launcher starts it; gamemoded drops it
+      # again when it exits. The match skips EscapeFromTarkov_BE.exe, BattlEye's stub. -r
+      # toggles, so each PID is requested once.
+      (
+        registered=" "
+        while :; do
+          for pid in $(pgrep -x EscapeFromTarko || true); do
+            case "$registered" in *" $pid "*) continue ;; esac
+            tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | grep -q 'EscapeFromTarkov\.exe' || continue
+            gamemoded -r"$pid" >/dev/null && registered="$registered$pid "
+          done
+          sleep 5
+        done
+      ) &
+      gamemode_watch=$!
+
+      trap 'kill "$gamemode_watch" 2>/dev/null; [ "$paused_replay" = 0 ] || gsr-ui-cli toggle-replay' EXIT
+
+      # The launcher is CEF-based and hangs on its software rasterizer under Proton. umu-run
+      # returns once the launcher exits, not the game.
+      umu-run "$launcher" --disable-software-rasterizer "$@"
     '';
   };
 in

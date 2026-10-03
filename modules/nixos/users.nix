@@ -20,6 +20,9 @@
       "plugdev"
       # Required by peripherals.nix's programs.ydotool.enable, for uinput access.
       "ydotool"
+      # gamemode's polkit rule lets only this group run its governor and sysctl helpers;
+      # without it gamemoded registers games but every privileged tweak is refused.
+      "gamemode"
     ];
   };
 
