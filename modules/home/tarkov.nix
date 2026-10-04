@@ -1,13 +1,18 @@
 # Escape from Tarkov, BSG launcher copy (direct purchase, not Steam), offline PvE only. Online
-# PvP needs BattlEye's Proton runtime, which BSG has not enabled for Tarkov. Imported only by
-# hosts/tarmantria/default.nix.
+# PvP needs BattlEye's Proton runtime, which BSG has not enabled for Tarkov. Imported by
+# hosts/tarmantria/default.nix and hosts/tariognatha/default.nix.
 #
 # umu-launcher runs the launcher with the Nix GE-Proton, so no Proton build is downloaded at
 # runtime. The prefix is live state, never declared here: `tarkov-setup <installer.exe>` builds
 # it once from the installer on the BSG account page (the download needs a login), then the
 # launcher downloads the game itself. The game also needs Steam's free Proton BattlEye Runtime
 # (app 1161040), installed once with `steam steam://install/1161040`.
-{ pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 let
   env = ''
     export WINEPREFIX="$HOME/Games/tarkov"
@@ -82,11 +87,13 @@ let
         fi
       fi
 
-      # PRIME offload: render on the NVIDIA dGPU, for GL and for DXVK's Vulkan.
-      export __NV_PRIME_RENDER_OFFLOAD=1
-      export __NV_PRIME_RENDER_OFFLOAD_PROVIDER=NVIDIA-G0
-      export __GLX_VENDOR_LIBRARY_NAME=nvidia
-      export __VK_LAYER_NV_optimus=NVIDIA_only
+      ${lib.optionalString config.krane.tarkov.primeOffload ''
+        # PRIME offload: render on the NVIDIA dGPU, for GL and for DXVK's Vulkan.
+        export __NV_PRIME_RENDER_OFFLOAD=1
+        export __NV_PRIME_RENDER_OFFLOAD_PROVIDER=NVIDIA-G0
+        export __GLX_VENDOR_LIBRARY_NAME=nvidia
+        export __VK_LAYER_NV_optimus=NVIDIA_only
+      ''}
 
       # FPS counter, top right like Steam's. pressure-vessel imports the host's MangoHud Vulkan
       # layer (gaming.nix) into umu's container, so the variable alone enables it for DXVK. The
@@ -94,7 +101,7 @@ let
       export MANGOHUD=1
       export MANGOHUD_CONFIG="''${MANGOHUD_CONFIG:-fps_only,position=top-right,blacklist=BsgLauncher.exe}"
       # gsr-ui's replay buffer (recording.nix) holds ~220 MiB of VRAM and keeps NVENC busy, and
-      # Tarkov fills the 8 GiB of VRAM on its own. Pause it for the session, and resume it only
+      # Tarkov fills tarmantria's 8 GiB of VRAM on its own. Pause it for the session, and resume it only
       # if it was on. The replay recorder is the gpu-screen-recorder process run with -r.
       replay_on() {
         local pid
@@ -134,12 +141,21 @@ let
   };
 in
 {
-  home.packages = [
+  options.krane.tarkov.primeOffload = lib.mkOption {
+    type = lib.types.bool;
+    default = false;
+    description = ''
+      Export the PRIME render offload variables so the game renders on the NVIDIA dGPU. Only
+      for hybrid-graphics laptops: a single-GPU host has no NVIDIA-G0 provider to offload to.
+    '';
+  };
+
+  config.home.packages = [
     tarkovSetup
     tarkov
   ];
 
-  xdg.desktopEntries.tarkov = {
+  config.xdg.desktopEntries.tarkov = {
     name = "Escape from Tarkov";
     comment = "BSG launcher through umu-launcher and GE-Proton";
     exec = "${tarkov}/bin/tarkov";

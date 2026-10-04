@@ -19,11 +19,15 @@
   hardware.nvidia.dynamicBoost.enable = true;
 
   # display.nix sets krane.hypr.*, a home-manager module, imported at the user level.
-  # tarkov.nix is also home-manager, here and not in modules/home/default.nix: only this host.
-  home-manager.users.${config.krane.user.name}.imports = [
-    ./display.nix
-    ../../modules/home/tarkov.nix
-  ];
+  # tarkov.nix is also home-manager, here and not in modules/home/default.nix: only the hosts
+  # that play it.
+  home-manager.users.${config.krane.user.name} = {
+    imports = [
+      ./display.nix
+      ../../modules/home/tarkov.nix
+    ];
+    krane.tarkov.primeOffload = true;
+  };
 
   # PCI bus IDs from `lspci | grep -E 'VGA|3D'`. FILL AT INSTALL: these placeholders are
   # almost certainly wrong for the actual laptop.
