@@ -19,12 +19,13 @@
   hardware.nvidia.dynamicBoost.enable = true;
 
   # display.nix sets krane.hypr.*, a home-manager module, imported at the user level.
-  # tarkov.nix is also home-manager, here and not in modules/home/default.nix: only the hosts
-  # that play it.
+  # tarkov.nix and stalker-gamma.nix are also home-manager, here and not in
+  # modules/home/default.nix: only the hosts that play them.
   home-manager.users.${config.krane.user.name} = {
     imports = [
       ./display.nix
       ../../modules/home/tarkov.nix
+      ../../modules/home/stalker-gamma.nix
     ];
     krane.tarkov.primeOffload = true;
   };
