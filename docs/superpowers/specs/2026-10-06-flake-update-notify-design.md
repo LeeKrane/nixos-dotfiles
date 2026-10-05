@@ -1,0 +1,100 @@
+# Desktop notification for pending flake updates
+
+The weekly `update` workflow (`.github/workflows/update.yml`) pushes
+`ci/flake-update` and opens a pull request, but nothing on the hosts says so.
+This spec adds a Home Manager timer that checks for that pull request and
+raises a desktop notification once per new update.
+
+## Goals
+
+- Notify on every host when an update pull request is open, once per pushed
+  head commit.
+- Show whether the gate passed and which inputs moved.
+- One click opens the pull request in the browser.
+
+## Non-goals
+
+- Detecting a running system that is behind `main` after a merge.
+- Running `nix flake update` locally; CI already does it.
+- Merging, checking out or switching from the notification.
+
+## Approach
+
+The repo is public, so the script calls the GitHub REST API with `curl`,
+unauthenticated. `gh` is not logged in on every host, and one call a day is far
+below the 60 requests/hour unauthenticated limit.
+
+## Components
+
+### `pkgs/flake-update-notify/`
+
+A `writeShellApplication` (built and shellchecked on its own, like
+`pkgs/proton-drive-mount`), exposed through `pkgs/default.nix`. Runtime inputs:
+`curl`, `jq`, `libnotify`, `xdg-utils`, `coreutils`.
+
+Environment, set by the module:
+
+- `REPO`: `owner/name`, e.g. `LeeKrane/nixos-dotfiles`.
+- `BRANCH`: head branch, `ci/flake-update`.
+
+State: `${XDG_STATE_HOME:-$HOME/.local/state}/flake-update-notify/last-sha`.
+
+Flow:
+
+1. `GET https://api.github.com/repos/$REPO/pulls?head=<owner>:$BRANCH&state=open`.
+   A curl or HTTP failure prints the error to stderr and exits 1. No
+   notification, state untouched, so the next run retries.
+2. Empty array: remove the state file and exit 0. A later pull request
+   notifies again even if it reuses a head commit.
+3. Take the first pull request's `head.sha`, `html_url`, `title`, `body`.
+   If `head.sha` equals the state file content, exit 0.
+4. Build the notification:
+   - Summary: `Flake update ready` or, when the title starts with
+     `[gate failing]`, `Flake update ready (gate failing)` with
+     `--urgency=critical`.
+   - Body: one line per moved input, the quoted names from
+     `Updated input '<name>'` lines in the body's fenced block, plus the
+     `claude-code <old> -> <new>` line when present. Falls back to the
+     pull request title if nothing matches.
+5. Write `head.sha` to the state file before notifying, so a dismissed or
+   ignored notification does not repeat.
+6. `notify-send -a Dotfiles --action=open="Open PR" --wait ...`. If it prints
+   `open`, run `xdg-open "$html_url"`.
+
+### `modules/home/flake-update-notify.nix`
+
+Imported from `modules/home/default.nix`, so every host gets it.
+
+- `systemd.user.services.flake-update-notify`: `Type=oneshot`,
+  `ExecStart` the package, `Environment` `REPO` and `BRANCH`.
+  `After`/`PartOf` `graphical-session.target`, since `notify-send` and
+  `xdg-open` need the session.
+- `systemd.user.timers.flake-update-notify`: `OnCalendar=daily`,
+  `OnStartupSec=5min`, `Persistent=true`, `RandomizedDelaySec=15min`,
+  `WantedBy=timers.target`.
+
+`REPO` lives in one `let` binding in the module.
+
+## Error handling
+
+- Network down or API error: exit 1, visible in
+  `journalctl --user -u flake-update-notify`, retried next run.
+- Rate limit (403/429): same path as any HTTP error.
+- No graphical session: the service is bound to `graphical-session.target`,
+  so the timer's start fails cleanly and `Persistent=true` catches up later.
+
+## Testing
+
+- `nix build .#flake-update-notify` (shellcheck runs in the build).
+- Eval checks for `taractias`, `tariognatha`, `tarmantria`.
+- Manual: `systemctl --user start flake-update-notify` with no state file
+  fires the notification; a second start stays silent; writing a wrong SHA
+  to the state file fires it again. With no open pull request, the state
+  file is removed.
+
+## Related
+
+The `pr` job in run `37303436430` failed to create the pull request. The likely
+cause is the repo setting "Allow GitHub Actions to create and approve pull
+requests" being off. Until that setting is enabled, there is no pull request for
+this notifier to find.
