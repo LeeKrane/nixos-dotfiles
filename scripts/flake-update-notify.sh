@@ -12,7 +12,7 @@ set -euo pipefail
 
 url="${PULLS_URL:-https://api.github.com/repos/$REPO/pulls?head=${REPO%%/*}:$BRANCH&state=open}"
 state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/flake-update-notify"
-state_file="$state_dir/last-sha"
+state_file="$state_dir/last-seen"
 
 # Prints the data rows of the Markdown table under the heading $1, without
 # its header and separator rows.
@@ -36,13 +36,19 @@ if [ "$(jq 'length' <<<"$pulls")" -eq 0 ]; then
 fi
 
 sha=$(jq -r '.[0].head.sha' <<<"$pulls")
-if [ -f "$state_file" ] && [ "$(<"$state_file")" = "$sha" ]; then
-    exit 0
-fi
-
 html_url=$(jq -r '.[0].html_url' <<<"$pulls")
 title=$(jq -r '.[0].title' <<<"$pulls")
 body=$(jq -r '.[0].body // ""' <<<"$pulls" | tr -d '\r')
+
+# Dedupe on head SHA plus a hash of title+body, not SHA alone: a run between
+# the pr job's force-push and its later body rewrite (same SHA, different
+# body) must still notify once the body settles.
+seen_hash=$(printf '%s\n%s' "$title" "$body" | sha256sum | cut -d' ' -f1)
+if [ -f "$state_file" ] \
+    && [ "$(sed -n '1p' "$state_file")" = "$sha" ] \
+    && [ "$(sed -n '2p' "$state_file")" = "$seen_hash" ]; then
+    exit 0
+fi
 
 summary='Flake update ready'
 urgency=normal
@@ -66,7 +72,7 @@ fi
 # repeat. Removed again if notify-send fails, so that run is retried. Expire
 # time 0 keeps the popup on screen until dismissed.
 mkdir -p "$state_dir"
-printf '%s\n' "$sha" >"$state_file"
+printf '%s\n%s\n' "$sha" "$seen_hash" >"$state_file"
 
 if ! action=$(notify-send -a Dotfiles -u "$urgency" --action=open='Open PR' --expire-time=0 --hint=boolean:x-ii-expanded:true --wait "$summary" "$text"); then
     rm -f "$state_file"

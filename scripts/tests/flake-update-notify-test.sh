@@ -32,7 +32,7 @@ exec "$@"
 EOF
 chmod +x "$WORK/bin/notify-send" "$WORK/bin/xdg-open" "$WORK/bin/systemd-run"
 
-STATE_FILE="$WORK/state/flake-update-notify/last-sha"
+STATE_FILE="$WORK/state/flake-update-notify/last-seen"
 failures=0
 
 # pr_json SHA TITLE BODY: one-element pulls array, written to $WORK/pulls.json.
@@ -68,7 +68,7 @@ systemd_run_has() { # exact match against any single systemd-run argument
     while IFS= read -r -d '' arg; do [ "$arg" = "$1" ] && return 0; done <"$WORK/log/systemd-run"
     return 1
 }
-state_is() { [ "$(command cat "$STATE_FILE" 2>/dev/null)" = "$1" ]; }
+state_is() { [ "$(sed -n '1p' "$STATE_FILE" 2>/dev/null)" = "$1" ]; }
 
 # shellcheck disable=SC2016 # backticks in test fixture strings, don't expand here
 VERSIONS_BODY=$(printf '%s\n' \
@@ -114,6 +114,13 @@ check 'versions body: no xdg-open' [ ! -f "$WORK/log/xdg" ]
 run
 check 'dedupe: exit 0' [ "$status" -eq 0 ]
 check 'dedupe: not notified' eval '! notified'
+
+# same SHA, body changed (e.g. the pr job rewrote the body after a
+# force-push a prior run already saw) notifies again
+pr_json sha1 'Update flake inputs' "$INPUTS_BODY"
+run
+check 'body changed: notified' notified
+check 'body changed: state sha unchanged' state_is sha1
 
 # new SHA notifies again
 pr_json sha2 'Update flake inputs' "$VERSIONS_BODY"

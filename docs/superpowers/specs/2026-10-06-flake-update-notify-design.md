@@ -37,7 +37,8 @@ Environment, set by the module:
 - `REPO`: `owner/name`, e.g. `LeeKrane/nixos-dotfiles`.
 - `BRANCH`: head branch, `ci/flake-update`.
 
-State: `${XDG_STATE_HOME:-$HOME/.local/state}/flake-update-notify/last-sha`.
+State: `${XDG_STATE_HOME:-$HOME/.local/state}/flake-update-notify/last-seen`,
+two lines: `head.sha`, then a `sha256sum` of `title` + `body`.
 
 Flow:
 
@@ -46,8 +47,12 @@ Flow:
    notification, state untouched, so the next run retries.
 2. Empty array: remove the state file and exit 0. A later pull request
    notifies again even if it reuses a head commit.
-3. Take the first pull request's `head.sha`, `html_url`, `title`, `body`.
-   If `head.sha` equals the state file content, exit 0.
+3. Take the first pull request's `head.sha`, `html_url`, `title`, `body`,
+   and hash `title` + `body` with `sha256sum`. If both the SHA and the hash
+   match the state file's two lines, exit 0. Keying on the hash as well as
+   the SHA means a run that lands between the pr job's force-push and its
+   later body rewrite (same SHA, placeholder body) does not suppress the
+   notification once the real body is in place.
 4. Build the notification:
    - Summary: `Flake update ready` or, when the title starts with
      `[gate failing]`, `Flake update ready (gate failing)` with
@@ -56,8 +61,8 @@ Flow:
      as `<package> <before> → <after>`. If that section is missing, the
      body is `<N> inputs updated`, counted from the `### Inputs` table
      rows. The body format comes from `scripts/update-summary.sh`.
-5. Write `head.sha` to the state file before notifying, so a dismissed or
-   ignored notification does not repeat.
+5. Write the SHA and hash to the state file before notifying, so a
+   dismissed or ignored notification does not repeat.
 6. `notify-send -a Dotfiles --action=open="Open PR" --expire-time=0
    --hint=boolean:x-ii-expanded:true --wait ...` (expire time 0 keeps the
    popup on screen until dismissed; the `x-ii-expanded` hint is read by
