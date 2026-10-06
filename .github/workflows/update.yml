@@ -72,9 +72,10 @@ jobs:
         if: steps.diff.outputs.haschanges == 'true'
         run: |
           # The update commit hasn't happened yet, so HEAD still holds the
-          # pre-update content; git restore --worktree is no-overlay (unlike
-          # `git checkout <ref> -- <path>`, it also deletes a path that exists
-          # in the worktree but not at <ref>, e.g. a brand-new pkgs/claude-code).
+          # pre-update content. If pkgs/claude-code is new (untracked at
+          # HEAD), restore fails on it with "pathspec did not match" instead
+          # of deleting it: the step fails fail-safe, before anything is
+          # committed or pushed.
           git restore --source=HEAD --worktree -- flake.lock pkgs/claude-code
           nix eval --json --impure '.#nixosConfigurations' \
             --apply 'import ./scripts/update-versions.nix' > "$RUNNER_TEMP/versions-before.json"
@@ -94,6 +95,7 @@ jobs:
           name: update-summary
           path: ${{ runner.temp }}/summary.md
           retention-days: 7
+          overwrite: true
       - name: Commit and push
         id: push
         if: steps.diff.outputs.haschanges == 'true'
@@ -121,17 +123,17 @@ jobs:
       pull-requests: read
     uses: ./.github/workflows/check.yml
     with:
-      ref: ci/flake-update-staging
+      ref: ${{ needs.update.outputs.sha }}
       force-nvim: true
 
   # Report-only: a vulnix CVE diff and a local-build count per host, never
-  # gating the PR or its title. ci/flake-update-staging is main plus one
-  # commit (update's "Commit and push" force-pushes it there), so its HEAD~1
-  # is the pre-update base. This runs on a fresh runner, so the before/after
-  # .drv files from the update job's evals don't exist in its store (they're
-  # local build products, not fetched from a substituter) — it has to
-  # instantiate both states itself, which is also why it still needs
-  # flake.lock/pkgs/claude-code checked out at HEAD~1 and HEAD in turn.
+  # gating the PR or its title. The exact commit the update job pushed is
+  # main plus one commit, so its HEAD~1 is the pre-update base. This runs on
+  # a fresh runner, so the before/after .drv files from the update job's
+  # evals don't exist in its store (they're local build products, not
+  # fetched from a substituter) — it has to instantiate both states itself,
+  # which is also why it still needs flake.lock/pkgs/claude-code checked out
+  # at HEAD~1 and HEAD in turn.
   security:
     needs: update
     if: needs.update.outputs.changed == 'true'
@@ -141,7 +143,10 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ci/flake-update-staging
+          # The exact SHA the update job pushed, not the staging branch name:
+          # a later run could have force-pushed a newer commit to staging in
+          # between this job being queued and this checkout running.
+          ref: ${{ needs.update.outputs.sha }}
           fetch-depth: 2
       - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
       - name: Evaluate toplevel derivations before and after
@@ -220,6 +225,7 @@ jobs:
           name: security-summary
           path: ${{ runner.temp }}/security-summary.md
           retention-days: 7
+          overwrite: true
 
   pr:
     needs: [update, check, security]
@@ -282,6 +288,7 @@ jobs:
           name: pr-body-full
           path: ${{ runner.temp }}/body.md
           retention-days: 7
+          overwrite: true
       - name: Cap pull request body size
         env:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -294,7 +301,7 @@ jobs:
           # ci/flake-update-staging happens to point at by the time this
           # runs: a later scheduled or manual run could have force-pushed a
           # newer commit to staging in between.
-          git fetch origin "$SHA"
+          git fetch --depth=1 origin "$SHA"
           git push --force origin "$SHA":refs/heads/ci/flake-update
       - name: Create or update the pull request
         env:

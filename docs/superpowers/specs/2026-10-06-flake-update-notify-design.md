@@ -53,9 +53,13 @@ Flow:
    force-pushes the run's commit to a staging branch first; the pr job builds
    the title and body, then moves `ci/flake-update` to that exact commit, and
    only then edits the open pull request in place (or opens one if none is
-   open) — so `ci/flake-update`'s head SHA and the pull request's title and
-   body change together, with no window where one has moved but not the
-   other. Keying the hash on `number` + `title` + `body` as well as the SHA
+   open) — so the branch move and the pull request edit are adjacent steps,
+   not simultaneous. If the edit step itself fails after the branch has
+   already moved, `ci/flake-update` points at the new commit while the pull
+   request still shows the previous title and body; the notifier sees the new
+   SHA with a stale body, so it won't match a prior state file and notifies
+   again once a later run succeeds in updating the body. Keying the hash on
+   `number` + `title` + `body` as well as the SHA
    still matters: a new pull request notifies even when its SHA and body
    match the last-seen one (the previous one was merged or closed by hand).
 4. Build the notification:
