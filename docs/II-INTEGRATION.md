@@ -262,7 +262,8 @@ every new terminal after each activation. The backup lives at
 
 `patches/ii/` holds one `git format-patch` series per sub-project:
 `01-fixes` (fixes from [pctrade/end4-pC](https://github.com/pctrade/end4-pC)),
-then `02-translator`, `04-agents` and `05-settings` as they land.
+then `02-translator`, `04-agents`, `05-settings` and `06-notifications` as
+they land.
 `lib/mk-host.nix` applies them with `applyPatches`, after the cheatsheet
 patch, to build the `dots-hyprland-patched` source the soymou module copies:
 directories in lexical order, and the files in each directory in lexical
@@ -379,6 +380,16 @@ node scripts/ii-agents/test-logic.mjs [<ii root>]
 
 `<ii root>` is `…/dots/.config/quickshell/ii`, for example inside the
 `dots-hyprland-patched` store path.
+
+### Notifications (`06-notifications`)
+
+| Patch | Fork commit | Port | Drop when |
+|---|---|---|---|
+| `0001` start expanded when flagged `x-ii-expanded` | `local` | local | pinned `NotificationGroup.qml`'s `expanded` default reads a per-notification hint |
+
+A notification popup starts collapsed unless its sender set the
+`x-ii-expanded` hint, which `scripts/flake-update-notify.sh` does so its
+action buttons are visible without a right-click.
 
 ### Workflow
 

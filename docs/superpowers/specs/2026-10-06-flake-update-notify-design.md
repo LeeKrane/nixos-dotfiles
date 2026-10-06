@@ -58,8 +58,12 @@ Flow:
      rows. The body format comes from `scripts/update-summary.sh`.
 5. Write `head.sha` to the state file before notifying, so a dismissed or
    ignored notification does not repeat.
-6. `notify-send -a Dotfiles --action=open="Open PR" --wait ...`. If it prints
-   `open`, run `xdg-open "$html_url"`.
+6. `notify-send -a Dotfiles --action=open="Open PR" --expire-time=0
+   --hint=boolean:x-ii-expanded:true --wait ...` (expire time 0 keeps the
+   popup on screen until dismissed; the `x-ii-expanded` hint is read by
+   ii's `06-notifications` patch, which starts a flagged notification
+   expanded so the "Open PR" button is visible without a right-click). If
+   it prints `open`, run `xdg-open "$html_url"`.
 
 ### `modules/home/flake-update-notify.nix`
 
@@ -81,7 +85,9 @@ Imported from `modules/home/default.nix`, so every host gets it.
   `journalctl --user -u flake-update-notify`, retried next run.
 - Rate limit (403/429): same path as any HTTP error.
 - No graphical session: the service is bound to `graphical-session.target`,
-  so the timer's start fails cleanly and `Persistent=true` catches up later.
+  so the timer's start fails cleanly. There's no lingering, so no catch-up
+  runs before the next login; recovery is `OnStartupSec=5min` after login,
+  or the next daily trigger.
 
 ## Testing
 

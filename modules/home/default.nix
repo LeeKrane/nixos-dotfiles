@@ -22,6 +22,7 @@
     ./qwertz-binds.nix
     ./recording.nix
     ./teamclaude.nix
+    ./flake-update-notify.nix
     ./steam.nix
   ];
 

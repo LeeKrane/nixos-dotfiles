@@ -4,6 +4,7 @@
   # is set by pkgs/claude-code/manifest.zst.json rather than the nixpkgs pin.
   claude-code = pkgs.callPackage ./claude-code/package.nix { };
 
+  flake-update-notify = pkgs.callPackage ./flake-update-notify { };
   plymouth-lone = pkgs.callPackage ./plymouth-lone { };
   proton-drive-mount = pkgs.callPackage ./proton-drive-mount { };
   skillspector = pkgs.callPackage ./skillspector/package.nix { };

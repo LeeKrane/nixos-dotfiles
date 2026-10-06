@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Tue, 6 Oct 2026 02:33:37 +0200
+Subject: [PATCH] notifications: start expanded when flagged x-ii-expanded
+
+---
+ .../quickshell/ii/modules/common/widgets/NotificationGroup.qml  | 2 +-
+ dots/.config/quickshell/ii/services/Notifications.qml           | 1 +
+ 2 files changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/dots/.config/quickshell/ii/modules/common/widgets/NotificationGroup.qml b/dots/.config/quickshell/ii/modules/common/widgets/NotificationGroup.qml
+index 9f572a52..e9684cd6 100644
+--- a/dots/.config/quickshell/ii/modules/common/widgets/NotificationGroup.qml
++++ b/dots/.config/quickshell/ii/modules/common/widgets/NotificationGroup.qml
+@@ -16,7 +16,7 @@ MouseArea { // Notification group area
+     property var notifications: notificationGroup?.notifications ?? []
+     property int notificationCount: notifications.length
+     property bool multipleNotifications: notificationCount > 1
+-    property bool expanded: false
++    property bool expanded: root.notifications.some(n => n.expanded)
+     property bool popup: false
+     property real padding: 10
+     implicitHeight: background.implicitHeight
+diff --git a/dots/.config/quickshell/ii/services/Notifications.qml b/dots/.config/quickshell/ii/services/Notifications.qml
+index c290e091..1ce5298f 100644
+--- a/dots/.config/quickshell/ii/services/Notifications.qml
++++ b/dots/.config/quickshell/ii/services/Notifications.qml
+@@ -26,6 +26,7 @@ Singleton {
+         })) ?? []
+         property bool popup: false
+         property bool isTransient: notification?.hints.transient ?? false
++        property bool expanded: notification?.hints["x-ii-expanded"] ?? false
+         property string appIcon: notification?.appIcon ?? ""
+         property string appName: notification?.appName ?? ""
+         property string body: notification?.body ?? ""
