@@ -174,7 +174,8 @@ echo '### Local builds'
 echo
 build_names=""
 for host in "${HOSTS[@]}"; do
-  if [ -f "$WORKDIR/build-before-$host.failed" ] || [ -f "$WORKDIR/build-after-$host.failed" ]; then
+  if [ -f "$WORKDIR/build-before-$host.failed" ] || [ -f "$WORKDIR/build-after-$host.failed" ] \
+    || [ ! -f "$WORKDIR/build-before-$host.log" ] || [ ! -f "$WORKDIR/build-after-$host.log" ]; then
     echo "$host: local build check failed"
     continue
   fi
