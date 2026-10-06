@@ -123,11 +123,11 @@ echo
 if [ "$new_count" -eq 0 ] && [ "$fixed_count" -eq 0 ]; then
   echo 'No CVE changes'
 elif [ "$new_count" -gt 0 ] && [ "$fixed_count" -gt 0 ]; then
-  echo "$fixed_count CVEs fixed, $new_count new"
+  echo "$fixed_count CVE$([ "$fixed_count" = 1 ] || echo s) fixed, $new_count new"
 elif [ "$fixed_count" -gt 0 ]; then
-  echo "$fixed_count CVEs fixed"
+  echo "$fixed_count CVE$([ "$fixed_count" = 1 ] || echo s) fixed"
 else
-  echo "$new_count new CVEs"
+  echo "$new_count new CVE$([ "$new_count" = 1 ] || echo s)"
 fi
 echo
 

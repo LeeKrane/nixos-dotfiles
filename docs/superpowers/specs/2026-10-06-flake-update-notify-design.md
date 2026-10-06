@@ -38,7 +38,7 @@ Environment, set by the module:
 - `BRANCH`: head branch, `ci/flake-update`.
 
 State: `${XDG_STATE_HOME:-$HOME/.local/state}/flake-update-notify/last-seen`,
-two lines: `head.sha`, then a `sha256sum` of `title` + `body`.
+two lines: `head.sha`, then a `sha256sum` of `number` + `title` + `body`.
 
 Flow:
 
@@ -47,12 +47,15 @@ Flow:
    notification, state untouched, so the next run retries.
 2. Empty array: remove the state file and exit 0. A later pull request
    notifies again even if it reuses a head commit.
-3. Take the first pull request's `head.sha`, `html_url`, `title`, `body`,
-   and hash `title` + `body` with `sha256sum`. If both the SHA and the hash
-   match the state file's two lines, exit 0. Keying on the hash as well as
-   the SHA means a run that lands between the pr job's force-push and its
-   later body rewrite (same SHA, placeholder body) does not suppress the
-   notification once the real body is in place.
+3. Take the first pull request's `head.sha`, `number`, `html_url`, `title`,
+   `body`, and hash `number` + `title` + `body` with `sha256sum`. If both the
+   SHA and the hash match the state file's two lines, exit 0. The update job
+   force-pushes `ci/flake-update` on every run, and the pr job then closes
+   the old pull request and opens a brand-new one (it never rewrites an
+   existing PR's body in place), so the head SHA can repeat across pull
+   requests; keying the hash on `number` as well as `title` + `body` means a
+   closed-and-reopened pull request still notifies even when its SHA and
+   body happen to match the last-seen one.
 4. Build the notification:
    - Summary: `Flake update ready` or, when the title starts with
      `[gate failing]`, `Flake update ready (gate failing)` with

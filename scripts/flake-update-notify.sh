@@ -36,14 +36,16 @@ if [ "$(jq 'length' <<<"$pulls")" -eq 0 ]; then
 fi
 
 sha=$(jq -r '.[0].head.sha' <<<"$pulls")
+number=$(jq -r '.[0].number' <<<"$pulls")
 html_url=$(jq -r '.[0].html_url' <<<"$pulls")
 title=$(jq -r '.[0].title' <<<"$pulls")
 body=$(jq -r '.[0].body // ""' <<<"$pulls" | tr -d '\r')
 
-# Dedupe on head SHA plus a hash of title+body, not SHA alone: a run between
-# the pr job's force-push and its later body rewrite (same SHA, different
-# body) must still notify once the body settles.
-seen_hash=$(printf '%s\n%s' "$title" "$body" | sha256sum | cut -d' ' -f1)
+# Dedupe on head SHA plus a hash of number+title+body, not SHA alone: the pr
+# job closes the old PR and opens a new one on every run, so a reused head SHA
+# with a different PR number (or the same PR edited in place) must still
+# notify.
+seen_hash=$(printf '%s\n%s\n%s' "$number" "$title" "$body" | sha256sum | cut -d' ' -f1)
 if [ -f "$state_file" ] \
     && [ "$(sed -n '1p' "$state_file")" = "$sha" ] \
     && [ "$(sed -n '2p' "$state_file")" = "$seen_hash" ]; then

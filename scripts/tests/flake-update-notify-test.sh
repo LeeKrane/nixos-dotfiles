@@ -35,10 +35,12 @@ chmod +x "$WORK/bin/notify-send" "$WORK/bin/xdg-open" "$WORK/bin/systemd-run"
 STATE_FILE="$WORK/state/flake-update-notify/last-seen"
 failures=0
 
-# pr_json SHA TITLE BODY: one-element pulls array, written to $WORK/pulls.json.
+# pr_json SHA TITLE BODY [NUMBER=3]: one-element pulls array, written to
+# $WORK/pulls.json.
 pr_json() {
-    jq -n --arg sha "$1" --arg t "$2" --arg b "$3" \
-        '[{head: {sha: $sha}, html_url: "https://github.com/a/b/pull/3", title: $t, body: $b}]' \
+    local number="${4:-3}"
+    jq -n --arg sha "$1" --arg t "$2" --arg b "$3" --argjson n "$number" \
+        '[{head: {sha: $sha}, html_url: ("https://github.com/a/b/pull/" + ($n | tostring)), number: $n, title: $t, body: $b}]' \
         >"$WORK/pulls.json"
 }
 
@@ -115,8 +117,7 @@ run
 check 'dedupe: exit 0' [ "$status" -eq 0 ]
 check 'dedupe: not notified' eval '! notified'
 
-# same SHA, body changed (e.g. the pr job rewrote the body after a
-# force-push a prior run already saw) notifies again
+# same SHA, same PR number, body changed notifies again
 pr_json sha1 'Update flake inputs' "$INPUTS_BODY"
 run
 check 'body changed: notified' notified
@@ -127,6 +128,13 @@ pr_json sha2 'Update flake inputs' "$VERSIONS_BODY"
 run
 check 'new sha: notified' notified
 check 'new sha: state updated' state_is sha2
+
+# same SHA and body, different PR number (the pr job closed the old PR and
+# opened a new one without changing head.sha) notifies again
+pr_json sha2 'Update flake inputs' "$VERSIONS_BODY" 4
+run
+check 'new pr number: notified' notified
+check 'new pr number: state unchanged sha' state_is sha2
 
 # no pr clears state
 printf '[]' >"$WORK/pulls.json"

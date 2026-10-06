@@ -59,7 +59,11 @@ let
     let
       system = attrByPath [ "pkgs" "stdenv" "hostPlatform" "system" ] null cfg;
       inputs = attrByPath [ "_module" "specialArgs" "inputs" ] { } cfg;
-      nvidiaUsed = attrByPath [ "config" "hardware" "nvidia" "enabled" ] false cfg;
+      nvidiaUsed =
+        let
+          r = builtins.tryEval (attrByPath [ "config" "hardware" "nvidia" "enabled" ] false cfg);
+        in
+        r.success && r.value == true;
     in
     builtins.mapAttrs (_: tryVersion) (
       {
