@@ -2,18 +2,22 @@
 # Renders the Markdown body pieces for the weekly flake-update pull request's
 # security report (.github/workflows/update.yml, `security` job): a CVE diff
 # between vulnix scans of each host's toplevel derivation before/after
-# `nix flake update`, and a local-build count per host from
-# `nix build --dry-run`. Prints Markdown to stdout. Also writes "true" or
-# "false" to WORKDIR/critical (whether any CVE newly affecting a host has
-# CVSS >= 9.0), for the workflow to read into a job output.
+# `nix flake update`, and a count of local builds that are new since main,
+# per host, from `nix build --dry-run`. Prints Markdown to stdout. CVEs are
+# reported here only, never gating the PR or its title.
 #
 # Usage: security-summary.sh WORKDIR HOST...
 #   WORKDIR  directory holding, per HOST:
 #              vulnix-before-<host>.json  `vulnix -j` output, pre-update drv
 #              vulnix-after-<host>.json   `vulnix -j` output, post-update drv
+#              build-before-<host>.log    raw `nix build --dry-run` output,
+#                                         pre-update drv
 #              build-after-<host>.log     raw `nix build --dry-run` output,
-#                                         post-update drv only (local builds
-#                                         are a going-forward concern)
+#                                         post-update drv
+#              build-before-<host>.failed  present if the pre-update dry-run
+#                                           itself failed (not just found
+#                                           builds)
+#              build-after-<host>.failed   same, post-update drv
 #   HOST...  one or more host names, in display order
 set -euo pipefail
 
@@ -64,11 +68,11 @@ for host in "${HOSTS[@]}"; do
   done
 done
 
-# --- Diff: per host, which (cve, package, version) tuples are new/gone -----
-# Grouped back up to (cve, package) for display, since the table has no
-# version column and a package can carry different versions per host.
+# --- Diff: per host, which (cve, package) pairs are new/gone ---------------
+# Keyed on (host, cve, package), not version: a version bump that leaves the
+# same CVE unfixed on the same package must show as neither new nor fixed.
 cat >"$WORK/diff.jq" <<'JQ'
-def tkey: [.cve, .package, .version];
+def tkey: [.cve, .package];
 
 ($before[0]) as $before |
 ($after[0]) as $after |
@@ -89,6 +93,11 @@ def tkey: [.cve, .package, .version];
     select((tkey) as $k | ($afterKeys | any(. == $k)) | not)
   ]
 ) as $fixedFlat |
+# $flat rows for the "new" side come from $after (the version on the host
+# today) and rows for the "fixed" side come from $before (the version that
+# carried the CVE before the update), so .version is already the right side
+# per caller; group it into one deduplicated, comma-joined string in case it
+# somehow differs across the hosts a group spans.
 def grouped($flat):
   $flat
   | group_by([.cve, .package])
@@ -96,6 +105,7 @@ def grouped($flat):
       cve: .[0].cve,
       cvss: (map(.cvss) | max),
       package: .[0].package,
+      versions: (map(.version) | map(select(. != "")) | unique | join(", ")),
       hosts: (map(.host) | unique | join(", ")),
     })
   | sort_by(-.cvss);
@@ -107,9 +117,6 @@ diff_json="$(jq -n --slurpfile before "$before_flat" --slurpfile after "$after_f
 
 new_count="$(jq '.new | length' <<<"$diff_json")"
 fixed_count="$(jq '.fixed | length' <<<"$diff_json")"
-
-critical="$(jq -r '[.new[] | select(.cvss >= 9.0)] | length > 0' <<<"$diff_json")"
-echo "$critical" >"$WORKDIR/critical"
 
 echo '### Security'
 echo
@@ -140,36 +147,50 @@ if [ "$new_count" -gt 0 ] || [ "$fixed_count" -gt 0 ]; then
     fi
     echo
   }
-  new_rows="$(jq -r '.new[] | "| [\(.cve)](https://nvd.nist.gov/vuln/detail/\(.cve)) | \(.cvss) | \(.package) | \(.hosts) |"' <<<"$diff_json")"
-  fixed_rows="$(jq -r '.fixed[] | "| [\(.cve)](https://nvd.nist.gov/vuln/detail/\(.cve)) | \(.cvss) | \(.package) | \(.hosts) |"' <<<"$diff_json")"
+  pkg_col='if .versions != "" then .package + " " + .versions else .package end'
+  new_rows="$(jq -r ".new[] | \"| [\(.cve)](https://nvd.nist.gov/vuln/detail/\(.cve)) | \(.cvss) | \($pkg_col) | \(.hosts) |\"" <<<"$diff_json")"
+  fixed_rows="$(jq -r ".fixed[] | \"| [\(.cve)](https://nvd.nist.gov/vuln/detail/\(.cve)) | \(.cvss) | \($pkg_col) | \(.hosts) |\"" <<<"$diff_json")"
   render_table 'New' "$new_rows"
   render_table 'Fixed' "$fixed_rows"
   echo '</details>'
   echo
 fi
 
-# --- Local builds: cache-miss count per host, after state only -------------
+# --- Local builds: new-vs-main cache misses per host ------------------------
+# Counting every package `nix build --dry-run` would build after the update
+# is mostly noise: most of it is already true on main. Instead diff the
+# before/after "will be built" name sets and show only what's new.
+names_in() {
+  local log="$1"
+  [ -f "$log" ] || return 0
+  awk '
+    /will be built:/ { capture=1; next }
+    /will be fetched/ { capture=0 }
+    capture && /^  \// { print }
+  ' "$log" | sed -E 's#^  /nix/store/[^-]+-##; s#\.drv$##' | sort -u
+}
+
 echo '### Local builds'
 echo
 build_names=""
 for host in "${HOSTS[@]}"; do
-  log="$WORKDIR/build-after-$host.log"
-  names=""
-  if [ -f "$log" ]; then
-    names="$(awk '
-      /will be built:/ { capture=1; next }
-      /will be fetched/ { capture=0 }
-      capture && /^  \// { print }
-    ' "$log" | sed -E 's#^  /nix/store/[^-]+-##; s#\.drv$##')"
+  if [ -f "$WORKDIR/build-before-$host.failed" ] || [ -f "$WORKDIR/build-after-$host.failed" ]; then
+    echo "$host: local build check failed"
+    continue
   fi
-  count=0
-  if [ -n "$names" ]; then
-    count="$(wc -l <<<"$names")"
-  fi
-  echo "$host: $count package$([ "$count" = 1 ] || echo s) must be built locally"
-  if [ "$count" -gt 0 ]; then
+  before_names="$(names_in "$WORKDIR/build-before-$host.log")"
+  after_names="$(names_in "$WORKDIR/build-after-$host.log")"
+  new_names="$(comm -13 <(echo "$before_names") <(echo "$after_names") | sed '/^$/d')"
+  total=0
+  if [ -n "$after_names" ]; then total="$(wc -l <<<"$after_names")"; fi
+  new_count=0
+  if [ -n "$new_names" ]; then new_count="$(wc -l <<<"$new_names")"; fi
+  if [ "$new_count" -eq 0 ]; then
+    echo "$host: no new local builds ($total total)"
+  else
+    echo "$host: $new_count new local build$([ "$new_count" = 1 ] || echo s) ($total total)"
     build_names="$build_names**$host**:
-- ${names//$'\n'/$'\n- '}
+- ${new_names//$'\n'/$'\n- '}
 
 "
   fi
