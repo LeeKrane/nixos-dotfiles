@@ -18,38 +18,57 @@ jobs:
     permissions:
       contents: write
     outputs:
-      changed: ${{ steps.commit.outputs.changed }}
-      summary: ${{ steps.commit.outputs.summary }}
+      changed: ${{ steps.diff.outputs.changed }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
       - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+      - name: Package versions before update
+        run: |
+          nix eval --json --impure '.#nixosConfigurations.tarmantria' \
+            --apply 'import ./scripts/update-versions.nix' > "$RUNNER_TEMP/versions-before.json"
+      - name: Save old flake.lock
+        run: cp flake.lock "$RUNNER_TEMP/flake.lock.old"
       - name: Update inputs and claude-code
         run: |
           set -o pipefail
           nix flake update 2>&1 | tee "$RUNNER_TEMP/update.log"
           scripts/update-claude-code.sh 2>&1 | tee -a "$RUNNER_TEMP/update.log"
-      - name: Commit and push
-        id: commit
+      - name: Check for changes
+        id: diff
         run: |
           if [ -z "$(git status --porcelain -- flake.lock pkgs/claude-code)" ]; then
             echo "Nothing to update."
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            exit 0
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
+      - name: Package versions after update
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          nix eval --json --impure '.#nixosConfigurations.tarmantria' \
+            --apply 'import ./scripts/update-versions.nix' > "$RUNNER_TEMP/versions-after.json"
+      - name: Render summary
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          scripts/update-summary.sh "$RUNNER_TEMP/flake.lock.old" flake.lock \
+            "$RUNNER_TEMP/versions-before.json" "$RUNNER_TEMP/versions-after.json" \
+            "$RUNNER_TEMP/update.log" > "$RUNNER_TEMP/summary.md"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: steps.diff.outputs.changed == 'true'
+        with:
+          name: update-summary
+          path: ${{ runner.temp }}/summary.md
+          retention-days: 7
+      - name: Commit and push
+        if: steps.diff.outputs.changed == 'true'
+        run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add flake.lock pkgs/claude-code
           git commit -m 'Update flake inputs and claude-code'
           git push --force origin HEAD:refs/heads/ci/flake-update
-          {
-            echo "changed=true"
-            echo "summary<<SUMMARY_EOF"
-            grep --no-group-separator -A2 "Updated input" "$RUNNER_TEMP/update.log" || true
-            grep -E '^claude-code .* -> ' "$RUNNER_TEMP/update.log" || true
-            echo "SUMMARY_EOF"
-          } >> "$GITHUB_OUTPUT"
 
   check:
     needs: update
@@ -71,25 +90,31 @@ jobs:
     permissions:
       pull-requests: write
     steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: update-summary
+          path: ${{ runner.temp }}
       - name: Create or update the pull request
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RESULT: ${{ needs.check.result }}
-          SUMMARY: ${{ needs.update.outputs.summary }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           title='Update flake inputs'
           if [ "$RESULT" != success ]; then
             title="[gate failing] $title"
           fi
+          case "$RESULT" in
+            success) gate='✅ passed' ;;
+            failure) gate='❌ failing' ;;
+            *) gate="$RESULT" ;;
+          esac
           body="$RUNNER_TEMP/body.md"
           {
-            echo "Gate result: **$RESULT** ([run]($RUN_URL))"
+            echo "Gate: $gate ([run]($RUN_URL))"
             echo
-            echo '```'
-            printf '%s\n' "$SUMMARY"
-            echo '```'
+            command cat "$RUNNER_TEMP/summary.md"
             echo
             # shellcheck disable=SC2016 # literal backticks for Markdown
             echo 'CI checks eval only. Before merging, run `gh pr checkout <n> && just switch <host>` on one machine.'
