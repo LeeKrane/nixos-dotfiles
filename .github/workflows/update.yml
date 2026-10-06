@@ -26,7 +26,7 @@ jobs:
       - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
       - name: Package versions before update
         run: |
-          nix eval --json --impure '.#nixosConfigurations.tarmantria' \
+          nix eval --json --impure '.#nixosConfigurations' \
             --apply 'import ./scripts/update-versions.nix' > "$RUNNER_TEMP/versions-before.json"
       - name: Save old flake.lock
         run: cp flake.lock "$RUNNER_TEMP/flake.lock.old"
@@ -47,7 +47,7 @@ jobs:
       - name: Package versions after update
         if: steps.diff.outputs.changed == 'true'
         run: |
-          nix eval --json --impure '.#nixosConfigurations.tarmantria' \
+          nix eval --json --impure '.#nixosConfigurations' \
             --apply 'import ./scripts/update-versions.nix' > "$RUNNER_TEMP/versions-after.json"
       - name: Render summary
         if: steps.diff.outputs.changed == 'true'

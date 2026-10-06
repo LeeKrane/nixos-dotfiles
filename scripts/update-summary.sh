@@ -9,8 +9,8 @@
 #
 # Usage: update-summary.sh OLD_LOCK NEW_LOCK [VERSIONS_BEFORE VERSIONS_AFTER] [RAW_LOG]
 #   OLD_LOCK, NEW_LOCK      flake.lock before/after `nix flake update`
-#   VERSIONS_BEFORE/_AFTER  optional, name->version JSON (nix eval --json
-#                           '.#nixosConfigurations.<host>' --apply
+#   VERSIONS_BEFORE/_AFTER  optional, host->name->version JSON (nix eval --json
+#                           --impure '.#nixosConfigurations' --apply
 #                           'import scripts/update-versions.nix'); pass both
 #                           or neither, the package table is skipped otherwise
 #   RAW_LOG                 optional, raw `nix flake update` output, quoted
@@ -90,6 +90,44 @@ def changes($o; $n):
 }
 JQ
 
+# Diffs two update-versions.nix evaluations, each shaped {host: {package:
+# version}}. A package whose change is the same on every host it touched
+# gets one row; a package that differs between hosts (a different version,
+# or present on some hosts but not others) gets one row per distinct
+# (before, after) pair, each naming its hosts. Emits { needsHosts: bool,
+# packages: [{package, groups: [{before, after, hosts}]}] } — unchanged
+# hosts (before == after, including both missing) are dropped per package
+# before grouping, so a package with no surviving host is left out
+# entirely.
+cat >"$WORKDIR/version-diff.jq" <<'JQ'
+($before[0]) as $before |
+($after[0]) as $after |
+($before | keys) as $hosts |
+(
+  [$hosts[] | ($before[.] // {} | keys)] + [$hosts[] | ($after[.] // {} | keys)]
+  | add // [] | unique
+) as $pkgs |
+[
+  $pkgs[] | . as $p |
+  (
+    [
+      $hosts[] | . as $h |
+      { host: $h, before: (($before[$h] // {})[$p] // null), after: (($after[$h] // {})[$p] // null) }
+    ] | map(select(.before != .after))
+  ) as $changes |
+  select(($changes | length) > 0) |
+  {
+    package: $p,
+    groups: (
+      $changes
+      | group_by([.before, .after])
+      | map({ before: .[0].before, after: .[0].after, hosts: (map(.host) | join(", ")) })
+    ),
+  }
+] as $packages |
+{ needsHosts: ($packages | any(.groups | length > 1)), packages: $packages }
+JQ
+
 diff_json="$(jq -n --slurpfile old "$OLD_LOCK" --slurpfile new "$NEW_LOCK" -f "$WORKDIR/lock-diff.jq")"
 
 top_rows="$(jq -r '.top[]' <<<"$diff_json")"
@@ -97,19 +135,30 @@ trans_rows="$(jq -r '.trans[]' <<<"$diff_json")"
 
 # --- Package versions -------------------------------------------------------
 if [ -n "$VERSIONS_BEFORE" ] && [ -n "$VERSIONS_AFTER" ]; then
-  version_rows="$(jq -nr \
+  version_diff="$(jq -n \
     --slurpfile before "$VERSIONS_BEFORE" \
-    --slurpfile after "$VERSIONS_AFTER" '
-      ($before[0]) as $before | ($after[0]) as $after |
-      (($before | keys) + ($after | keys) | unique) as $ks |
-      $ks[] | . as $k | ($before[$k]) as $b | ($after[$k]) as $a |
-      select($b != $a) |
-      "| \($k) | \($b // "-") | \($a // "-") |"
-    ')"
+    --slurpfile after "$VERSIONS_AFTER" -f "$WORKDIR/version-diff.jq")"
+  needs_hosts="$(jq -r '.needsHosts' <<<"$version_diff")"
+  if [ "$needs_hosts" = true ]; then
+    version_rows="$(jq -r '
+      .packages[] | .package as $p | .groups[] |
+      "| \($p) | \(.before // "-") | \(.after // "-") | \(.hosts) |"
+    ' <<<"$version_diff")"
+  else
+    version_rows="$(jq -r '
+      .packages[] | .package as $p | .groups[0] as $g |
+      "| \($p) | \($g.before // "-") | \($g.after // "-") |"
+    ' <<<"$version_diff")"
+  fi
   if [ -n "$version_rows" ]; then
     echo '### Package versions'
-    echo '| Package | Before | After |'
-    echo '| --- | --- | --- |'
+    if [ "$needs_hosts" = true ]; then
+      echo '| Package | Before | After | Hosts |'
+      echo '| --- | --- | --- | --- |'
+    else
+      echo '| Package | Before | After |'
+      echo '| --- | --- | --- |'
+    fi
     echo "$version_rows"
     echo
   fi
