@@ -15,8 +15,8 @@
 writeShellApplication {
   name = "flake-update-notify";
   # Every external command the script calls: curl, jq, gawk (awk), sed, coreutils
-  # (sha256sum, cut, tr, wc, mkdir, rm, printf), libnotify (notify-send), systemd
-  # (systemd-run), xdg-utils (xdg-open).
+  # (sha256sum, cut, tr, wc, mkdir, rm, printf, head), libnotify (notify-send), systemd
+  # (systemd-run, busctl), xdg-utils (xdg-open).
   runtimeInputs = [
     curl
     jq
