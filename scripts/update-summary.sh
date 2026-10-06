@@ -56,7 +56,11 @@ def shortid:
   end;
 
 def fmtdate:
-  if . == null then "-" else (.lastModified | gmtime | strftime("%Y-%m-%d")) end;
+  # A path/file input's locked node carries no lastModified, so render "-" for
+  # it instead of erroring on gmtime(null).
+  if (. == null) or (.lastModified == null) then "-"
+  else (.lastModified | gmtime | strftime("%Y-%m-%d"))
+  end;
 
 def changes($o; $n):
   if $o == null then "added"
