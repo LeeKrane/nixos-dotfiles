@@ -32,11 +32,9 @@ jobs:
       - name: Compute host list
         id: hosts
         run: |
-          # Every nixosConfigurations attribute except the `-vm` check target
-          # (flake.nix), so the host list lives in exactly one place and
-          # every later eval/loop (here, and in the security job) uses it.
-          apply='cfgs: builtins.filter (n: builtins.substring (builtins.stringLength n - 3) 3 n != "-vm") (builtins.attrNames cfgs)'
-          nix eval --json --impure '.#nixosConfigurations' --apply "$apply" > "$RUNNER_TEMP/hosts.json"
+          # scripts/hosts.nix is the one shared place for this list; check.yml's
+          # eval matrix uses the same file.
+          nix eval --json --impure '.#nixosConfigurations' --apply 'import ./scripts/hosts.nix' > "$RUNNER_TEMP/hosts.json"
           echo "hosts=$(command cat "$RUNNER_TEMP/hosts.json")" >> "$GITHUB_OUTPUT"
       - name: Package versions before update
         env:
@@ -253,12 +251,30 @@ jobs:
             echo
             echo 'Checks do not appear on this pull request: it is opened with GITHUB_TOKEN, which triggers no workflows. Merging runs the gate on main.'
           } > "$body"
-          # GitHub refuses a second open PR for the same head/base, and only
-          # one update PR should ever be open, so close every open one with
-          # this head (normally at most one) before creating the new one.
-          mapfile -t numbers < <(gh pr list --head ci/flake-update --base main --state open --json number --jq '.[].number')
+          # The repo is public: `--head ci/flake-update` alone would also match a
+          # fork PR from a same-named branch, so restrict to PRs whose head lives
+          # in this repo before treating them as "the" prior update PR.
+          mapfile -t numbers < <(gh pr list --head ci/flake-update --base main --state open \
+            --json number,isCrossRepository --jq 'sort_by(.number) | reverse | .[] | select(.isCrossRepository | not) | .number')
+          # GitHub refuses a second open PR for the same head/base, so the old
+          # ones must close before the new one is created. Comment only once the
+          # new PR exists: if create then fails, the closed PRs would otherwise
+          # carry a "superseded" comment pointing nowhere.
           for number in "${numbers[@]}"; do
-            gh pr comment "$number" --body 'Superseded by a newer update run.'
             gh pr close "$number"
           done
-          gh pr create --head ci/flake-update --base main --title "$title" --body-file "$body"
+          if new_url=$(gh pr create --head ci/flake-update --base main --title "$title" --body-file "$body"); then
+            for number in "${numbers[@]}"; do
+              gh pr comment "$number" --body "Superseded by ${new_url##*/}."
+            done
+          else
+            status=$?
+            # Recover: reopen the most recently closed PR (numbers is newest
+            # first) and give it the new content, so an update is still visible
+            # even though create failed. Still exit non-zero so the run is red.
+            if [ "${#numbers[@]}" -gt 0 ]; then
+              gh pr reopen "${numbers[0]}"
+              gh pr edit "${numbers[0]}" --title "$title" --body-file "$body"
+            fi
+            exit "$status"
+          fi

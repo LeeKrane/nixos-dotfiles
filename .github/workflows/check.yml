@@ -44,12 +44,32 @@ jobs:
       - name: shellcheck
         run: nix shell --inputs-from . nixpkgs#shellcheck -c shellcheck -x -S style install.sh scripts/*.sh
 
+  # Same ref as the eval jobs: under workflow_call (update.yml calls this with
+  # ref: ci/flake-update), github.ref is the caller's ref, not inputs.ref.
+  hosts:
+    runs-on: ubuntu-latest
+    outputs:
+      hosts: ${{ steps.hosts.outputs.hosts }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+      - name: Compute host list
+        id: hosts
+        run: |
+          # scripts/hosts.nix is the one shared place for this list;
+          # update.yml's update/security jobs use the same file.
+          nix eval --json --impure '.#nixosConfigurations' --apply 'import ./scripts/hosts.nix' > "$RUNNER_TEMP/hosts.json"
+          echo "hosts=$(command cat "$RUNNER_TEMP/hosts.json")" >> "$GITHUB_OUTPUT"
+
   eval:
+    needs: hosts
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        host: [tariognatha, tarmantria, taractias]
+        host: ${{ fromJSON(needs.hosts.outputs.hosts) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
