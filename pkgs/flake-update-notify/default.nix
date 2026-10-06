@@ -6,6 +6,7 @@
   curl,
   jq,
   gawk,
+  gnused,
   libnotify,
   xdg-utils,
   coreutils,
@@ -13,10 +14,14 @@
 }:
 writeShellApplication {
   name = "flake-update-notify";
+  # Every external command the script calls: curl, jq, gawk (awk), sed, coreutils
+  # (sha256sum, cut, tr, wc, mkdir, rm, printf), libnotify (notify-send), systemd
+  # (systemd-run), xdg-utils (xdg-open).
   runtimeInputs = [
     curl
     jq
     gawk
+    gnused
     libnotify
     xdg-utils
     coreutils
