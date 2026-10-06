@@ -23,6 +23,7 @@ jobs:
       # the job and this output stays unset, so check/security/pr never run
       # against a half-done push.
       changed: ${{ steps.push.outputs.changed }}
+      sha: ${{ steps.push.outputs.sha }}
       hosts: ${{ steps.hosts.outputs.hosts }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -33,16 +34,9 @@ jobs:
         id: hosts
         run: |
           # scripts/hosts.nix is the one shared place for this list; check.yml's
-          # eval matrix uses the same file.
+          # eval matrix and the security job below use the same file.
           nix eval --json --impure '.#nixosConfigurations' --apply 'import ./scripts/hosts.nix' > "$RUNNER_TEMP/hosts.json"
           echo "hosts=$(command cat "$RUNNER_TEMP/hosts.json")" >> "$GITHUB_OUTPUT"
-      - name: Package versions before update
-        env:
-          HOSTS_JSON: ${{ steps.hosts.outputs.hosts }}
-        run: |
-          hosts_nix="$(jq -r '"[ " + (map("\"" + . + "\"") | join(" ")) + " ]"' <<<"$HOSTS_JSON")"
-          nix eval --json --impure '.#nixosConfigurations' \
-            --apply "import ./scripts/update-versions.nix $hosts_nix" > "$RUNNER_TEMP/versions-before.json"
       - name: Save old flake.lock
         run: cp flake.lock "$RUNNER_TEMP/flake.lock.old"
       - name: Update inputs and claude-code
@@ -59,14 +53,35 @@ jobs:
           else
             echo "haschanges=true" >> "$GITHUB_OUTPUT"
           fi
+      # Evaluating package versions is not free (it forces most of the
+      # nixosConfigurations closure), so skip both evaluations entirely on a
+      # week with no change instead of always paying for a "before" that
+      # turns out unused.
+      - name: Save updated flake.lock and claude-code
+        if: steps.diff.outputs.haschanges == 'true'
+        run: |
+          cp flake.lock "$RUNNER_TEMP/flake.lock.new"
+          rm -rf "$RUNNER_TEMP/claude-code.new"
+          cp -r pkgs/claude-code "$RUNNER_TEMP/claude-code.new"
       - name: Package versions after update
         if: steps.diff.outputs.haschanges == 'true'
-        env:
-          HOSTS_JSON: ${{ steps.hosts.outputs.hosts }}
         run: |
-          hosts_nix="$(jq -r '"[ " + (map("\"" + . + "\"") | join(" ")) + " ]"' <<<"$HOSTS_JSON")"
           nix eval --json --impure '.#nixosConfigurations' \
-            --apply "import ./scripts/update-versions.nix $hosts_nix" > "$RUNNER_TEMP/versions-after.json"
+            --apply 'import ./scripts/update-versions.nix' > "$RUNNER_TEMP/versions-after.json"
+      - name: Package versions before update
+        if: steps.diff.outputs.haschanges == 'true'
+        run: |
+          # The update commit hasn't happened yet, so HEAD still holds the
+          # pre-update content; git restore --worktree is no-overlay (unlike
+          # `git checkout <ref> -- <path>`, it also deletes a path that exists
+          # in the worktree but not at <ref>, e.g. a brand-new pkgs/claude-code).
+          git restore --source=HEAD --worktree -- flake.lock pkgs/claude-code
+          nix eval --json --impure '.#nixosConfigurations' \
+            --apply 'import ./scripts/update-versions.nix' > "$RUNNER_TEMP/versions-before.json"
+          # Put the updated state back so the commit below captures it.
+          rm -rf pkgs/claude-code
+          cp "$RUNNER_TEMP/flake.lock.new" flake.lock
+          cp -r "$RUNNER_TEMP/claude-code.new" pkgs/claude-code
       - name: Render summary
         if: steps.diff.outputs.haschanges == 'true'
         run: |
@@ -87,8 +102,14 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add flake.lock pkgs/claude-code
           git commit -m 'Update flake inputs and claude-code'
-          git push --force origin HEAD:refs/heads/ci/flake-update
+          # Pushed to a staging branch, not ci/flake-update directly: the pr
+          # job moves ci/flake-update to this exact commit only after it has
+          # built the PR body, so the branch's head and its PR's body change
+          # together instead of a window where ci/flake-update already points
+          # at a new commit but the open PR still shows last week's body.
+          git push --force origin HEAD:refs/heads/ci/flake-update-staging
           echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
   check:
     needs: update
@@ -100,14 +121,14 @@ jobs:
       pull-requests: read
     uses: ./.github/workflows/check.yml
     with:
-      ref: ci/flake-update
+      ref: ci/flake-update-staging
       force-nvim: true
 
   # Report-only: a vulnix CVE diff and a local-build count per host, never
-  # gating the PR or its title. ci/flake-update is main plus one commit
-  # (update's "Commit and push" force-pushes it there), so its HEAD~1 is the
-  # pre-update base. This runs on a fresh runner, so the before/after .drv
-  # files from the update job's evals don't exist in its store (they're
+  # gating the PR or its title. ci/flake-update-staging is main plus one
+  # commit (update's "Commit and push" force-pushes it there), so its HEAD~1
+  # is the pre-update base. This runs on a fresh runner, so the before/after
+  # .drv files from the update job's evals don't exist in its store (they're
   # local build products, not fetched from a substituter) — it has to
   # instantiate both states itself, which is also why it still needs
   # flake.lock/pkgs/claude-code checked out at HEAD~1 and HEAD in turn.
@@ -120,16 +141,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ci/flake-update
+          ref: ci/flake-update-staging
           fetch-depth: 2
       - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
       - name: Evaluate toplevel derivations before and after
-        env:
-          HOSTS_JSON: ${{ needs.update.outputs.hosts }}
         run: |
-          hosts_nix="$(jq -r '"[ " + (map("\"" + . + "\"") | join(" ")) + " ]"' <<<"$HOSTS_JSON")"
           # shellcheck disable=SC2016 # ${h} is Nix antiquotation, not a shell variable
-          apply="cfgs: builtins.listToAttrs (map (h: { name = h; value = cfgs.\${h}.config.system.build.toplevel.drvPath; }) $hosts_nix)"
+          apply='cfgs: let hosts = import ./scripts/hosts.nix cfgs; in builtins.listToAttrs (map (h: { name = h; value = cfgs.${h}.config.system.build.toplevel.drvPath; }) hosts)'
           # git restore --worktree is no-overlay: unlike `git checkout <ref> --
           # <path>`, it deletes a path that exists in the worktree but not at
           # <ref> (e.g. pkgs/claude-code, if this update added it).
@@ -153,13 +171,15 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/security"
           scan() {
-            # vulnix exits 2 when it finds active CVEs; that's expected output,
-            # not a scan failure, so only a different nonzero code is fatal.
+            # vulnix exits 0 (no CVEs), 1 (CVEs found but all whitelisted), or
+            # 2 (active CVEs found); all three are a completed scan, not a
+            # scan failure, so only a different nonzero code is fatal.
+            # --inputs-from . pins vulnix itself to the flake's nixpkgs.
             set +e
-            nix run nixpkgs#vulnix -- --json "$1" > "$2"
+            nix run --inputs-from . nixpkgs#vulnix -- --json "$1" > "$2"
             rc=$?
             set -e
-            [ "$rc" -eq 0 ] || [ "$rc" -eq 2 ] || { echo "vulnix exited $rc scanning $1" >&2; exit "$rc"; }
+            [ "$rc" -eq 0 ] || [ "$rc" -eq 1 ] || [ "$rc" -eq 2 ] || { echo "vulnix exited $rc scanning $1" >&2; exit "$rc"; }
           }
           mapfile -t HOSTS < <(jq -r '.[]' <<<"$HOSTS_JSON")
           for host in "${HOSTS[@]}"; do
@@ -206,8 +226,14 @@ jobs:
     if: ${{ !cancelled() && needs.update.outputs.changed == 'true' }}
     runs-on: ubuntu-latest
     permissions:
+      # contents: write to move ci/flake-update to the staging commit below.
+      contents: write
       pull-requests: write
     steps:
+      # Needed for scripts/cap-pr-body.sh and to push the branch-move below.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: update-summary
@@ -217,10 +243,9 @@ jobs:
         with:
           name: security-summary
           path: ${{ runner.temp }}
-      - name: Create a fresh pull request, closing any other open one
+      - name: Build pull request body
+        id: build
         env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
           RESULT: ${{ needs.check.result }}
           SECURITY_RESULT: ${{ needs.security.result }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -251,13 +276,39 @@ jobs:
             echo
             echo 'Checks do not appear on this pull request: it is opened with GITHUB_TOKEN, which triggers no workflows. Merging runs the gate on main.'
           } > "$body"
+          echo "title=$title" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pr-body-full
+          path: ${{ runner.temp }}/body.md
+          retention-days: 7
+      - name: Cap pull request body size
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: scripts/cap-pr-body.sh "$RUNNER_TEMP/body.md" "$RUN_URL" > "$RUNNER_TEMP/body-capped.md"
+      - name: Move ci/flake-update to the staging commit
+        env:
+          SHA: ${{ needs.update.outputs.sha }}
+        run: |
+          # The exact SHA the update job pushed, not whatever
+          # ci/flake-update-staging happens to point at by the time this
+          # runs: a later scheduled or manual run could have force-pushed a
+          # newer commit to staging in between.
+          git fetch origin "$SHA"
+          git push --force origin "$SHA":refs/heads/ci/flake-update
+      - name: Create or update the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: ${{ steps.build.outputs.title }}
+        run: |
           # The repo is public: `--head ci/flake-update` alone would also match a
           # fork PR from a same-named branch, so restrict to PRs whose head lives
           # in this repo before treating them as "the" prior update PR.
           number=$(gh pr list --head ci/flake-update --base main --state open \
             --json number,isCrossRepository --jq '[.[] | select(.isCrossRepository | not)][0].number // empty')
           if [ -n "$number" ]; then
-            gh pr edit "$number" --title "$title" --body-file "$body"
+            gh pr edit "$number" --title "$TITLE" --body-file "$RUNNER_TEMP/body-capped.md"
           else
-            gh pr create --head ci/flake-update --base main --title "$title" --body-file "$body"
+            gh pr create --head ci/flake-update --base main --title "$TITLE" --body-file "$RUNNER_TEMP/body-capped.md"
           fi

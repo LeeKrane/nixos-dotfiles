@@ -50,11 +50,14 @@ Flow:
 3. Take the first pull request's `head.sha`, `number`, `html_url`, `title`,
    `body`, and hash `number` + `title` + `body` with `sha256sum`. If both the
    SHA and the hash match the state file's two lines, exit 0. The update job
-   force-pushes `ci/flake-update` on every run, and the pr job then edits
-   the open pull request in place (or opens one if none is open), so the
-   SHA changes before the title and body do. Keying the hash on `number` +
-   `title` + `body` means the later rewrite still notifies, and a new pull
-   request notifies even when its SHA and body match the last-seen one.
+   force-pushes the run's commit to a staging branch first; the pr job builds
+   the title and body, then moves `ci/flake-update` to that exact commit, and
+   only then edits the open pull request in place (or opens one if none is
+   open) — so `ci/flake-update`'s head SHA and the pull request's title and
+   body change together, with no window where one has moved but not the
+   other. Keying the hash on `number` + `title` + `body` as well as the SHA
+   still matters: a new pull request notifies even when its SHA and body
+   match the last-seen one (the previous one was merged or closed by hand).
 4. Build the notification:
    - Summary: `Flake update ready` or, when the title starts with
      `[gate failing]`, `Flake update ready (gate failing)` with

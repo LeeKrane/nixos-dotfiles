@@ -42,7 +42,9 @@ jobs:
       - name: deadnix
         run: nix shell --inputs-from . nixpkgs#deadnix -c deadnix --fail --exclude hosts/*/hardware-configuration.nix -- .
       - name: shellcheck
-        run: nix shell --inputs-from . nixpkgs#shellcheck -c shellcheck -x -S style install.sh scripts/*.sh
+        run: nix shell --inputs-from . nixpkgs#shellcheck -c shellcheck -x -S style install.sh scripts/*.sh scripts/tests/*.sh
+      - name: flake-update-notify tests
+        run: nix shell --inputs-from . nixpkgs#curl nixpkgs#jq nixpkgs#gawk -c bash scripts/tests/flake-update-notify-test.sh
 
   # Same ref as the eval jobs: under workflow_call (update.yml calls this with
   # ref: ci/flake-update), github.ref is the caller's ref, not inputs.ref.
