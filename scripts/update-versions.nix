@@ -1,11 +1,11 @@
 # Evaluated against the flake's nixosConfigurations attrset (not a single host) to print
 # the package versions update.yml shows in the weekly update PR body
-# (scripts/update-summary.sh), for the hosts update.yml passes in. Called once before
-# `nix flake update` and once after, with the shared host list (update.yml computes it
-# once from `nixosConfigurations`'s attribute names, excluding the `-vm` check target)
-# curried in ahead of the `configs` attrset `--apply` itself provides:
-#   nix eval --json --impure '.#nixosConfigurations' \
-#     --apply 'import scripts/update-versions.nix [ "taractias" "tariognatha" "tarmantria" ]'
+# (scripts/update-summary.sh). Called once before `nix flake update` and once after.
+# The host list (every nixosConfigurations attribute except the `-vm` check target) is
+# read straight off the `configs` attrset `--apply` provides, via hosts.nix (the one
+# shared place for that list — check.yml's eval matrix and update.yml's security job use
+# the same file), so no caller needs to pass hosts in separately:
+#   nix eval --json --impure '.#nixosConfigurations' --apply 'import scripts/update-versions.nix'
 #
 # Every lookup goes through attrByPath, which walks a path of attribute names through
 # nested sets using `?`/`or` and returns `default` the moment an attribute is missing, a
@@ -17,8 +17,10 @@
 # Either way, a renamed or removed attribute (a nixpkgs restructuring, illogical-flake
 # dropping an input, ...) drops just that one entry for that host instead of failing the
 # whole weekly update run.
-hosts: configs:
+configs:
 let
+  hosts = import ./hosts.nix configs;
+
   # attrByPath PATH DEFAULT SET: walks PATH (a list of attribute names, static or
   # dynamic) through nested attrsets, returning DEFAULT as soon as a segment is missing,
   # isn't a string (a dynamic segment computed as null, say), or the value to descend
