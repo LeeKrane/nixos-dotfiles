@@ -41,10 +41,10 @@ html_url=$(jq -r '.[0].html_url' <<<"$pulls")
 title=$(jq -r '.[0].title' <<<"$pulls")
 body=$(jq -r '.[0].body // ""' <<<"$pulls" | tr -d '\r')
 
-# Dedupe on head SHA plus a hash of number+title+body, not SHA alone: the pr
-# job closes the old PR and opens a new one on every run, so a reused head SHA
-# with a different PR number (or the same PR edited in place) must still
-# notify.
+# Dedupe on head SHA plus a hash of number+title+body, not SHA alone: the
+# update job force-pushes before the pr job rewrites the PR in place, so a run
+# in between sees the new SHA with last week's body, and the later rewrite must
+# still notify.
 seen_hash=$(printf '%s\n%s\n%s' "$number" "$title" "$body" | sha256sum | cut -d' ' -f1)
 if [ -f "$state_file" ] \
     && [ "$(sed -n '1p' "$state_file")" = "$sha" ] \
