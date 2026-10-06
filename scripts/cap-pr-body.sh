@@ -113,6 +113,7 @@ self_test() {
   {
     echo '### Package versions'
     echo
+    # shellcheck disable=SC2016 # backticks in fixture string, don't expand here
     echo '<details><summary>Transitive inputs and raw `nix flake update` log</summary>'
     echo
     echo '```'
