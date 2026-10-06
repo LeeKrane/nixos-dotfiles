@@ -265,7 +265,7 @@ jobs:
           done
           if new_url=$(gh pr create --head ci/flake-update --base main --title "$title" --body-file "$body"); then
             for number in "${numbers[@]}"; do
-              gh pr comment "$number" --body "Superseded by ${new_url##*/}."
+              gh pr comment "$number" --body "Superseded by #${new_url##*/}."
             done
           else
             status=$?

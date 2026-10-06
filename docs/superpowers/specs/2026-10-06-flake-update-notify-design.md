@@ -51,11 +51,12 @@ Flow:
    `body`, and hash `number` + `title` + `body` with `sha256sum`. If both the
    SHA and the hash match the state file's two lines, exit 0. The update job
    force-pushes `ci/flake-update` on every run, and the pr job then closes
-   the old pull request and opens a brand-new one (it never rewrites an
-   existing PR's body in place), so the head SHA can repeat across pull
-   requests; keying the hash on `number` as well as `title` + `body` means a
-   closed-and-reopened pull request still notifies even when its SHA and
-   body happen to match the last-seen one.
+   the old pull request and opens a brand-new one; the pr job only rewrites
+   an existing PR's body in place when create fails, in which case it reopens
+   the most recent closed PR and updates it. The head SHA can repeat across
+   pull requests; keying the hash on `number` as well as `title` + `body`
+   means a closed-and-reopened pull request still notifies even when its SHA
+   and body happen to match the last-seen one.
 4. Build the notification:
    - Summary: `Flake update ready` or, when the title starts with
      `[gate failing]`, `Flake update ready (gate failing)` with
