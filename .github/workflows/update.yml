@@ -226,6 +226,22 @@ jobs:
           path: ${{ runner.temp }}/security-summary.md
           retention-days: 7
           overwrite: true
+      # The dry-run logs are the only place a locally-built package's name
+      # still appears (scripts/security-summary.sh only counts them). This is
+      # the job's last step, so if: always() here guards against an earlier
+      # step failing (the dry-run check itself, say), not a later one:
+      # the logs still upload even when the job ends up failed overall.
+      # continue-on-error: true keeps an upload failure (no files matched,
+      # say) from being the thing that fails the job.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        continue-on-error: true
+        with:
+          name: local-builds
+          path: ${{ runner.temp }}/security/build-*.log
+          retention-days: 30
+          if-no-files-found: ignore
+          overwrite: true
 
   pr:
     needs: [update, check, security]
@@ -273,12 +289,16 @@ jobs:
             echo
             if [ "$SECURITY_RESULT" = success ]; then
               command cat "$RUNNER_TEMP/security-summary.md"
+              echo
+              echo "Full local-build logs: \`local-builds\` artifact on [this run]($RUN_URL)."
             else
               echo "Security scan failed ([run]($RUN_URL))"
             fi
             echo
-            # shellcheck disable=SC2016 # literal backticks for Markdown
-            echo 'CI checks eval only. Before merging, run `gh pr checkout <n> && just switch <host>` on one machine.'
+            echo 'CI checks eval only. Before merging, on one machine, run:'
+            echo
+            echo '    git fetch origin ci/flake-update && git switch -C ci/flake-update FETCH_HEAD'
+            echo '    just switch <host>'
             echo
             echo 'Checks do not appear on this pull request: it is opened with GITHUB_TOKEN, which triggers no workflows. Merging runs the gate on main.'
           } > "$body"

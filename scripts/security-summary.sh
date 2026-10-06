@@ -172,7 +172,6 @@ names_in() {
 
 echo '### Local builds'
 echo
-build_names=""
 for host in "${HOSTS[@]}"; do
   if [ -f "$WORKDIR/build-before-$host.failed" ] || [ -f "$WORKDIR/build-after-$host.failed" ] \
     || [ ! -f "$WORKDIR/build-before-$host.log" ] || [ ! -f "$WORKDIR/build-after-$host.log" ]; then
@@ -190,16 +189,5 @@ for host in "${HOSTS[@]}"; do
     echo "$host: no new local builds ($total total)"
   else
     echo "$host: $new_count new local build$([ "$new_count" = 1 ] || echo s) ($total total)"
-    build_names="$build_names**$host**:
-- ${new_names//$'\n'/$'\n- '}
-
-"
   fi
 done
-echo
-if [ -n "$build_names" ]; then
-  echo '<details><summary>Packages built locally</summary>'
-  echo
-  printf '%s' "$build_names"
-  echo '</details>'
-fi

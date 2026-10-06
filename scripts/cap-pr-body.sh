@@ -12,7 +12,6 @@
 #      "Transitive inputs and raw ... log" <details>)
 #   2. the CVE "Fixed" table (security-summary.sh)
 #   3. the CVE "New" table (security-summary.sh)
-#   4. the per-host "Packages built locally" bullet lists (security-summary.sh)
 #
 # Usage: cap-pr-body.sh BODY_FILE RUN_URL [MAX_CHARS]
 #   BODY_FILE   assembled Markdown body; the (possibly capped) result is
@@ -26,7 +25,6 @@ set -euo pipefail
 
 MAX_DEFAULT=60000
 KEEP_ROWS=15
-KEEP_BULLETS=10
 
 # Replaces the first ``` ... ``` fenced block with a one-line note.
 strip_log() {
@@ -79,34 +77,6 @@ truncate_table() {
   '
 }
 
-# truncate_bullets KEEP URL: truncates every "**host**:" bullet list
-# (security-summary.sh's "Packages built locally" block), keeping the first
-# KEEP "- " lines of each and replacing the rest with one note line.
-truncate_bullets() {
-  awk -v keep="$1" -v url="$2" '
-    function note(n) { printf("... %d more, see run artifacts: %s\n", n, url) }
-    BEGIN { state = 0; rowcount = 0 }
-    {
-      if (state == 0) {
-        print
-        if ($0 ~ /^\*\*[^*]+\*\*:$/) { state = 1; rowcount = 0 }
-        next
-      }
-      if ($0 ~ /^- /) {
-        rowcount++
-        if (rowcount <= keep) print
-        next
-      }
-      if (rowcount > keep) note(rowcount - keep)
-      print
-      state = 0
-      rowcount = 0
-      next
-    }
-    END { if (state == 1 && rowcount > keep) note(rowcount - keep) }
-  '
-}
-
 self_test() {
   tmp="$(mktemp -d)"
   trap 'rm -rf "$tmp"' EXIT
@@ -135,12 +105,9 @@ self_test() {
     echo '| --- | --- | --- | --- |'
     for i in $(seq 1 200); do echo "| CVE-2025-$i | 9.1 | pkg-$i | hostb |"; done
     echo
-    echo '<details><summary>Packages built locally</summary>'
+    echo '### Local builds'
     echo
-    echo '**hosta**:'
-    for i in $(seq 1 100); do echo "- package-$i"; done
-    echo
-    echo '</details>'
+    echo 'hosta: no new local builds (3 total)'
   } >"$tmp/body.md"
   before=$(wc -c <"$tmp/body.md")
   "$0" "$tmp/body.md" 'https://example.invalid/run' 60000 >"$tmp/capped.md"
@@ -179,6 +146,5 @@ shrink_step() {
 shrink_step strip_log
 shrink_step truncate_table '**Fixed**' "$KEEP_ROWS" "$RUN_URL"
 shrink_step truncate_table '**New**' "$KEEP_ROWS" "$RUN_URL"
-shrink_step truncate_bullets "$KEEP_BULLETS" "$RUN_URL"
 
 command cat "$work"
