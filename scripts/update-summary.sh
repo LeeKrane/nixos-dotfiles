@@ -185,7 +185,15 @@ if [ -n "$trans_rows" ] || [ -n "$RAW_LOG" ]; then
   fi
   if [ -n "$RAW_LOG" ]; then
     echo '```'
-    command cat "$RAW_LOG"
+    # The raw log interleaves real `nix flake update` output with git's
+    # \r-updated fetch progress (Enumerating/Counting/Compressing/Receiving
+    # objects, Resolving deltas). Split \r-joined lines apart, then keep only
+    # the lines that carry information: the lock-file warning, each
+    # "• Updated input" line, its indented before/after quoted locked refs,
+    # and the claude-code version bump. grep finding nothing is not a script
+    # failure here, just an empty (but well-formed) code block.
+    keep_pattern="^(warning: |• |    '|  → |claude-code )"
+    tr '\r' '\n' <"$RAW_LOG" | grep -E "$keep_pattern" || true
     echo '```'
   fi
   echo '</details>'
