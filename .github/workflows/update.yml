@@ -18,16 +18,33 @@ jobs:
     permissions:
       contents: write
     outputs:
-      changed: ${{ steps.diff.outputs.changed }}
+      # Set only by the final step, after the update commit has been pushed.
+      # A failure anywhere earlier (eval, render, upload, push itself) fails
+      # the job and this output stays unset, so check/security/pr never run
+      # against a half-done push.
+      changed: ${{ steps.push.outputs.changed }}
+      hosts: ${{ steps.hosts.outputs.hosts }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
       - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
-      - name: Package versions before update
+      - name: Compute host list
+        id: hosts
         run: |
+          # Every nixosConfigurations attribute except the `-vm` check target
+          # (flake.nix), so the host list lives in exactly one place and
+          # every later eval/loop (here, and in the security job) uses it.
+          apply='cfgs: builtins.filter (n: builtins.substring (builtins.stringLength n - 3) 3 n != "-vm") (builtins.attrNames cfgs)'
+          nix eval --json --impure '.#nixosConfigurations' --apply "$apply" > "$RUNNER_TEMP/hosts.json"
+          echo "hosts=$(command cat "$RUNNER_TEMP/hosts.json")" >> "$GITHUB_OUTPUT"
+      - name: Package versions before update
+        env:
+          HOSTS_JSON: ${{ steps.hosts.outputs.hosts }}
+        run: |
+          hosts_nix="$(jq -r '"[ " + (map("\"" + . + "\"") | join(" ")) + " ]"' <<<"$HOSTS_JSON")"
           nix eval --json --impure '.#nixosConfigurations' \
-            --apply 'import ./scripts/update-versions.nix' > "$RUNNER_TEMP/versions-before.json"
+            --apply "import ./scripts/update-versions.nix $hosts_nix" > "$RUNNER_TEMP/versions-before.json"
       - name: Save old flake.lock
         run: cp flake.lock "$RUNNER_TEMP/flake.lock.old"
       - name: Update inputs and claude-code
@@ -40,35 +57,40 @@ jobs:
         run: |
           if [ -z "$(git status --porcelain -- flake.lock pkgs/claude-code)" ]; then
             echo "Nothing to update."
-            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "haschanges=false" >> "$GITHUB_OUTPUT"
           else
-            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "haschanges=true" >> "$GITHUB_OUTPUT"
           fi
       - name: Package versions after update
-        if: steps.diff.outputs.changed == 'true'
+        if: steps.diff.outputs.haschanges == 'true'
+        env:
+          HOSTS_JSON: ${{ steps.hosts.outputs.hosts }}
         run: |
+          hosts_nix="$(jq -r '"[ " + (map("\"" + . + "\"") | join(" ")) + " ]"' <<<"$HOSTS_JSON")"
           nix eval --json --impure '.#nixosConfigurations' \
-            --apply 'import ./scripts/update-versions.nix' > "$RUNNER_TEMP/versions-after.json"
+            --apply "import ./scripts/update-versions.nix $hosts_nix" > "$RUNNER_TEMP/versions-after.json"
       - name: Render summary
-        if: steps.diff.outputs.changed == 'true'
+        if: steps.diff.outputs.haschanges == 'true'
         run: |
           scripts/update-summary.sh "$RUNNER_TEMP/flake.lock.old" flake.lock \
             "$RUNNER_TEMP/versions-before.json" "$RUNNER_TEMP/versions-after.json" \
             "$RUNNER_TEMP/update.log" > "$RUNNER_TEMP/summary.md"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: steps.diff.outputs.changed == 'true'
+        if: steps.diff.outputs.haschanges == 'true'
         with:
           name: update-summary
           path: ${{ runner.temp }}/summary.md
           retention-days: 7
       - name: Commit and push
-        if: steps.diff.outputs.changed == 'true'
+        id: push
+        if: steps.diff.outputs.haschanges == 'true'
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add flake.lock pkgs/claude-code
           git commit -m 'Update flake inputs and claude-code'
           git push --force origin HEAD:refs/heads/ci/flake-update
+          echo "changed=true" >> "$GITHUB_OUTPUT"
 
   check:
     needs: update
@@ -84,16 +106,19 @@ jobs:
       force-nvim: true
 
   # Report-only: a vulnix CVE diff and a local-build count per host, never
-  # gating the PR. ci/flake-update is main plus one commit (update's "Commit
-  # and push" force-pushes it there), so its HEAD~1 is the pre-update base.
+  # gating the PR or its title. ci/flake-update is main plus one commit
+  # (update's "Commit and push" force-pushes it there), so its HEAD~1 is the
+  # pre-update base. This runs on a fresh runner, so the before/after .drv
+  # files from the update job's evals don't exist in its store (they're
+  # local build products, not fetched from a substituter) — it has to
+  # instantiate both states itself, which is also why it still needs
+  # flake.lock/pkgs/claude-code checked out at HEAD~1 and HEAD in turn.
   security:
     needs: update
     if: needs.update.outputs.changed == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    outputs:
-      critical: ${{ steps.summary.outputs.critical }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -101,12 +126,18 @@ jobs:
           fetch-depth: 2
       - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
       - name: Evaluate toplevel derivations before and after
+        env:
+          HOSTS_JSON: ${{ needs.update.outputs.hosts }}
         run: |
+          hosts_nix="$(jq -r '"[ " + (map("\"" + . + "\"") | join(" ")) + " ]"' <<<"$HOSTS_JSON")"
           # shellcheck disable=SC2016 # ${h} is Nix antiquotation, not a shell variable
-          apply='cfgs: builtins.listToAttrs (map (h: { name = h; value = cfgs.${h}.config.system.build.toplevel.drvPath; }) ["taractias" "tariognatha" "tarmantria"])'
-          git checkout HEAD~1 -- flake.lock pkgs/claude-code
+          apply="cfgs: builtins.listToAttrs (map (h: { name = h; value = cfgs.\${h}.config.system.build.toplevel.drvPath; }) $hosts_nix)"
+          # git restore --worktree is no-overlay: unlike `git checkout <ref> --
+          # <path>`, it deletes a path that exists in the worktree but not at
+          # <ref> (e.g. pkgs/claude-code, if this update added it).
+          git restore --source=HEAD~1 --worktree -- flake.lock pkgs/claude-code
           nix eval --json --impure '.#nixosConfigurations' --apply "$apply" > "$RUNNER_TEMP/drvs-before.json"
-          git checkout HEAD -- flake.lock pkgs/claude-code
+          git restore --source=HEAD --worktree -- flake.lock pkgs/claude-code
           nix eval --json --impure '.#nixosConfigurations' --apply "$apply" > "$RUNNER_TEMP/drvs-after.json"
       - name: Compute cache week
         id: week
@@ -119,6 +150,8 @@ jobs:
           restore-keys: |
             vulnix-nvd-
       - name: Scan before/after CVEs with vulnix
+        env:
+          HOSTS_JSON: ${{ needs.update.outputs.hosts }}
         run: |
           mkdir -p "$RUNNER_TEMP/security"
           scan() {
@@ -130,24 +163,40 @@ jobs:
             set -e
             [ "$rc" -eq 0 ] || [ "$rc" -eq 2 ] || { echo "vulnix exited $rc scanning $1" >&2; exit "$rc"; }
           }
-          for host in taractias tariognatha tarmantria; do
+          mapfile -t HOSTS < <(jq -r '.[]' <<<"$HOSTS_JSON")
+          for host in "${HOSTS[@]}"; do
             scan "$(jq -r --arg h "$host" '.[$h]' "$RUNNER_TEMP/drvs-before.json")" \
               "$RUNNER_TEMP/security/vulnix-before-$host.json"
             scan "$(jq -r --arg h "$host" '.[$h]' "$RUNNER_TEMP/drvs-after.json")" \
               "$RUNNER_TEMP/security/vulnix-after-$host.json"
           done
-      - name: Dry-run build check after update
+      - name: Dry-run build check before and after update
+        env:
+          HOSTS_JSON: ${{ needs.update.outputs.hosts }}
         run: |
-          for host in taractias tariognatha tarmantria; do
+          mkdir -p "$RUNNER_TEMP/security"
+          mapfile -t HOSTS < <(jq -r '.[]' <<<"$HOSTS_JSON")
+          for host in "${HOSTS[@]}"; do
+            before_drv="$(jq -r --arg h "$host" '.[$h]' "$RUNNER_TEMP/drvs-before.json")"
             after_drv="$(jq -r --arg h "$host" '.[$h]' "$RUNNER_TEMP/drvs-after.json")"
-            nix build --dry-run "${after_drv}^*" > "$RUNNER_TEMP/security/build-after-$host.log" 2>&1 || true
+            # Not `|| true`: a dry-run failure must be visible to the summary
+            # as "check failed" instead of silently counting as 0 builds.
+            if ! nix build --dry-run "${before_drv}^*" > "$RUNNER_TEMP/security/build-before-$host.log" 2>&1; then
+              echo "dry-run before failed for $host" >&2
+              : > "$RUNNER_TEMP/security/build-before-$host.failed"
+            fi
+            if ! nix build --dry-run "${after_drv}^*" > "$RUNNER_TEMP/security/build-after-$host.log" 2>&1; then
+              echo "dry-run after failed for $host" >&2
+              : > "$RUNNER_TEMP/security/build-after-$host.failed"
+            fi
           done
       - name: Render summary
-        id: summary
+        env:
+          HOSTS_JSON: ${{ needs.update.outputs.hosts }}
         run: |
-          scripts/security-summary.sh "$RUNNER_TEMP/security" taractias tariognatha tarmantria \
+          mapfile -t HOSTS < <(jq -r '.[]' <<<"$HOSTS_JSON")
+          scripts/security-summary.sh "$RUNNER_TEMP/security" "${HOSTS[@]}" \
             > "$RUNNER_TEMP/security-summary.md"
-          echo "critical=$(command cat "$RUNNER_TEMP/security/critical")" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: security-summary
@@ -170,19 +219,15 @@ jobs:
         with:
           name: security-summary
           path: ${{ runner.temp }}
-      - name: Create or update the pull request
+      - name: Create a fresh pull request, closing any other open one
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RESULT: ${{ needs.check.result }}
           SECURITY_RESULT: ${{ needs.security.result }}
-          CRITICAL: ${{ needs.security.outputs.critical }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           title='Update flake inputs'
-          if [ "$CRITICAL" = true ]; then
-            title="[new CVE] $title"
-          fi
           if [ "$RESULT" != success ]; then
             title="[gate failing] $title"
           fi
@@ -208,9 +253,12 @@ jobs:
             echo
             echo 'Checks do not appear on this pull request: it is opened with GITHUB_TOKEN, which triggers no workflows. Merging runs the gate on main.'
           } > "$body"
-          number=$(gh pr list --head ci/flake-update --base main --state open --json number --jq '.[0].number // empty')
-          if [ -n "$number" ]; then
-            gh pr edit "$number" --title "$title" --body-file "$body"
-          else
-            gh pr create --head ci/flake-update --base main --title "$title" --body-file "$body"
-          fi
+          # GitHub refuses a second open PR for the same head/base, and only
+          # one update PR should ever be open, so close every open one with
+          # this head (normally at most one) before creating the new one.
+          mapfile -t numbers < <(gh pr list --head ci/flake-update --base main --state open --json number --jq '.[].number')
+          for number in "${numbers[@]}"; do
+            gh pr comment "$number" --body 'Superseded by a newer update run.'
+            gh pr close "$number"
+          done
+          gh pr create --head ci/flake-update --base main --title "$title" --body-file "$body"
