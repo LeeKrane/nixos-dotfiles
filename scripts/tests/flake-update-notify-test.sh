@@ -95,6 +95,16 @@ INPUTS_BODY=$(printf '%s\n' \
     '| --- | --- | --- | --- |' \
     '| nixpkgs | 2026-09-04 | 2026-10-03 | x |' \
     '| disko | 2026-06-11 | 2026-09-18 | x |')
+# 4-column form (scripts/update-summary.sh's version-diff.jq adds a Hosts
+# column when a package's before/after differs across hosts): both rows of
+# the same package, split by host group.
+SPLIT_VERSIONS_BODY=$(printf '%s\n' \
+    '### Package versions' \
+    '| Package | Before | After | Hosts |' \
+    '| --- | --- | --- | --- |' \
+    '| NVIDIA driver | 610 | 615 | tariognatha |' \
+    '| NVIDIA driver | 610 | 620 | tarmantria |' \
+    '')
 
 # versions body: first notification
 rm -rf "$WORK/state"
@@ -129,8 +139,9 @@ run
 check 'new sha: notified' notified
 check 'new sha: state updated' state_is sha2
 
-# same SHA and body, different PR number (the pr job closed the old PR and
-# opened a new one without changing head.sha) notifies again
+# same SHA and body, different PR number (the previous update PR was merged
+# or closed by hand, so the pr job opened a new one reusing the same commit
+# and body) notifies again
 pr_json sha2 'Update flake inputs' "$VERSIONS_BODY" 4
 run
 check 'new pr number: notified' notified
@@ -171,12 +182,19 @@ run STUB_ACTION=open
 check 'click: systemd-run launches xdg-open' systemd_run_has 'xdg-open'
 check 'click: xdg-open url' grep -qxF 'https://github.com/a/b/pull/3' "$WORK/log/xdg"
 
+# 4-column package versions table: each row's Hosts column is appended in
+# parentheses
+pr_json sha8 'Update flake inputs' "$SPLIT_VERSIONS_BODY"
+run
+check '4-column: notified' notified
+check '4-column: lines' notify_has $'NVIDIA driver 610 → 615 (tariognatha)\nNVIDIA driver 610 → 620 (tarmantria)'
+
 # curl failure: non-zero, no notification, state untouched
-pr_json sha8 'Update flake inputs' "$VERSIONS_BODY"
+pr_json sha9 'Update flake inputs' "$VERSIONS_BODY"
 run PULLS_URL="file://$WORK/missing.json"
 check 'curl failure: non-zero' [ "$status" -ne 0 ]
 check 'curl failure: not notified' eval '! notified'
-check 'curl failure: state untouched' state_is sha7
+check 'curl failure: state untouched' state_is sha8
 
 # notify-send failure: non-zero, state removed so the next run retries
 run STUB_EXIT=1

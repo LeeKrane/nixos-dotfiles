@@ -62,8 +62,15 @@ case "$title" in
 esac
 
 text=$(table_rows '### Package versions' <<<"$body" | awk -F'|' '{
-    for (i = 2; i <= 4; i++) gsub(/^[ \t`]+|[ \t`]+$/, "", $i)
-    print $2 " " $3 " → " $4
+    # NF-1 is the index of the last real column: 4 for the plain
+    # "Package | Before | After" table, 5 when a 4-column "Hosts" column
+    # (scripts/update-summary.sh, a package split differently across hosts)
+    # is present.
+    last = NF - 1
+    for (i = 2; i <= last; i++) gsub(/^[ \t`]+|[ \t`]+$/, "", $i)
+    line = $2 " " $3 " → " $4
+    if (last >= 5) line = line " (" $5 ")"
+    print line
 }')
 if [ -z "$text" ]; then
     inputs=$(table_rows '### Inputs' <<<"$body" | wc -l)
