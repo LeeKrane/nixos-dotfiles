@@ -39,6 +39,10 @@
       # Comms
       vesktop
 
+      # Notes: vault syncs to the home server through the Self-hosted LiveSync plugin,
+      # configured in-app (its config holds the CouchDB credentials, so it stays out of Nix).
+      obsidian
+
       # Networking / downloads
       qbittorrent
       proton-vpn # renamed from protonvpn-gui
