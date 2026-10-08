@@ -38,6 +38,7 @@
     claude-code
     rtk # Claude Code hooks
     codegraph # Claude Code hooks
+    anydoc # converts office docs and PDFs to Markdown for Claude Code
     skillspector # scans Claude Code skills for security issues before install
 
     # scheme-medium (~1-2 GB) instead of scheme-full (~5 GB). Switch if a package is missing.
