@@ -65,6 +65,16 @@ let
       sed = "s/property bool launchOnStartup: false/property bool launchOnStartup: true/";
       why = "fresh hosts seed config.json from ii's QML defaults; want ii to lock immediately under greetd autologin";
     }
+    {
+      # ii's dark/light toggle writes color-scheme with gsettings, but no schemas are on the
+      # session's XDG_DATA_DIRS (ii's own custom/env.lua hardcodes it), so every call fails with
+      # "No schemas installed" and the portal keeps reporting no preference. Point each call at
+      # the schemas directly instead.
+      file = "${config.home.homeDirectory}/.config/quickshell/ii/scripts/colors/switchwall.sh";
+      # `#` delimiter, not `|`: `\|` is the alternation inside the pattern.
+      sed = "s#gsettings \\(set\\|get\\) org.gnome.desktop.interface#GSETTINGS_SCHEMA_DIR=${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}/glib-2.0/schemas ${pkgs.glib.bin}/bin/gsettings \\1 org.gnome.desktop.interface#g";
+      why = "gsettings finds no schemas in the ii session, so the dark/light toggle never reaches the portal";
+    }
   ]
   ++ lib.optional (!config.krane.hypr.idleTimeouts) {
     # ii's hypridle.conf locks at 5 min, turns DPMS off at 10 and suspends at 15. Dropping
@@ -135,6 +145,11 @@ in
       '';
     }
   ];
+
+  # Default for the portal's color-scheme until ii's toggle (patched above) changes it. Without
+  # it the key stays unset and apps that follow the system preference fall back to light.
+  # Rewritten on every activation, so a light-mode choice lasts until the next switch.
+  dconf.settings."org/gnome/desktop/interface".color-scheme = "prefer-dark";
 
   programs.illogical-impulse = {
     enable = true;
