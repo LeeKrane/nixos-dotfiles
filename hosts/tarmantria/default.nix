@@ -6,6 +6,7 @@
     ./audio.nix
     ./gpu-mux.nix
     ../../modules/nixos/gpu/nvidia-prime.nix
+    ../../modules/nixos/t7-win11.nix
   ];
 
   system.stateVersion = "26.05";

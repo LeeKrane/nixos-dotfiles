@@ -5,6 +5,7 @@
     ./disko.nix
     ./storage.nix
     ../../modules/nixos/gpu/nvidia-desktop.nix
+    ../../modules/nixos/t7-win11.nix
   ];
 
   system.stateVersion = "26.05";
