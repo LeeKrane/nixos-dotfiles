@@ -3,6 +3,8 @@
 {
   programs.steam = {
     enable = true;
+    # -console adds the Console tab to the client on every start.
+    package = pkgs.steam.override { extraArgs = "-console"; };
     gamescopeSession.enable = true;
     protontricks.enable = true;
     # proton-ge-bin: Glorious Eggroll's Proton build, added as a compat tool.
