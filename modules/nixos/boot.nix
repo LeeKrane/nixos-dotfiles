@@ -8,7 +8,7 @@
 {
   boot.loader.systemd-boot = {
     enable = true;
-    configurationLimit = 10;
+    configurationLimit = 3;
     editor = false;
     edk2-uefi-shell.enable = false;
 
