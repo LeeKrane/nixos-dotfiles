@@ -99,6 +99,7 @@ let
       pkgs.procps
       pkgs.gamemode
       pkgs.power-profiles-daemon
+      pkgs.coreutils
     ];
     text = ''
       ${env}
@@ -181,12 +182,21 @@ let
 
       trap 'kill "$gamemode_watch" 2>/dev/null; [ "$paused_replay" = 0 ] || gsr-ui-cli toggle-replay' EXIT
 
-      # The launcher is CEF-based and hangs on its software rasterizer under Proton. umu-run
-      # returns once the launcher exits, not the game.
-      # The performance power profile is held for the session and released when the launcher
-      # exits, back to whatever profile was set before.
+      # Hold the performance power profile until this script exits. The hold ends with the
+      # holder process, and tail exits once this shell does.
       powerprofilesctl launch --profile performance --reason "Escape from Tarkov" -- \
-        umu-run "$launcher" --disable-software-rasterizer "$@"
+        tail --pid=$$ -f /dev/null &
+
+      # The launcher is CEF-based and hangs on its software rasterizer under Proton.
+      umu-run "$launcher" --disable-software-rasterizer "$@" || true
+
+      # umu-run returns when the launcher exits, and the launcher exits once the game starts.
+      # Keep the session (power profile, gamemode registration, paused replay) until the game
+      # exits too.
+      sleep 5
+      while pgrep -x EscapeFromTarko >/dev/null; do
+        sleep 5
+      done
     '';
   };
 in
