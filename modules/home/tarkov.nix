@@ -98,6 +98,7 @@ let
       pkgs.umu-launcher
       pkgs.procps
       pkgs.gamemode
+      pkgs.power-profiles-daemon
     ];
     text = ''
       ${env}
@@ -182,7 +183,10 @@ let
 
       # The launcher is CEF-based and hangs on its software rasterizer under Proton. umu-run
       # returns once the launcher exits, not the game.
-      umu-run "$launcher" --disable-software-rasterizer "$@"
+      # The performance power profile is held for the session and released when the launcher
+      # exits, back to whatever profile was set before.
+      powerprofilesctl launch --profile performance --reason "Escape from Tarkov" -- \
+        umu-run "$launcher" --disable-software-rasterizer "$@"
     '';
   };
 in

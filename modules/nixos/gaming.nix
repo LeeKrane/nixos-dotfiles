@@ -13,9 +13,20 @@
 
   programs.gamemode = {
     enable = true;
-    # Raise registered games' CPU priority; gamemode's default of 0 leaves it unchanged.
-    settings.general.renice = 10;
+    settings.general = {
+      # Registered games get the highest CPU priority (nice -20) and best-effort I/O priority 0.
+      # PipeWire runs real-time through rtkit, so audio keeps up regardless.
+      renice = 20;
+      ioprio = 0;
+    };
   };
+
+  # ntsync: Wine's sync primitives in the kernel instead of wineserver round trips. GE-Proton
+  # uses it on its own whenever /dev/ntsync exists, which needs the module loaded.
+  boot.kernelModules = [ "ntsync" ];
+  # The kernel deliberately slows down split-lock instructions, which some Windows games issue
+  # constantly. Valve's Steam Deck kernel disables the slowdown for the same reason.
+  boot.kernel.sysctl."kernel.split_lock_mitigate" = 0;
   programs.gamescope.enable = true;
 
   hardware.steam-hardware.enable = true;
