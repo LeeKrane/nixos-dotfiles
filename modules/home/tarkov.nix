@@ -21,6 +21,45 @@ let
     export GAMEID=umu-default
   '';
 
+  # Display color as set in the NVIDIA Control Panel on Windows, in the units the driver stores
+  # under HKCU\Software\NVIDIA Corporation\Global\NVTweak\Devices\<id>\Color, not the slider
+  # percentages: brightness and contrast 100 are neutral, gamma is the slider value times 100.
+  # Sliders 50% / 62% / 2.30 store 100 / 108 / 230. Applied to the game only, through vkBasalt's
+  # LUT effect, since Wayland has no per-app gamma ramp.
+  color = {
+    brightness = 100;
+    contrast = 108;
+    gamma = 230;
+  };
+
+  # The driver's ramp, as reverse-engineered from nvxdapix.dll by nvBrightness (CalculateGamma in
+  # src/nvDisplay.cpp): contrast stretches around the midpoint, brightness offsets, then gamma,
+  # each step clamped. The ramp is per channel; the 3D LUT applies it to R, G and B.
+  colorLut = pkgs.runCommand "tarkov-color.cube" { nativeBuildInputs = [ pkgs.python3 ]; } ''
+    python3 - > $out <<'EOF'
+    b = (${toString color.brightness} - 100) / 100
+    c = (${toString color.contrast} - 100) / 100
+    g = 100 / ${toString color.gamma}
+    def ramp(x):
+        x = (c + 1) * (x - 0.5) if c <= 0 else (x - 0.5) / (1 - c)
+        x = min(max(x + b + 0.5, 0.0), 1.0)
+        return min(x**g, 1.0)
+    n = 64
+    print(f"LUT_3D_SIZE {n}")
+    t = [ramp(i / (n - 1)) for i in range(n)]
+    for bi in range(n):
+        for gi in range(n):
+            for ri in range(n):
+                print(f"{t[ri]:.6f} {t[gi]:.6f} {t[bi]:.6f}")
+    EOF
+  '';
+
+  vkbasaltConf = pkgs.writeText "tarkov-vkbasalt.conf" ''
+    effects = lut
+    lutFile = ${colorLut}
+    toggleKey = Home
+  '';
+
   # The launcher refuses to start the game unless the BattlEye service is registered.
   # Registering it does not make BattlEye work and does not enable online play.
   beService = "HKLM\\System\\CurrentControlSet\\Services\\BEService";
@@ -100,6 +139,13 @@ let
       # blacklist keeps it off the launcher, which DXVK also renders.
       export MANGOHUD=1
       export MANGOHUD_CONFIG="''${MANGOHUD_CONFIG:-fps_only,position=top-right,blacklist=BsgLauncher.exe}"
+      # Color correction (colorLut above). Like MangoHud, the host's vkBasalt layer (gaming.nix)
+      # reaches DXVK in umu's container; it also tints the launcher. Home toggles it in game.
+      export ENABLE_VKBASALT=1
+      # GE-Proton bundles its own vkBasalt layer under another name and enables it on the same
+      # variable, which applied the LUT twice. Keep only the host layer.
+      export VK_LOADER_LAYERS_DISABLE=VK_LAYER_VKBASALT_post_processing
+      export VKBASALT_CONFIG_FILE="''${VKBASALT_CONFIG_FILE:-${vkbasaltConf}}"
       # gsr-ui's replay buffer (recording.nix) holds ~220 MiB of VRAM and keeps NVENC busy, and
       # Tarkov fills tarmantria's 8 GiB of VRAM on its own. Pause it for the session, and resume it only
       # if it was on. The replay recorder is the gpu-screen-recorder process run with -r.
