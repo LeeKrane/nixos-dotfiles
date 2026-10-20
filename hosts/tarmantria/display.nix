@@ -77,6 +77,28 @@ in
       };
     };
 
+    # Fn+F10 sends KEY_TOUCHPAD_TOGGLE from asus-wmi-hotkeys; nothing handles it by default.
+    # The touchpad is listed twice, as -touchpad and -mouse, so both are toggled. A config
+    # reload enables the touchpad again and resets the flag with it.
+    extraKeybindsLua = ''
+      local kraneTouchpadOn = true
+      local function kraneToggleTouchpad()
+          kraneTouchpadOn = not kraneTouchpadOn
+          for _, name in ipairs({ "asup1205:00-093a:2008-touchpad", "asup1205:00-093a:2008-mouse" }) do
+              hl.device({ name = name, enabled = kraneTouchpadOn })
+          end
+          hl.exec_cmd("notify-send -a Hyprland -t 1500 'Touchpad "
+              .. (kraneTouchpadOn and "enabled" or "disabled") .. "'")
+      end
+    '';
+    binds = [
+      {
+        keys = "XF86TouchpadToggle";
+        action = "kraneToggleTouchpad";
+        description = "Input: Toggle touchpad";
+      }
+    ];
+
     # Same as the desktop. See hosts/tariognatha/display.nix for why.
     variables = {
       terminal = "kitty";
