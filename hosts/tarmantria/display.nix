@@ -78,14 +78,28 @@ in
     };
 
     # Fn+F10 sends KEY_TOUCHPAD_TOGGLE from asus-wmi-hotkeys; nothing handles it by default.
-    # The touchpad is listed twice, as -touchpad and -mouse, so both are toggled. A config
-    # reload enables the touchpad again and resets the flag with it.
+    # The touchpad is listed twice, as -touchpad and -mouse, so both are toggled. The off state
+    # is a marker file, so it survives config reloads, logout and reboot.
     extraKeybindsLua = ''
-      local kraneTouchpadOn = true
+      local kraneTouchpadMarker = (os.getenv("XDG_STATE_HOME") or (os.getenv("HOME") .. "/.local/state"))
+          .. "/hypr-touchpad-disabled"
+      local function kraneSetTouchpad(on)
+          for _, name in ipairs({ "asup1205:00-093a:2008-touchpad", "asup1205:00-093a:2008-mouse" }) do
+              hl.device({ name = name, enabled = on })
+          end
+      end
+      local marker = io.open(kraneTouchpadMarker, "r")
+      local kraneTouchpadOn = marker == nil
+      if marker then marker:close() end
+      kraneSetTouchpad(kraneTouchpadOn)
       local function kraneToggleTouchpad()
           kraneTouchpadOn = not kraneTouchpadOn
-          for _, name in ipairs({ "asup1205:00-093a:2008-touchpad", "asup1205:00-093a:2008-mouse" }) do
-              hl.device({ name = name, enabled = kraneTouchpadOn })
+          kraneSetTouchpad(kraneTouchpadOn)
+          if kraneTouchpadOn then
+              os.remove(kraneTouchpadMarker)
+          else
+              local f = io.open(kraneTouchpadMarker, "w")
+              if f then f:close() end
           end
           hl.exec_cmd("notify-send -a Hyprland -t 1500 'Touchpad "
               .. (kraneTouchpadOn and "enabled" or "disabled") .. "'")
