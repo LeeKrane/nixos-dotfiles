@@ -20,19 +20,25 @@
   hardware.nvidia.dynamicBoost.enable = true;
 
   # display.nix sets krane.hypr.*, a home-manager module, imported at the user level.
-  # tarkov.nix and stalker-gamma.nix are also home-manager, here and not in
+  # tarkov.nix, spt.nix and stalker-gamma.nix are also home-manager, here and not in
   # modules/home/default.nix: only the hosts that play them.
   home-manager.users.${config.krane.user.name} = {
     imports = [
       ./display.nix
       ../../modules/home/tarkov.nix
+      ../../modules/home/spt.nix
       ../../modules/home/stalker-gamma.nix
     ];
     krane.tarkov.primeOffload = true;
+    krane.spt.server = "https://spt-tarkov.krane.dev:6969";
   };
 
   # PCI bus IDs from `lspci | grep -E 'VGA|3D'`. FILL AT INSTALL: these placeholders are
   # almost certainly wrong for the actual laptop.
   krane.prime.intelBusId = "PCI:0:2:0"; # set by install.sh
   krane.prime.nvidiaBusId = "PCI:1:0:0"; # set by install.sh
+
+  # Fika (SPT co-op, spt.nix): the SPT server runs on the home server, so only the raid host's
+  # UDP 25565 is opened, for when this machine hosts a raid. home-manager cannot open ports.
+  networking.firewall.allowedUDPPorts = [ 25565 ];
 }

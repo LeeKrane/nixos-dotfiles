@@ -14,51 +14,11 @@
   ...
 }:
 let
-  env = ''
-    export WINEPREFIX="$HOME/Games/tarkov"
-    export PROTONPATH="${pkgs.proton-ge-bin.steamcompattool}"
-    # umu-default: GE-Proton's Tarkov protonfix is for the Steam copy and expects its layout.
-    export GAMEID=umu-default
-  '';
+  common = import ./tarkov-common.nix { inherit config lib pkgs; };
+  env = common.umuEnv "$HOME/Games/tarkov";
 
-  # Display color as set in the NVIDIA Control Panel on Windows, in the units the driver stores
-  # under HKCU\Software\NVIDIA Corporation\Global\NVTweak\Devices\<id>\Color, not the slider
-  # percentages: brightness and contrast 100 are neutral, gamma is the slider value times 100.
-  # Sliders 50% / 62% / 2.30 store 100 / 108 / 230. Applied to the game only, through vkBasalt's
-  # LUT effect, since Wayland has no per-app gamma ramp.
-  color = {
-    brightness = 100;
-    contrast = 108;
-    gamma = 230;
-  };
-
-  # The driver's ramp, as reverse-engineered from nvxdapix.dll by nvBrightness (CalculateGamma in
-  # src/nvDisplay.cpp): contrast stretches around the midpoint, brightness offsets, then gamma,
-  # each step clamped. The ramp is per channel; the 3D LUT applies it to R, G and B.
-  colorLut = pkgs.runCommand "tarkov-color.cube" { nativeBuildInputs = [ pkgs.python3 ]; } ''
-    python3 - > $out <<'EOF'
-    b = (${toString color.brightness} - 100) / 100
-    c = (${toString color.contrast} - 100) / 100
-    g = 100 / ${toString color.gamma}
-    def ramp(x):
-        x = (c + 1) * (x - 0.5) if c <= 0 else (x - 0.5) / (1 - c)
-        x = min(max(x + b + 0.5, 0.0), 1.0)
-        return min(x**g, 1.0)
-    n = 64
-    print(f"LUT_3D_SIZE {n}")
-    t = [ramp(i / (n - 1)) for i in range(n)]
-    for bi in range(n):
-        for gi in range(n):
-            for ri in range(n):
-                print(f"{t[ri]:.6f} {t[gi]:.6f} {t[bi]:.6f}")
-    EOF
-  '';
-
-  vkbasaltConf = pkgs.writeText "tarkov-vkbasalt.conf" ''
-    effects = lut
-    lutFile = ${colorLut}
-    toggleKey = Home
-  '';
+  # Starting one install offers to close the other, SPT (spt.nix), found by its prefix.
+  sptPrefix = "$HOME/Games/spt";
 
   # The launcher refuses to start the game unless the BattlEye service is registered.
   # Registering it does not make BattlEye work and does not enable online play.
@@ -94,15 +54,12 @@ let
     # No gamemoderun: its preload runs inside umu's Steam Runtime container, which cannot see
     # libgamemode.so in the Nix store, so gamemode never engaged and only spammed the log. The
     # game is registered from outside the container by PID instead, below.
-    runtimeInputs = [
-      pkgs.umu-launcher
-      pkgs.procps
-      pkgs.gamemode
-      pkgs.power-profiles-daemon
-      pkgs.coreutils
-    ];
+    runtimeInputs = common.runtimeInputs;
     text = ''
       ${env}
+      ${common.exclusion}
+      ensure_exclusive "Escape from Tarkov" SPT "${sptPrefix}"
+
       # Proton swaps the Windows BEClient for this runtime's Linux one. Without it the game
       # loads the Windows client, which needs the BEService kernel service Wine cannot run, and
       # quits with BATTLEYE_ServiceNotRunningProperly. Steam only installs it for Steam games.
@@ -128,75 +85,14 @@ let
         fi
       fi
 
-      ${lib.optionalString config.krane.tarkov.primeOffload ''
-        # PRIME offload: render on the NVIDIA dGPU, for GL and for DXVK's Vulkan.
-        export __NV_PRIME_RENDER_OFFLOAD=1
-        export __NV_PRIME_RENDER_OFFLOAD_PROVIDER=NVIDIA-G0
-        export __GLX_VENDOR_LIBRARY_NAME=nvidia
-        export __VK_LAYER_NV_optimus=NVIDIA_only
-      ''}
-
-      # FPS counter, top right like Steam's. pressure-vessel imports the host's MangoHud Vulkan
-      # layer (gaming.nix) into umu's container, so the variable alone enables it for DXVK. The
-      # blacklist keeps it off the launcher, which DXVK also renders.
-      export MANGOHUD=1
-      export MANGOHUD_CONFIG="''${MANGOHUD_CONFIG:-fps_only,position=top-right,blacklist=BsgLauncher.exe}"
-      # Color correction (colorLut above). Like MangoHud, the host's vkBasalt layer (gaming.nix)
-      # reaches DXVK in umu's container; it also tints the launcher. Home toggles it in game.
-      export ENABLE_VKBASALT=1
-      # GE-Proton bundles its own vkBasalt layer under another name and enables it on the same
-      # variable, which applied the LUT twice. Keep only the host layer.
-      export VK_LOADER_LAYERS_DISABLE=VK_LAYER_VKBASALT_post_processing
-      export VKBASALT_CONFIG_FILE="''${VKBASALT_CONFIG_FILE:-${vkbasaltConf}}"
-      # gsr-ui's replay buffer (recording.nix) holds ~220 MiB of VRAM and keeps NVENC busy, and
-      # Tarkov fills tarmantria's 8 GiB of VRAM on its own. Pause it for the session, and resume it only
-      # if it was on. The replay recorder is the gpu-screen-recorder process run with -r.
-      replay_on() {
-        local pid
-        for pid in $(pgrep -x gpu-screen-reco || true); do
-          tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | grep -q -- ' -r ' && return 0
-        done
-        return 1
-      }
-      paused_replay=0
-      if command -v gsr-ui-cli >/dev/null && replay_on; then
-        gsr-ui-cli toggle-replay
-        paused_replay=1
-      fi
-
-      # Register each game process with gamemoded as the launcher starts it; gamemoded drops it
-      # again when it exits. The match skips EscapeFromTarkov_BE.exe, BattlEye's stub. -r
-      # toggles, so each PID is requested once.
-      (
-        registered=" "
-        while :; do
-          for pid in $(pgrep -x EscapeFromTarko || true); do
-            case "$registered" in *" $pid "*) continue ;; esac
-            tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | grep -q 'EscapeFromTarkov\.exe' || continue
-            gamemoded -r"$pid" >/dev/null && registered="$registered$pid "
-          done
-          sleep 5
-        done
-      ) &
-      gamemode_watch=$!
-
-      trap 'kill "$gamemode_watch" 2>/dev/null; [ "$paused_replay" = 0 ] || gsr-ui-cli toggle-replay' EXIT
-
-      # Hold the performance power profile until this script exits. The hold ends with the
-      # holder process, and tail exits once this shell does.
-      powerprofilesctl launch --profile performance --reason "Escape from Tarkov" -- \
-        tail --pid=$$ -f /dev/null &
-
+      ${common.primeEnv}
+      ${common.renderEnv "BsgLauncher.exe"}
+      ${common.session "Escape from Tarkov"}
       # The launcher is CEF-based and hangs on its software rasterizer under Proton.
       umu-run "$launcher" --disable-software-rasterizer "$@" || true
 
       # umu-run returns when the launcher exits, and the launcher exits once the game starts.
-      # Keep the session (power profile, gamemode registration, paused replay) until the game
-      # exits too.
-      sleep 5
-      while pgrep -x EscapeFromTarko >/dev/null; do
-        sleep 5
-      done
+      ${common.waitForGameExit}
     '';
   };
 in

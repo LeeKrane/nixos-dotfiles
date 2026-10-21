@@ -11,14 +11,22 @@
   system.stateVersion = "26.05";
 
   # display.nix sets krane.hypr.*, a home-manager module, imported at the user level.
-  # tarkov.nix and stalker-gamma.nix are also home-manager, here and not in
+  # tarkov.nix, spt.nix and stalker-gamma.nix are also home-manager, here and not in
   # modules/home/default.nix: only the hosts that play them.
-  home-manager.users.${config.krane.user.name}.imports = [
-    ./display.nix
-    ../../modules/home/tarkov.nix
-    ../../modules/home/stalker-gamma.nix
-  ];
+  home-manager.users.${config.krane.user.name} = {
+    imports = [
+      ./display.nix
+      ../../modules/home/tarkov.nix
+      ../../modules/home/spt.nix
+      ../../modules/home/stalker-gamma.nix
+    ];
+    krane.spt.server = "https://spt-tarkov.krane.dev:6969";
+  };
 
   # Desktop only: peripherals.nix defaults this false via mkDefault, so plain `true` wins.
   services.hardware.openrgb.enable = true;
+
+  # Fika (SPT co-op, spt.nix): the SPT server runs on the home server, so only the raid host's
+  # UDP 25565 is opened, for when this machine hosts a raid. home-manager cannot open ports.
+  networking.firewall.allowedUDPPorts = [ 25565 ];
 }
