@@ -14,6 +14,10 @@
   # zram at twice the RAM size instead of boot.nix's 1:1 default: Tarkov alone keeps ~9 GiB
   # resident plus swapped on this 16 GiB laptop, and its launcher another ~3 GiB.
   zramSwap.memoryPercent = 200;
+  # lz4 instead of boot.nix's zstd: SPT keeps over 10 GiB swapped mid-raid, and zstd's slower
+  # decompression shows up as stutter whenever the game touches it. lz4 compresses less, so the
+  # same swapped data takes more RAM.
+  zramSwap.algorithm = "lz4";
 
   # nvidia-powerd: without it the RTX 4060 Laptop GPU stays at its 80 W base limit; Dynamic
   # Boost lets it borrow CPU headroom up to the 140 W nvidia-smi reports as its maximum.

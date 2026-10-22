@@ -56,7 +56,7 @@
   zramSwap = {
     enable = true;
     memoryPercent = lib.mkDefault 100;
-    algorithm = "zstd";
+    algorithm = lib.mkDefault "zstd";
   };
 
   # Tuning for swap on zram, not disk (values from the Arch wiki's zram page). Swapping to
