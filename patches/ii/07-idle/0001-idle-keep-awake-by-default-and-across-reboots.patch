@@ -1,0 +1,51 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Thu, 22 Oct 2026 12:25:12 +0200
+Subject: [PATCH] idle: keep awake by default and across reboots
+
+---
+ .../quickshell/ii/modules/common/Persistent.qml        |  2 +-
+ dots/.config/quickshell/ii/services/Idle.qml           | 10 ++++------
+ 2 files changed, 5 insertions(+), 7 deletions(-)
+
+diff --git a/dots/.config/quickshell/ii/modules/common/Persistent.qml b/dots/.config/quickshell/ii/modules/common/Persistent.qml
+index 8367692..7176e21 100644
+--- a/dots/.config/quickshell/ii/modules/common/Persistent.qml
++++ b/dots/.config/quickshell/ii/modules/common/Persistent.qml
+@@ -80,7 +80,7 @@ Singleton {
+             }
+ 
+             property JsonObject idle: JsonObject {
+-                property bool inhibit: false
++                property bool inhibit: true
+             }
+ 
+             property JsonObject overlay: JsonObject {
+diff --git a/dots/.config/quickshell/ii/services/Idle.qml b/dots/.config/quickshell/ii/services/Idle.qml
+index a2b8047..fb50471 100644
+--- a/dots/.config/quickshell/ii/services/Idle.qml
++++ b/dots/.config/quickshell/ii/services/Idle.qml
+@@ -11,16 +11,14 @@ Singleton {
+     id: root
+ 
+     property alias inhibit: idleInhibitor.enabled
+-    inhibit: false
++    inhibit: true
+ 
++    // Restore the saved state on every start, including the first after a
++    // reboot, so the toggle survives reboots.
+     Connections {
+         target: Persistent
+         function onReadyChanged() {
+-            if (!Persistent.isNewHyprlandInstance) {
+-                root.inhibit = Persistent.states.idle.inhibit;
+-            } else {
+-                Persistent.states.idle.inhibit = root.inhibit;
+-            }
++            root.inhibit = Persistent.states.idle.inhibit;
+         }
+     }
+ 
+-- 
+2.55.0
+

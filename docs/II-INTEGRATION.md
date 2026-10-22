@@ -391,6 +391,16 @@ A notification popup starts collapsed unless its sender set the
 `x-ii-expanded` hint, which `scripts/flake-update-notify.sh` does so its
 action buttons are visible without a right-click.
 
+### Idle (`07-idle`)
+
+| Patch | Fork commit | Port | Drop when |
+|---|---|---|---|
+| `0001` keep awake by default and across reboots | `local` | local | pinned `Idle.qml` restores `states.idle.inhibit` on a new Hyprland instance and defaults it to `true` |
+
+Upstream resets "Keep awake" to off on every new Hyprland instance, so it
+never survives a reboot. `0001` defaults it to on and always restores the
+saved value from `~/.local/state/quickshell/states.json`.
+
 ### Workflow
 
 The clone at `~/src/dots-hyprland` is a disposable workspace; the patch files
