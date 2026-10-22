@@ -25,20 +25,20 @@ in
         scale = 1;
       }
     ]
-    # Internal panel, to the right of the external one. Scale 1 when it is the only
+    # Internal panel, to the right of the external one. Scale 1.25 when it is the only
     # output; extraMonitorsLua below raises it while an external monitor is attached.
     ++ map (
       output:
       internal
       // {
         inherit output;
-        scale = 1;
+        scale = 1.25;
       }
     ) internalOutputs;
 
-    # Scale the internal panel up only while another output is connected. Hyprland
+    # Scale the internal panel to 1.25 alone and 1.6 while another output is connected. Hyprland
     # needs a scale that divides the mode into whole logical pixels; 1.6 gives
-    # 1600x900 logical.
+    # 1600x900 logical, 1.25 gives 2048x1152.
     # The external monitor sits at a negative x, so the panel keeps its 0x0 origin.
     extraMonitorsLua = ''
       local function is_internal(name)
@@ -57,7 +57,7 @@ in
                       output = m.name,
                       mode = "${internal.mode}",
                       position = "${internal.position}",
-                      scale = external and 1.6 or 1,
+                      scale = external and 1.6 or 1.25,
                   })
               end
           end
