@@ -23,6 +23,12 @@
     krane.spt.server = "https://spt-tarkov.krane.dev:6969";
   };
 
+  # No CPU vulnerability mitigations: the i9-9900KS pays heavily for its Spectre and MDS ones
+  # (IBRS, buffer clears on every kernel exit), and Wine games make syscalls and context switches
+  # constantly. A single-user gaming desktop; the cost is protection from local code, such as
+  # browser JavaScript, reading other processes' memory through speculative execution.
+  boot.kernelParams = [ "mitigations=off" ];
+
   # Desktop only: peripherals.nix defaults this false via mkDefault, so plain `true` wins.
   services.hardware.openrgb.enable = true;
 

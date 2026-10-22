@@ -290,10 +290,8 @@ let
     ];
     text = ''
       ${env}
-      # Reported needed: Proton's Xalia accessibility layer hangs the launcher. The media
-      # variable is SPT's guide default, for the game's videos.
+      # Reported needed: Proton's Xalia accessibility layer hangs the launcher.
       export PROTON_USE_XALIA=0
-      export PROTON_MEDIA_USE_GST=1
       ${common.exclusion}
       ${common.gamePids}
       ensure_exclusive SPT "Escape from Tarkov" "$HOME/Games/tarkov"
