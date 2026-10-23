@@ -20,8 +20,13 @@
       ../../modules/home/spt.nix
       ../../modules/home/stalker-gamma.nix
     ];
-    krane.spt.server = "https://spt-tarkov.krane.dev:6969";
+    # taragarmr's wg1 address, reached over wg0; the public port is closed.
+    krane.spt.server = "https://192.168.83.1:6969";
   };
+
+  # The SPT server hands out spt-tarkov.krane.dev as its backend address, so it has to
+  # resolve to the WireGuard side too.
+  networking.hosts."192.168.83.1" = [ "spt-tarkov.krane.dev" ];
 
   # No CPU vulnerability mitigations: the i9-9900KS pays heavily for its Spectre and MDS ones
   # (IBRS, buffer clears on every kernel exit), and Wine games make syscalls and context switches
