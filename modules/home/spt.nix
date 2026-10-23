@@ -287,6 +287,7 @@ let
     runtimeInputs = common.runtimeInputs ++ [
       dotnet
       pkgs.iproute2
+      pkgs.libnotify
     ];
     text = ''
       ${env}
@@ -336,7 +337,9 @@ let
         [ "$host" = "$hostport" ] || port=''${hostport##*:}
         # shellcheck disable=SC2016
         if ! timeout 5 bash -c 'exec 3<>"/dev/tcp/$1/$2"' _ "$host" "$port" 2>/dev/null; then
-          zenity --error --no-wrap --title=SPT --text="The SPT server at $remote does not answer." || true
+          msg="The SPT server at $remote does not answer."
+          echo "$msg" >&2
+          notify-send --urgency=critical --app-name=SPT SPT "$msg" || true
           exit 1
         fi
       else
