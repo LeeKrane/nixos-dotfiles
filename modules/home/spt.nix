@@ -34,7 +34,30 @@ let
   sptMetadataUrl = "https://patcher.sp-tushonka.com";
 
   common = import ./tarkov-common.nix { inherit config lib pkgs; };
-  env = common.umuEnv "$HOME/Games/spt";
+  # Trial: a newer GE-Proton than nixpkgs' for SPT only, for the client's post-raid hang.
+  # Live Tarkov keeps the nixpkgs one from tarkov-common.nix.
+  proton =
+    (pkgs.proton-ge-bin.overrideAttrs (
+      final: prev: {
+        version = "GE-Proton11-11";
+        # src comes from passthru.variants, which is overridden below.
+        __intentionallyOverridingVersion = true;
+        passthru = prev.passthru // {
+          variants = prev.passthru.variants // {
+            x86_64-linux = {
+              toolName = "${final.version}-x86_64";
+              src = pkgs.fetchzip {
+                url = "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/${final.version}/${final.version}-x86_64.tar.gz";
+                hash = "sha256-3tVgf83IkteFtVo/bHd4yG1xCtPeuW8FXaTrHOLjvKQ=";
+              };
+            };
+          };
+        };
+      }
+    )).steamcompattool;
+  env = common.umuEnv "$HOME/Games/spt" + ''
+    export PROTONPATH="${proton}"
+  '';
 
   # SPT 4.1's server targets .NET 10 and ASP.NET Core 10; a later SPT series needs a newer one.
   dotnet = pkgs.dotnet-aspnetcore_10;
@@ -293,6 +316,9 @@ let
       ${env}
       # Reported needed: Proton's Xalia accessibility layer hangs the launcher.
       export PROTON_USE_XALIA=0
+      # The menu's TV videos (TUE_Main_Menu_Video) loop for the whole session, in raids too;
+      # Wine decodes them in software on 3-4 threads at 100% each. No H.264 decoder, no videos.
+      export WINEDLLOVERRIDES="msmpeg2vdec=d''${WINEDLLOVERRIDES:+;$WINEDLLOVERRIDES}"
       ${common.exclusion}
       ${common.gamePids}
       ensure_exclusive SPT "Escape from Tarkov" "$HOME/Games/tarkov"
@@ -421,6 +447,26 @@ let
       wait "$launcher" 2>/dev/null || true
     '';
   };
+
+  # Greed.exe, the [SVM] Server Value Modifier's preset editor, in the SPT prefix. Presets are
+  # written to this install's SPT_Runtime; a remote server needs them copied over and a restart.
+  sptGreed = pkgs.writeShellApplication {
+    name = "spt-greed";
+    runtimeInputs = [ pkgs.umu-launcher ];
+    text = ''
+      ${env}
+      export PROTON_USE_XALIA=0
+      # Under X11 Greed dies on XI_BadDevice from X_GetDeviceButtonMapping when an input
+      # device comes or goes; Wine's Wayland driver has no XInput.
+      export PROTON_ENABLE_WAYLAND=1
+      cd "${sptDir}"
+      if [ ! -e Greed.exe ]; then
+        echo "No Greed.exe in ${sptDir}. Install SVM's client part first." >&2
+        exit 1
+      fi
+      exec umu-run Greed.exe "$@"
+    '';
+  };
 in
 {
   options.krane.spt.server = lib.mkOption {
@@ -437,12 +483,21 @@ in
   config.home.packages = [
     sptSetup
     spt
+    sptGreed
   ];
 
   config.xdg.desktopEntries.spt = {
-    name = "Single Player Tarkov";
+    name = "SPT Tarkov";
     comment = "SPT with Fika through umu-launcher and GE-Proton, server run natively";
     exec = "${spt}/bin/spt";
+    icon = "applications-games";
+    categories = [ "Game" ];
+  };
+
+  config.xdg.desktopEntries.spt-greed = {
+    name = "SPT Greed (SVM presets)";
+    comment = "Server Value Modifier preset editor in the SPT prefix";
+    exec = "${sptGreed}/bin/spt-greed";
     icon = "applications-games";
     categories = [ "Game" ];
   };
