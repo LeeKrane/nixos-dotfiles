@@ -57,7 +57,7 @@
       terminal = "kitty";
       browser = "zen-beta";
       codeEditor = "kitty -1 nvim";
-      textEditor = "kitty -1 nvim";
+      textEditor = "zeditor";
       fileManager = "dolphin";
     };
   };

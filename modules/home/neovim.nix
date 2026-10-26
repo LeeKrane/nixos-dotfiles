@@ -54,5 +54,7 @@ in
     mimeType = textTypes;
   };
 
-  xdg.mimeApps.defaultApplications = lib.genAttrs textTypes (_: "nvim-kitty.desktop");
+  # GUI default for text files is Zed (dev.zed.Zed.desktop, from apps.nix); nvim
+  # stays $EDITOR for terminal tools such as git.
+  xdg.mimeApps.defaultApplications = lib.genAttrs textTypes (_: "dev.zed.Zed.desktop");
 }
