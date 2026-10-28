@@ -23,6 +23,10 @@
   # Boost lets it borrow CPU headroom up to the 140 W nvidia-smi reports as its maximum.
   hardware.nvidia.dynamicBoost.enable = true;
 
+  # S3 instead of the s2idle default: s2idle intermittently never came back on lid open
+  # (journal ends at "PM: suspend entry (s2idle)", keyboard light blinking, no input).
+  boot.kernelParams = [ "mem_sleep_default=deep" ];
+
   # display.nix sets krane.hypr.*, a home-manager module, imported at the user level.
   # tarkov.nix, spt.nix and stalker-gamma.nix are also home-manager, here and not in
   # modules/home/default.nix: only the hosts that play them.
