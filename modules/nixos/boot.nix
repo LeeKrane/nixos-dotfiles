@@ -31,8 +31,6 @@
     themePackages = [ pkgs.plymouth-lone ];
   };
 
-  boot.initrd.systemd.enable = true;
-
   boot.kernelParams = [
     "quiet"
     "splash"

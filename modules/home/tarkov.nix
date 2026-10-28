@@ -54,7 +54,7 @@ let
     # No gamemoderun: its preload runs inside umu's Steam Runtime container, which cannot see
     # libgamemode.so in the Nix store, so gamemode never engaged and only spammed the log. The
     # game is registered from outside the container by PID instead, below.
-    runtimeInputs = common.runtimeInputs;
+    inherit (common) runtimeInputs;
     text = ''
       ${env}
       ${common.exclusion}
