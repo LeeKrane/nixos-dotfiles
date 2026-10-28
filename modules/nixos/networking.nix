@@ -34,6 +34,16 @@
     autostart = true;
   };
 
+  # The peer endpoint is a hostname: at boot wg-quick can run before Wi-Fi/DNS
+  # is up and fail with "Name or service not known". Keep retrying instead.
+  systemd.services.wg-quick-wg0 = lib.mkIf (config.sops.templates ? "wg0.conf") {
+    unitConfig.StartLimitIntervalSec = 0;
+    serviceConfig = {
+      Restart = "on-failure";
+      RestartSec = 5;
+    };
+  };
+
   # WireGuard peer name for the tunnel server; only meaningful when wg0 is up.
   networking.hosts = lib.mkIf (config.sops.templates ? "wg0.conf") {
     "192.168.82.1" = [ "taragarmr" ];
