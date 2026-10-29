@@ -9,6 +9,7 @@
     ./go.nix
     ./rust.nix
     ./java.nix
+    ./scala.nix
     ./tex.nix
     ./markdown.nix
     ./docker-shell.nix
@@ -164,6 +165,7 @@
       gosum
       gowork
       java
+      scala
       latex
       bibtex
       dockerfile

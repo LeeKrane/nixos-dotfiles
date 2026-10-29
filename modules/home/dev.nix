@@ -27,6 +27,13 @@
     go
     jdk21
 
+    # Scala: sbt for builds, scala-cli for single-file scripts. Both run on programs.java's jdk21.
+    # metals sits on PATH for Zed's Scala extension; nixvim bundles its own (lang/scala.nix).
+    sbt
+    scala-cli
+    metals
+    scalafmt
+
     # No `clang` alongside `gcc`: both ship bin/c++/bin/cc and collide in buildEnv the same way.
     # For clang-specific work use `nix shell nixpkgs#clang` or a devShell instead.
     gcc
