@@ -40,6 +40,8 @@
     krane.tarkov.primeOffload = true;
     # taragarmr's wg1 address, reached over wg0; the public port is closed.
     krane.spt.server = "https://192.168.83.1:6969";
+    # The i7-13700H's P-cores (/sys/devices/cpu_core/cpus); 12-19 are its E-cores.
+    krane.spt.cpus = "0-11";
   };
 
   # The SPT server hands out spt-tarkov.krane.dev as its backend address, so it has to

@@ -311,6 +311,7 @@ let
       dotnet
       pkgs.iproute2
       pkgs.libnotify
+      pkgs.util-linux
     ];
     text = ''
       ${env}
@@ -326,6 +327,8 @@ let
       runtime="${sptDir}/SPT_Runtime"
       # krane.spt.server: the remote server to use, empty to run this install's own.
       remote=${lib.escapeShellArg (if cfg.server == null then "" else cfg.server)}
+      # krane.spt.cpus: the CPUs the launcher and the game are confined to, empty for all.
+      cpus=${lib.escapeShellArg (if cfg.cpus == null then "" else cfg.cpus)}
       if [ ! -e "$runtime/SPT.Launcher.exe" ] || { [ -z "$remote" ] && [ ! -e "$runtime/SPT.Server.Linux.dll" ]; }; then
         echo "No SPT in $runtime. Run spt-setup first." >&2
         exit 1
@@ -422,8 +425,14 @@ let
 
       cd "$runtime"
       # Unlike BSG's, the SPT launcher stays open while the game runs, and umu-run only returns
-      # once it closes. Run it in the background and watch the game instead.
-      umu-run SPT.Launcher.exe "$@" &
+      # once it closes. Run it in the background and watch the game instead. With
+      # krane.spt.cpus, taskset confines it before it starts, so every game thread inherits
+      # the set; gamemoded's own pinning only comes once it has registered the game.
+      if [ -n "$cpus" ]; then
+        taskset -c "$cpus" umu-run SPT.Launcher.exe "$@" &
+      else
+        umu-run SPT.Launcher.exe "$@" &
+      fi
       launcher=$!
 
       # Wait for the game, for as long as the launcher is open: the player may sit in it a
@@ -477,6 +486,17 @@ in
       URL of a remote SPT server, as given to the launcher, for `spt` to use instead of
       starting its own. It must run the same SPT, Fika and server mods as this install's
       client side.
+    '';
+  };
+
+  options.krane.spt.cpus = lib.mkOption {
+    type = lib.types.nullOr lib.types.str;
+    default = null;
+    example = "0-11";
+    description = ''
+      CPU list, in taskset's format, that `spt` confines the launcher and the game to, e.g.
+      a hybrid CPU's P-cores, so Tarkov's main thread never lands on an E-core. Null for
+      all CPUs.
     '';
   };
 
