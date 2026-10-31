@@ -7,7 +7,11 @@
   # modules/nixos/shells.nix instead (/etc/fish, never wiped).
   programs.bat.enable = true;
   programs.eza.enable = true;
-  programs.btop.enable = true;
+  # btop-cuda adds /run/opengl-driver/lib to the rpath so btop can dlopen libnvidia-ml for the GPU box.
+  programs.btop = {
+    enable = true;
+    package = pkgs.btop-cuda;
+  };
 
   # Point ssh at the gcr ssh-agent component gnome-keyring already runs
   # (services.gnome.gnome-keyring.enable in modules/nixos/desktop.nix), and let
