@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
-      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
       - name: Compute host list
         id: hosts
         run: |
@@ -89,7 +89,7 @@ jobs:
           scripts/update-summary.sh "$RUNNER_TEMP/flake.lock.old" flake.lock \
             "$RUNNER_TEMP/versions-before.json" "$RUNNER_TEMP/versions-after.json" \
             "$RUNNER_TEMP/update.log" > "$RUNNER_TEMP/summary.md"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: steps.diff.outputs.haschanges == 'true'
         with:
           name: update-summary
@@ -148,7 +148,7 @@ jobs:
           # between this job being queued and this checkout running.
           ref: ${{ needs.update.outputs.sha }}
           fetch-depth: 2
-      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
       - name: Evaluate toplevel derivations before and after
         run: |
           # shellcheck disable=SC2016 # ${h} is Nix antiquotation, not a shell variable
@@ -164,7 +164,7 @@ jobs:
         id: week
         run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
       - name: Cache vulnix's NVD database
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/vulnix
           key: vulnix-nvd-${{ steps.week.outputs.week }}
@@ -220,7 +220,7 @@ jobs:
           mapfile -t HOSTS < <(jq -r '.[]' <<<"$HOSTS_JSON")
           scripts/security-summary.sh "$RUNNER_TEMP/security" "${HOSTS[@]}" \
             > "$RUNNER_TEMP/security-summary.md"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: security-summary
           path: ${{ runner.temp }}/security-summary.md
@@ -233,7 +233,7 @@ jobs:
       # the logs still upload even when the job ends up failed overall.
       # continue-on-error: true keeps an upload failure (no files matched,
       # say) from being the thing that fails the job.
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         continue-on-error: true
         with:
@@ -256,11 +256,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: update-summary
           path: ${{ runner.temp }}
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         if: needs.security.result == 'success'
         with:
           name: security-summary
@@ -306,7 +306,7 @@ jobs:
             echo 'Checks do not appear on this pull request: it is opened with GITHUB_TOKEN, which triggers no workflows. Merging runs the gate on main.'
           } > "$body"
           echo "title=$title" >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pr-body-full
           path: ${{ runner.temp }}/body.md
