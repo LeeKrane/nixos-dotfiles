@@ -35,6 +35,7 @@
       spotify
       losslesscut
       upscaler
+      voicestudio # pkgs/voicestudio
 
       # Comms
       vesktop
