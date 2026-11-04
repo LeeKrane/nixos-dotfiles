@@ -23,9 +23,12 @@
   # Boost lets it borrow CPU headroom up to the 140 W nvidia-smi reports as its maximum.
   hardware.nvidia.dynamicBoost.enable = true;
 
-  # S3 instead of the s2idle default: s2idle intermittently never came back on lid open
-  # (journal ends at "PM: suspend entry (s2idle)", keyboard light blinking, no input).
-  boot.kernelParams = [ "mem_sleep_default=deep" ];
+  # Suspend the way Nobara and CachyOS do, where it resumed fine on this laptop: VRAM saved
+  # to a file by the nvidia-suspend/resume systemd services. The kernel-notifier default for
+  # open modules >= 595, with no TemporaryFilePath, left both s2idle and S3 stuck at
+  # "PM: suspend entry" (keyboard light blinking, not even the power button woke it).
+  hardware.nvidia.powerManagement.kernelSuspendNotifier = false;
+  boot.extraModprobeConfig = "options nvidia NVreg_TemporaryFilePath=/var/tmp";
 
   # display.nix sets krane.hypr.*, a home-manager module, imported at the user level.
   # tarkov.nix, spt.nix and stalker-gamma.nix are also home-manager, here and not in
