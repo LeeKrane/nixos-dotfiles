@@ -1,0 +1,43 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Wed, 4 Nov 2026 12:40:00 +0100
+Subject: [PATCH] idle: re-arm the inhibitor once its surface is mapped
+
+Quickshell creates the idle inhibitor as soon as the wl_surface exists,
+before the layer surface is mapped. Hyprland counts it as not visible and
+only rechecks inhibitors on window or focus events, so Keep awake could
+stay ineffective and hypridle still locked the session. Recreate the
+inhibitor once, 3 s after start.
+
+Drop when Hyprland rechecks idle inhibitors on layer surface map.
+---
+ dots/.config/quickshell/ii/services/Idle.qml | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/dots/.config/quickshell/ii/services/Idle.qml b/dots/.config/quickshell/ii/services/Idle.qml
+--- a/dots/.config/quickshell/ii/services/Idle.qml
++++ b/dots/.config/quickshell/ii/services/Idle.qml
+@@ -31,6 +31,20 @@
+         Persistent.states.idle.inhibit = root.inhibit;
+     }
+
++    // At startup the inhibitor is created before its layer surface is mapped.
++    // Hyprland then counts it as not visible and only rechecks on window or
++    // focus events, so idle can stay uninhibited. Recreate it once the surface
++    // is mapped.
++    Timer {
++        running: true
++        interval: 3000
++        onTriggered: {
++            if (!root.inhibit) return;
++            root.inhibit = false;
++            Qt.callLater(() => root.inhibit = true);
++        }
++    }
++
+     IdleInhibitor {
+         id: idleInhibitor
+         window: PanelWindow {
+--
+2.55.0
+

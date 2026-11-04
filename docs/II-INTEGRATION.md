@@ -396,10 +396,16 @@ action buttons are visible without a right-click.
 | Patch | Fork commit | Port | Drop when |
 |---|---|---|---|
 | `0001` keep awake by default and across reboots | `local` | local | pinned `Idle.qml` restores `states.idle.inhibit` on a new Hyprland instance and defaults it to `true` |
+| `0002` re-arm the inhibitor once its surface is mapped | `local` | local | Hyprland rechecks idle inhibitors when a layer surface maps |
 
 Upstream resets "Keep awake" to off on every new Hyprland instance, so it
 never survives a reboot. `0001` defaults it to on and always restores the
 saved value from `~/.local/state/quickshell/states.json`.
+
+`0002`: Quickshell creates the inhibitor before its layer surface is mapped,
+Hyprland counts it as not visible and only rechecks on window or focus
+events, so "Keep awake" could stay ineffective after login. The patch
+recreates the inhibitor once, 3 s after start.
 
 ### Workflow
 
