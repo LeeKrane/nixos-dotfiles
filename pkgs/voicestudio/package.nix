@@ -21,6 +21,14 @@ in
 appimageTools.wrapType2 {
   inherit pname version src;
 
+  # The app copies its Python backend out of resources/ into runtime/, keeping
+  # the store's read-only modes, so swapping or deleting old copies fails with
+  # EACCES. Restore owner write before each launch.
+  profile = ''
+    runtime="''${XDG_CONFIG_HOME:-$HOME/.config}/VoiceStudio/runtime"
+    if [ -d "$runtime" ]; then chmod -R u+w "$runtime" 2>/dev/null || true; fi
+  '';
+
   extraInstallCommands = ''
     install -Dm444 ${contents}/VoiceStudio.desktop $out/share/applications/voicestudio.desktop
     substituteInPlace $out/share/applications/voicestudio.desktop \
