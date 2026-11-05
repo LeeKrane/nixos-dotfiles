@@ -85,6 +85,21 @@
       };
     };
 
+  # Vesktop has no global shortcuts on Wayland, so forward Discord's built-in in-app toggles
+  # (Ctrl+Shift+M mute, Ctrl+Shift+D deafen) to its window without focusing it.
+  krane.hypr.binds = [
+    {
+      keys = "F6";
+      action = ''hl.dsp.send_shortcut({ mods = "CTRL SHIFT", key = "M", window = "class:vesktop" })'';
+      description = "Vesktop: Toggle mute";
+    }
+    {
+      keys = "F7";
+      action = ''hl.dsp.send_shortcut({ mods = "CTRL SHIFT", key = "D", window = "class:vesktop" })'';
+      description = "Vesktop: Toggle deafen";
+    }
+  ];
+
   # xdg-settings/xdg-open consult $BROWSER first in some tools; keep it aligned
   # with the mime defaults above.
   home.sessionVariables.BROWSER = "zen-beta";
