@@ -11,8 +11,8 @@
   system.stateVersion = "26.05";
 
   # display.nix sets krane.hypr.*, a home-manager module, imported at the user level.
-  # tarkov.nix, spt.nix and stalker-gamma.nix are also home-manager, here and not in
-  # modules/home/default.nix: only the hosts that play them.
+  # tarkov.nix, spt.nix, stalker-gamma.nix and heuristiclab.nix are also home-manager,
+  # here and not in modules/home/default.nix: only the hosts that use them.
   home-manager.users.${config.krane.user.name} = {
     imports = [
       ./display.nix
@@ -23,6 +23,7 @@
     ];
     # taragarmr's wg1 address, reached over wg0; the public port is closed.
     krane.spt.server = "https://192.168.83.1:6969";
+    krane.spt.vagabondServer = "https://192.168.83.1:6970";
   };
 
   # The SPT server hands out spt-tarkov.krane.dev as its backend address, so it has to
