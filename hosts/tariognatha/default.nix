@@ -19,6 +19,7 @@
       ../../modules/home/tarkov.nix
       ../../modules/home/spt.nix
       ../../modules/home/stalker-gamma.nix
+      ../../modules/home/heuristiclab.nix
     ];
     # taragarmr's wg1 address, reached over wg0; the public port is closed.
     krane.spt.server = "https://192.168.83.1:6969";

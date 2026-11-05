@@ -39,6 +39,7 @@
       ../../modules/home/tarkov.nix
       ../../modules/home/spt.nix
       ../../modules/home/stalker-gamma.nix
+      ../../modules/home/heuristiclab.nix
     ];
     krane.tarkov.primeOffload = true;
     # taragarmr's wg1 address, reached over wg0; the public port is closed.
