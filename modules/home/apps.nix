@@ -1,8 +1,8 @@
 # GUI applications from the machine inventory. flameshot is absent: ii ships hyprshot instead,
 # already wired into its keybinds.
-# Out of scope, never add here or elsewhere in this repo: all JetBrains IDEs and
-# jetbrains-toolbox, kate, android-studio, audacity, brave, thunderbird, notesnook, alpaca,
-# gnome-clocks, super-productivity, Path of Building, Hytale Launcher, DaVinci Resolve, VirtualBox.
+# Out of scope, never add here or elsewhere in this repo: jetbrains-toolbox, kate,
+# android-studio, audacity, brave, thunderbird, notesnook, alpaca, gnome-clocks,
+# super-productivity, Path of Building, Hytale Launcher, DaVinci Resolve, VirtualBox.
 { inputs, pkgs, ... }:
 {
   home.packages =
@@ -16,6 +16,7 @@
       vscode
       zed-editor
       code-cursor
+      pycharm # unified edition; its free tier includes Jupyter notebooks
 
       # File manager
       kdePackages.dolphin
