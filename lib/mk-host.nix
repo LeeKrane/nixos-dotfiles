@@ -2,6 +2,22 @@
 # Shared host builder: wires disko, sops-nix, home-manager and the soymou
 # module, at the HM level to avoid a dconf eval error.
 { inputs }:
+let
+  # Servers follow the stable channel: the stable nixpkgs, home-manager and nixvim inputs
+  # stand in under their usual names, so every module that reads inputs.nixpkgs (for
+  # example the nix registry) sees stable on servers. Desktops get `inputs` unchanged.
+  inputsFor =
+    role:
+    if role == "server" then
+      inputs
+      // {
+        nixpkgs = inputs.nixpkgs-stable;
+        home-manager = inputs.home-manager-stable;
+        nixvim = inputs.nixvim-stable;
+      }
+    else
+      inputs;
+in
 {
   hostName,
   system,
@@ -10,10 +26,14 @@
   role ? "desktop",
   extraModules ? [ ],
 }:
-inputs.nixpkgs.lib.nixosSystem {
+let
+  roleInputs = inputsFor role;
+in
+roleInputs.nixpkgs.lib.nixosSystem {
   inherit system;
   specialArgs = {
-    inherit inputs hostName role;
+    inherit hostName role;
+    inputs = roleInputs;
   };
   modules = [
     {
@@ -23,9 +43,9 @@ inputs.nixpkgs.lib.nixosSystem {
       nixpkgs.overlays = import ../overlays;
       nixpkgs.config.allowUnfree = true;
     }
-    inputs.disko.nixosModules.disko
-    inputs.sops-nix.nixosModules.sops
-    inputs.home-manager.nixosModules.home-manager
+    roleInputs.disko.nixosModules.disko
+    roleInputs.sops-nix.nixosModules.sops
+    roleInputs.home-manager.nixosModules.home-manager
     # Role before common: environment.systemPackages and other list options merge in import
     # order, and the pre-split module order put common modules (sops) after desktop ones.
     ../modules/nixos/${role}
@@ -41,13 +61,14 @@ inputs.nixpkgs.lib.nixosSystem {
           # every switch. Without this, the next switch collides with it.
           backupFileExtension = "hm-bak";
           extraSpecialArgs = {
-            inherit inputs hostName role;
+            inherit hostName role;
+            inputs = roleInputs;
             # modules/nixos/common/user.nix's krane.user, so home-manager modules read the
             # account name and git identity from the same per-host place.
             kraneUser = config.krane.user;
           };
           users.${config.krane.user.name}.imports =
-            inputs.nixpkgs.lib.optional (role == "desktop")
+            roleInputs.nixpkgs.lib.optional (role == "desktop")
               # HM level, not NixOS: soymou #19 dconf error.
               # Imported from a patched copy of the flake source rather than
               # homeManagerModules.default: illogical-flake pins Qt to qt6ct in three
@@ -61,9 +82,9 @@ inputs.nixpkgs.lib.nixosSystem {
               # is an infinite recursion.
               (
                 let
-                  patched = inputs.nixpkgs.legacyPackages.${system}.applyPatches {
+                  patched = roleInputs.nixpkgs.legacyPackages.${system}.applyPatches {
                     name = "illogical-flake-kde-platformtheme";
-                    src = inputs.illogical-flake;
+                    src = roleInputs.illogical-flake;
                     patches = [ ../patches/illogical-flake-kde-platformtheme.patch ];
                   };
                   # dots-hyprland (`inputs.dotfiles` below), not illogical-flake
@@ -87,7 +108,7 @@ inputs.nixpkgs.lib.nixosSystem {
                   # derived from the module's `config` would recurse infinitely.
                   iiSeries =
                     let
-                      lib = inputs.nixpkgs.lib;
+                      lib = roleInputs.nixpkgs.lib;
                       root = ../patches/ii;
                       sortedNames =
                         pred: dir: lib.sort lib.lessThan (builtins.attrNames (lib.filterAttrs pred (builtins.readDir dir)));
@@ -95,13 +116,13 @@ inputs.nixpkgs.lib.nixosSystem {
                         dir: map (n: dir + "/${n}") (sortedNames (n: t: t == "regular" && lib.hasSuffix ".patch" n) dir);
                     in
                     lib.concatMap (d: patchesIn (root + "/${d}")) (sortedNames (_n: t: t == "directory") root);
-                  patchedDotfiles = inputs.nixpkgs.legacyPackages.${system}.applyPatches {
+                  patchedDotfiles = roleInputs.nixpkgs.legacyPackages.${system}.applyPatches {
                     name = "dots-hyprland-patched";
-                    src = inputs.illogical-flake.inputs.dotfiles;
+                    src = roleInputs.illogical-flake.inputs.dotfiles;
                     patches = [ ../patches/illogical-flake-cheatsheet-fkeys.patch ] ++ iiSeries;
                   };
                   iiInputs = {
-                    inherit (inputs.illogical-flake.inputs) quickshell nur;
+                    inherit (roleInputs.illogical-flake.inputs) quickshell nur;
                     dotfiles = patchedDotfiles;
                   };
                 in
@@ -117,7 +138,7 @@ inputs.nixpkgs.lib.nixosSystem {
                 }
               )
             ++ [
-              inputs.nix-index-database.homeModules.nix-index
+              roleInputs.nix-index-database.homeModules.nix-index
               ../modules/home/common
               ../modules/home/${role}
             ];

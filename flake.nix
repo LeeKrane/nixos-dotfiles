@@ -9,6 +9,15 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # Stable channel for role = "server" hosts (lib/mk-host.nix swaps these in under the
+    # names nixpkgs/home-manager/nixvim). Bump all three together at each NixOS release.
+    nixpkgs-stable.url = "github:NixOS/nixpkgs/nixos-26.05";
+    home-manager-stable = {
+      url = "github:nix-community/home-manager/release-26.05";
+      inputs.nixpkgs.follows = "nixpkgs-stable";
+    };
+    nixvim-stable.url = "github:nix-community/nixvim/nixos-26.05";
+
     # end-4's dots-hyprland is a git checkout, pinned here as `dotfiles`.
     dots-hyprland = {
       url = "git+https://github.com/end-4/dots-hyprland?submodules=1";
