@@ -121,12 +121,15 @@
         nixpkgs.lib.filterAttrs (_: type: type == "directory") (builtins.readDir ./hosts)
       );
 
-      # Per-host metadata: an optional hosts/<name>/host.nix attrset `{ system, role, board }`. A
+      # Per-host metadata: an optional hosts/<name>/host.nix attrset `{ system, role, board, image }`. A
       # missing file, or a missing attribute in it, takes the default: x86_64-linux, role
       # "desktop", no board. role picks the module set mk-host.nix imports
       # (modules/{nixos,home}/{common,<role>}). board ("rpi4" | "rpi5") marks a Raspberry Pi:
       # it adds the nixos-raspberrypi modules, and defaults system to aarch64-linux and role
-      # to "server" (both may only be given as those values). Unknown attribute names, roles
+      # to "server" (both may only be given as those values). image ("sd" or absent/null) says the
+      # host builds a flashable SD image (it imports the nixos-raspberrypi sd-image module);
+      # it needs a board and is what `packages.image-<host>` is derived from, so listing the
+      # packages does not evaluate every Pi. Unknown attribute names, roles
       # or boards fail evaluation instead of silently falling back to the defaults.
       hostMeta = nixpkgs.lib.genAttrs hosts (
         name:
@@ -138,6 +141,7 @@
             system = if board == null then system else "aarch64-linux";
             role = if board == null then "desktop" else "server";
             inherit board;
+            image = null;
           }
           // given;
           unknown = builtins.filter (
@@ -146,13 +150,14 @@
               "system"
               "role"
               "board"
+              "image"
             ]
           ) (builtins.attrNames given);
         in
         assert nixpkgs.lib.assertMsg (builtins.isAttrs given)
-          "hosts/${name}/host.nix: must evaluate to an attribute set { system, role, board }, got ${builtins.typeOf given}";
+          "hosts/${name}/host.nix: must evaluate to an attribute set { system, role, board, image }, got ${builtins.typeOf given}";
         assert nixpkgs.lib.assertMsg (unknown == [ ])
-          "hosts/${name}/host.nix: unknown attribute(s) ${toString unknown}; only system, role and board are allowed";
+          "hosts/${name}/host.nix: unknown attribute(s) ${toString unknown}; only system, role, board and image are allowed";
         assert nixpkgs.lib.assertMsg (builtins.elem meta.role [
           "desktop"
           "server"
@@ -162,6 +167,13 @@
           "rpi4"
           "rpi5"
         ]) "hosts/${name}/host.nix: board must be \"rpi4\" or \"rpi5\", got \"${toString meta.board}\"";
+        assert nixpkgs.lib.assertMsg (builtins.elem meta.image [
+          null
+          "sd"
+        ]) "hosts/${name}/host.nix: image must be \"sd\" or absent, got \"${toString meta.image}\"";
+        assert nixpkgs.lib.assertMsg (
+          meta.image == null || meta.board != null
+        ) "hosts/${name}/host.nix: image \"${toString meta.image}\" needs a board";
         assert nixpkgs.lib.assertMsg
           (meta.board == null || (meta.system == "aarch64-linux" && meta.role == "server"))
           "hosts/${name}/host.nix: board ${toString meta.board} needs system aarch64-linux and role \"server\"";
@@ -171,9 +183,8 @@
       # (scripts/hosts.nix), but they are evaluated by checks.pi-eval, and their images are
       # exposed as packages (`nix build .#image-<host>`, via qemu binfmt or an aarch64 builder).
       piHosts = builtins.filter (name: hostMeta.${name}.board != null) hosts;
-      sdImageHosts = builtins.filter (
-        name: self.nixosConfigurations.${name}.config.system.build ? sdImage
-      ) piHosts;
+      # Pis that build an SD image, from host.nix metadata (no evaluation of the Pi configs).
+      sdImageHosts = builtins.filter (name: hostMeta.${name}.image == "sd") piHosts;
       desktopHosts = builtins.filter (name: hostMeta.${name}.role == "desktop") hosts;
     in
     {
@@ -203,6 +214,9 @@
       # (modules/home/common/neovim.nix reads inputs.self.packages.<hostPlatform>).
       packages.aarch64-linux.nvim-stable = nvimStableFor "aarch64-linux";
 
+      # The Pi images below sit under x86_64-linux on purpose: they are built from this machine
+      # (qemu binfmt or a remote aarch64 builder), so `nix build .#image-<host>` works where
+      # the flake is used; nothing keys them under packages.aarch64-linux.
       packages.${system} =
         import ./pkgs { inherit pkgs; }
         // {
