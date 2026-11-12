@@ -8,6 +8,7 @@
     ./docker.nix
     ./networking.nix
     ./ssh.nix
+    ./wireguard.nix
     ./zram.nix
   ];
 }

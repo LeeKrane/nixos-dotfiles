@@ -301,32 +301,122 @@
             "checks.user-option: ${nixpkgs.lib.concatStringsSep "; " failed}"
             (pkgs.runCommand "krane-user-option" { } "touch $out");
 
-        # Evaluates a role = "server" config built from tests/server-host/ (not under hosts/, so it
-        # is no nixosConfiguration) on the stable channel, so server-role regressions surface
-        # here before a real server host exists. Eval-only: nothing is built.
+        # Evaluates role = "server" configs built from tests/server-host/ (not under hosts/, so
+        # they are no nixosConfigurations) on the stable channel, so server-role regressions
+        # surface here before a real server host exists: a plain fixture, the WireGuard hub
+        # (taragarmr) and a spoke (tarronax), each with the fixture's dummy secret paths. Eval-only:
+        # nothing is built, the assertions run while evaluating.
         server-eval =
           let
-            fixture = mkHost {
-              hostName = "server-fixture";
-              inherit system;
-              role = "server";
-              hostDir = ./tests/server-host;
-            };
+            inherit (nixpkgs) lib;
+            fixtureFor =
+              hostName:
+              mkHost {
+                inherit hostName system;
+                role = "server";
+                hostDir = ./tests/server-host;
+              };
+            fixture = fixtureFor "server-fixture";
+            hub = (fixtureFor "taragarmr").config;
+            spoke = (fixtureFor "tarronax").config;
             inherit (fixture) config;
             release = config.system.nixos.release;
             hmUser = config.home-manager.users.${config.krane.user.name};
+            wgTable = import ./lib/wireguard.nix;
+            wg0Hub = hub.networking.wg-quick.interfaces.wg0;
+            wg0Spoke = spoke.networking.wg-quick.interfaces.wg0;
+            expectations = [
+              {
+                ok = release == "26.05";
+                what = "server role evaluated on NixOS ${release}, expected 26.05 (stable inputs not swapped in)";
+              }
+              {
+                ok = builtins.elem nvim-stable hmUser.home.packages;
+                what = "the server home does not install packages.nvim-stable";
+              }
+              {
+                ok = lib.length config.users.users.krane.openssh.authorizedKeys.keys == 4;
+                what = "krane has ${toString (lib.length config.users.users.krane.openssh.authorizedKeys.keys)} authorized keys, expected 4";
+              }
+              {
+                ok =
+                  config.services.openssh.enable
+                  && config.services.openssh.openFirewall
+                  && !config.services.openssh.settings.PasswordAuthentication
+                  && config.services.openssh.settings.PermitRootLogin == "no";
+                what = "sshd is not enabled, open and keys-only without root login";
+              }
+              {
+                ok =
+                  config.virtualisation.docker.enable
+                  && config.virtualisation.oci-containers.backend == "docker"
+                  && builtins.elem "docker" config.users.users.krane.extraGroups
+                  && config.virtualisation.docker.autoPrune.enable;
+                what = "docker, the oci-containers backend, the docker group or autoPrune is not set up";
+              }
+              {
+                ok = builtins.elem "krane" config.nix.settings.trusted-users && config.nix.gc.automatic;
+                what = "krane is not a trusted nix user, or nix gc is off";
+              }
+              {
+                ok = config.services.restic.backups ? default && config.services.restic.backups.default.initialize;
+                what = "krane.backup did not define services.restic.backups.default";
+              }
+              {
+                ok =
+                  config.services.restic.server.enable
+                  && config.services.restic.server.appendOnly
+                  && config.services.restic.server.listenAddress == "192.168.82.2:8000"
+                  && builtins.elem 8000 config.networking.firewall.interfaces.wg0.allowedTCPPorts;
+                what = "krane.backupServer is not an append-only REST server on 192.168.82.2:8000 with port 8000 open on wg0";
+              }
+              {
+                ok = !(config.networking.wg-quick.interfaces ? wg0) && !config.krane.wireguard.enable;
+                what = "a host outside lib/wireguard.nix got a wg0 interface";
+              }
+              {
+                ok = lib.length wg0Hub.peers == 7 && lib.all (p: lib.length p.allowedIPs == 1) wg0Hub.peers;
+                what = "the hub's wg0 does not have exactly 7 /32 peers";
+              }
+              {
+                ok =
+                  wg0Hub.listenPort == 13231
+                  && wg0Hub.autostart
+                  && builtins.elem 13231 hub.networking.firewall.allowedUDPPorts
+                  && builtins.elem "wg0" hub.networking.firewall.trustedInterfaces
+                  && hub.boot.kernel.sysctl."net.ipv4.ip_forward" == 1
+                  && lib.hasInfix "FORWARD -i wg0" wg0Hub.postUp;
+                what = "the hub's wg0 is not an autostarting, forwarding server on UDP 13231";
+              }
+              {
+                ok =
+                  hub.networking.wg-quick.interfaces.wg1.autostart == false
+                  && lib.length hub.networking.wg-quick.interfaces.wg1.peers == 4
+                  && !(hub.systemd.services.wg-quick-wg1.wantedBy or [ ] != [ ])
+                  && builtins.elem 51821 hub.networking.firewall.allowedUDPPorts;
+                what = "the hub's wg1 is not a 4-peer interface that stays down at boot with UDP 51821 open";
+              }
+              {
+                ok =
+                  wg0Spoke.address == [ "192.168.82.4/24" ]
+                  && lib.length wg0Spoke.peers == 1
+                  && (lib.head wg0Spoke.peers).publicKey == wgTable.wg0.hub.publicKey
+                  && (lib.head wg0Spoke.peers).endpoint == "wg.krane.dev:13231"
+                  && (lib.head wg0Spoke.peers).allowedIPs == [ "192.168.82.0/24" ]
+                  && (lib.head wg0Spoke.peers).persistentKeepalive == 25
+                  && !(spoke.networking.wg-quick.interfaces ? wg1);
+                what = "a spoke's wg0 is not a keepalive client of the hub with address 192.168.82.4/24 and no wg1";
+              }
+            ];
+            failed = map (e: e.what) (builtins.filter (e: !e.ok) expectations);
           in
-          nixpkgs.lib.throwIf (release != "26.05")
-            "checks.server-eval: server role evaluated on NixOS ${release}, expected 26.05 (stable inputs not swapped in)"
-            (
-              nixpkgs.lib.throwIf (!(builtins.elem nvim-stable hmUser.home.packages))
-                "checks.server-eval: the server home does not install packages.nvim-stable"
-                (
-                  pkgs.runCommand "krane-server-eval" {
-                    toplevel = builtins.unsafeDiscardOutputDependency config.system.build.toplevel.drvPath;
-                  } "echo \"$toplevel\" > $out"
-                )
-            );
+          lib.throwIf (failed != [ ]) "checks.server-eval: ${lib.concatStringsSep "; " failed}" (
+            pkgs.runCommand "krane-server-eval" {
+              toplevel = builtins.unsafeDiscardOutputDependency config.system.build.toplevel.drvPath;
+              hubToplevel = builtins.unsafeDiscardOutputDependency hub.system.build.toplevel.drvPath;
+              spokeToplevel = builtins.unsafeDiscardOutputDependency spoke.system.build.toplevel.drvPath;
+            } "echo \"$toplevel $hubToplevel $spokeToplevel\" > $out"
+          );
 
         # NixVim's own startup test: fails on errors or warnings at startup.
         nvim = nvimEval.config.build.test;
