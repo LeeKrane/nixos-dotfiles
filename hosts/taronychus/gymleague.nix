@@ -128,7 +128,16 @@ in
               echo "${image} is up to date"
               exit 0
             fi
-            ${docker} build --label nix-src=${src} -t ${image} ${src}/backend
+            # The Maven download inside the build needs the network. A retry loop here, not
+            # Restart=on-failure: the backend Requires= this unit, and a failed start job of a
+            # oneshot fails the backend's start with it, whatever Restart= does afterwards.
+            # Bounded (5 tries, 30 s apart, well inside TimeoutStartSec), then the unit fails.
+            for attempt in 1 2 3 4 5; do
+              ${docker} build --label nix-src=${src} -t ${image} ${src}/backend && exit 0
+              echo "docker build failed (attempt $attempt of 5)" >&2
+              [ "$attempt" = 5 ] || ${pkgs.coreutils}/bin/sleep 30
+            done
+            exit 1
           '';
         };
       };
