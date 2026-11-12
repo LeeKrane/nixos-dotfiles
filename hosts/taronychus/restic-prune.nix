@@ -29,7 +29,8 @@ let
   ];
 
   dataDir = config.krane.backupServer.dataDir;
-  secretName = repo: if repo == "taronychus" then "restic/repo-password" else "restic/repo-password-${repo}";
+  secretName =
+    repo: if repo == "taronychus" then "restic/repo-password" else "restic/repo-password-${repo}";
   passwordFile = repo: config.sops.secrets.${secretName repo}.path;
   retention = lib.concatStringsSep " " (import ../../lib/backup-retention.nix).primary;
 

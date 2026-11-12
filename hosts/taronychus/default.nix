@@ -61,9 +61,9 @@ in
     owner = "restic";
     mode = "0400";
   };
-  warnings = lib.optional (
-    !hasRestic
-  ) "taronychus: secrets/taronychus.yaml has no restic section; the REST server, pruning and the gym-league dump backup are off";
+  warnings =
+    lib.optional (!hasRestic)
+      "taronychus: secrets/taronychus.yaml has no restic section; the REST server, pruning and the gym-league dump backup are off";
   # Firewall (explicit, nothing added here): ssh (server module), wg0 (restic REST port, krane.backupServer) and the gym-league
   # backend port, which docker publishes and gymleague.nix restricts to taragarmr in the
   # DOCKER-USER chain. Nothing else is open; the old Traefik dashboard and Coolify's 80/443 do
