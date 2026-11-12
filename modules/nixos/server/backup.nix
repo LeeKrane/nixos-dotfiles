@@ -58,6 +58,16 @@ in
         refuses deletes: set this to [ ] for such a repository and prune from the server side.
       '';
     };
+    retryLock = mkOption {
+      type = types.str;
+      default = "2h";
+      example = "10m";
+      description = ''
+        How long `restic backup` waits for the repository lock (`--retry-lock`). Only an
+        exclusive lock (a prune) blocks a backup; a host whose prepare command takes a
+        service down for the run wants this short, so the outage stays bounded.
+      '';
+    };
     backupPrepareCommand = mkOption {
       type = types.nullOr types.str;
       default = null;
@@ -111,9 +121,10 @@ in
           backupCleanupCommand
           ;
         initialize = true;
-        # Server-side prune, the offsite copy and other clients hold the repository lock now
-        # and then; wait for it instead of failing the run (restic >= 0.16).
-        extraBackupArgs = [ "--retry-lock 2h" ];
+        # The server-side prune holds an exclusive repository lock now and then (the offsite copy
+        # and other backups take shared ones, which do not block); wait for it instead of
+        # failing the run (restic >= 0.16).
+        extraBackupArgs = [ "--retry-lock ${cfg.retryLock}" ];
       };
     })
 
