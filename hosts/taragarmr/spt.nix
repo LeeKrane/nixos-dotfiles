@@ -117,10 +117,10 @@ in
   home-manager.users.${user} = {
     systemd.user.services = {
       spt-server = {
-        Unit = {
-          Description = "SPT 4.1.6 server (Fika backend, TCP 6969)";
-          After = [ "network-online.target" ];
-        };
+        # No network ordering (network-online.target is not part of the user manager, so it
+        # would be ignored): the server and backup-profiles.sh only touch local files and bind
+        # local ports, and Restart=on-failure covers anything else.
+        Unit.Description = "SPT 4.1.6 server (Fika backend, TCP 6969)";
         Service = {
           Type = "simple";
           Environment = [ "PATH=${serverPath}" ];

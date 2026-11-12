@@ -9,8 +9,10 @@
     Unit = {
       Description = "TeamClaude multi-account Claude proxy";
       Documentation = [ "https://github.com/KarpelesLab/teamclaude" ];
-      After = [ "network-online.target" ];
     };
+    # No network ordering: network-online.target does not exist in the user manager, so an After=
+    # on it did nothing. The proxy needs the network only when forwarding a request, and
+    # Restart=always covers a failed start.
     # default.target, not graphical-session.target: claude also runs from TTYs and SSH. No
     # linger, so the proxy stops with the last session, same as upstream's own unit.
     Install.WantedBy = [ "default.target" ];
