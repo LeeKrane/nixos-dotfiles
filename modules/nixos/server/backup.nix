@@ -111,6 +111,9 @@ in
           backupCleanupCommand
           ;
         initialize = true;
+        # Server-side prune, the offsite copy and other clients hold the repository lock now
+        # and then; wait for it instead of failing the run (restic >= 0.16).
+        extraBackupArgs = [ "--retry-lock 2h" ];
       };
     })
 

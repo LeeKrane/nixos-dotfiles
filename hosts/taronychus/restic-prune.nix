@@ -3,9 +3,14 @@
 # which makes the module skip `restic forget`. Retention is applied here instead, directly on
 # the repository files, where the REST server's append-only flag does not apply.
 #
-# Each repository's password sits on this host (sops secret restic/repo-password-<repo>),
-# which is inherent to server-side pruning. The service runs as the `restic` user so the files
+# Each repository's password sits on this host, which is inherent to server-side pruning:
+# restic/repo-password-taragarmr, and restic/repo-password for taronychus' own repository (the
+# password backup.nix's self-backup uses). The service runs as the `restic` user so the files
 # keep the ownership the REST server expects.
+#
+# Schedule: Sunday 01:00 (+ up to 15 min), clear of the 02:30 gym-league dump, the 03:30
+# self-backup, taragarmr's 04:00(+30 min) backup and tarritator's 06:00 copy. The jobs that
+# still collide with a long prune wait on the repository lock (--retry-lock).
 {
   config,
   lib,
@@ -18,10 +23,15 @@ let
   hasRestic = hostSecrets.hasSection "restic";
 
   # Repository names under krane.backupServer.dataDir, one per client host.
-  repos = [ "taragarmr" ];
+  repos = [
+    "taragarmr"
+    "taronychus"
+  ];
 
   dataDir = config.krane.backupServer.dataDir;
-  passwordFile = repo: config.sops.secrets."restic/repo-password-${repo}".path;
+  secretName = repo: if repo == "taronychus" then "restic/repo-password" else "restic/repo-password-${repo}";
+  passwordFile = repo: config.sops.secrets.${secretName repo}.path;
+  retention = lib.concatStringsSep " " (import ../../lib/backup-retention.nix).primary;
 
   prune = pkgs.writeShellScript "restic-prune" ''
     set -u
@@ -32,7 +42,7 @@ let
         ${lib.getExe pkgs.restic} forget --prune \
           --repo "${dataDir}/${repo}" \
           --password-file "${passwordFile repo}" \
-          --keep-daily 7 --keep-weekly 4 --keep-monthly 6 || rc=1
+          --retry-lock 2h ${retention} || rc=1
       else
         echo "== ${repo}: not initialised yet, skipped"
       fi
@@ -42,7 +52,7 @@ let
 in
 {
   sops.secrets = lib.mkIf hasRestic (
-    lib.genAttrs (map (r: "restic/repo-password-${r}") repos) (_: {
+    lib.genAttrs (map secretName repos) (_: {
       owner = "restic";
       mode = "0400";
     })
@@ -69,9 +79,9 @@ in
   systemd.timers.restic-prune = lib.mkIf hasRestic {
     wantedBy = [ "timers.target" ];
     timerConfig = {
-      OnCalendar = "Sun 03:00";
+      OnCalendar = "Sun 01:00";
       Persistent = true;
-      RandomizedDelaySec = "1h";
+      RandomizedDelaySec = "15m";
     };
   };
 }

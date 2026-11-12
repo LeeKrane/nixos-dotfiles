@@ -15,8 +15,8 @@
 #      (0xf416 = SD, then NVMe, then USB; remove the SD card after installing).
 # Later deploys: nixos-rebuild switch --flake .#taronychus --target-host krane@taronychus
 #
-# Secrets (secrets/taronychus.yaml): wireguard/wg0-private-key, restic/htpasswd,
-# restic/repo-password-taragarmr, gymleague/env. A section absent from the file switches that
+# Secrets (secrets/taronychus.yaml): wireguard/wg0-private-key, users/krane-password-hash,
+# restic/{htpasswd,rest-env,repo-password,repo-password-taragarmr}, gymleague/env. A section absent from the file switches that
 # feature off, so the config evaluates before the file exists.
 {
   config,
@@ -32,6 +32,7 @@ in
   imports = [
     ./disko.nix
     ./restic-prune.nix
+    ./backup.nix
     ./gymleague.nix
   ];
 
@@ -42,23 +43,24 @@ in
   # enabled: servers import no systemd-boot or grub config, checks.pi-eval asserts it.
   boot.loader.raspberry-pi.bootloader = "kernel";
 
-  # Repository host for restic clients (taragarmr now, later others), reached over wg0 only.
+  # Repository host for restic clients (taragarmr, taronychus itself), reached over wg0 only.
   # appendOnly: a compromised client cannot delete its backups. Pruning happens here, in
-  # restic-prune.nix, and the clients run with krane.backup.pruneOpts = [ ].
-  krane.backupServer = {
+  # restic-prune.nix, and the clients run with krane.backup.pruneOpts = [ ]. Only enabled with
+  # the restic section: without it there is no htpasswd file, and an unauthenticated server
+  # must never run.
+  krane.backupServer = lib.mkIf hasRestic {
     enable = true;
     dataDir = "/srv/restic";
     appendOnly = true;
-    htpasswdFile = lib.mkIf hasRestic config.sops.secrets."restic/htpasswd".path;
+    htpasswdFile = config.sops.secrets."restic/htpasswd".path;
   };
   sops.secrets."restic/htpasswd" = lib.mkIf hasRestic {
     owner = "restic";
     mode = "0400";
   };
-  warnings =
-    lib.optional (!hasRestic)
-      "taronychus: secrets/taronychus.yaml has no restic section; the REST server runs without authentication and pruning is off";
-
+  warnings = lib.optional (
+    !hasRestic
+  ) "taronychus: secrets/taronychus.yaml has no restic section; the REST server, pruning and the gym-league dump backup are off";
   # Firewall (explicit, nothing added here): ssh (server module), wg0 (restic REST port, krane.backupServer) and the gym-league
   # backend port, which docker publishes and gymleague.nix restricts to taragarmr in the
   # DOCKER-USER chain. Nothing else is open; the old Traefik dashboard and Coolify's 80/443 do

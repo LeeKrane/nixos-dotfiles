@@ -8,8 +8,8 @@
 # secrets/tarritator.yaml. Later deploys:
 #   nixos-rebuild switch --flake .#tarritator --target-host krane@192.168.82.3
 #
-# Secrets (secrets/tarritator.yaml): wireguard/wg0-private-key, restic/rest-env,
-# restic/repo-password-taragarmr, restic/offsite-repo-password.
+# Secrets (secrets/tarritator.yaml): wireguard/wg0-private-key, users/krane-password-hash,
+# restic/{rest-env,repo-password-taragarmr,repo-password-taronychus,offsite-repo-password}.
 { inputs, ... }:
 {
   imports = [

@@ -141,20 +141,27 @@ in
         requires = [
           "gymleague-network.service"
           "gymleague-build.service"
+          "gymleague-firewall.service"
         ];
         after = [
           "gymleague-network.service"
+          "gymleague-firewall.service"
           "gymleague-build.service"
           "docker-gymleague-postgres.service"
         ];
       };
 
-      # Tied to the backend's lifecycle: the rules exist exactly while the published port does.
+      # Starts before the backend, which requires it: the published port is never reachable
+      # without the DOCKER-USER rules. DOCKER-USER exists once docker.service is up, and a
+      # docker restart (which flushes it) restarts this unit and the backend with it. The rules
+      # are removed when this unit stops, which also stops the backend; a plain backend
+      # restart leaves them in place.
       gymleague-firewall = {
         description = "DOCKER-USER rules for the gym-league backend port";
-        bindsTo = [ "docker-gymleague-backend.service" ];
-        after = [ "docker-gymleague-backend.service" ];
-        wantedBy = [ "docker-gymleague-backend.service" ];
+        after = [ "docker.service" ];
+        requires = [ "docker.service" ];
+        before = [ "docker-gymleague-backend.service" ];
+        requiredBy = [ "docker-gymleague-backend.service" ];
         serviceConfig = {
           Type = "oneshot";
           RemainAfterExit = true;
