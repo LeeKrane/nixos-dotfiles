@@ -312,157 +312,157 @@ let
       server,
     }:
     pkgs.writeShellApplication {
-    inherit name;
-    # No gamemoderun, for the same reason as tarkov: the game is registered by PID instead.
-    runtimeInputs = common.runtimeInputs ++ [
-      dotnet
-      pkgs.iproute2
-      pkgs.libnotify
-      pkgs.util-linux
-    ];
-    text = ''
-      ${env}
-      # Reported needed: Proton's Xalia accessibility layer hangs the launcher.
-      export PROTON_USE_XALIA=0
-      # The menu's TV videos (TUE_Main_Menu_Video) loop for the whole session, in raids too;
-      # Wine decodes them in software on 3-4 threads at 100% each. No H.264 decoder, no videos.
-      export WINEDLLOVERRIDES="msmpeg2vdec=d''${WINEDLLOVERRIDES:+;$WINEDLLOVERRIDES}"
-      ${common.exclusion}
-      ${common.gamePids}
-      ensure_exclusive SPT "Escape from Tarkov" "$HOME/Games/tarkov"
+      inherit name;
+      # No gamemoderun, for the same reason as tarkov: the game is registered by PID instead.
+      runtimeInputs = common.runtimeInputs ++ [
+        dotnet
+        pkgs.iproute2
+        pkgs.libnotify
+        pkgs.util-linux
+      ];
+      text = ''
+        ${env}
+        # Reported needed: Proton's Xalia accessibility layer hangs the launcher.
+        export PROTON_USE_XALIA=0
+        # The menu's TV videos (TUE_Main_Menu_Video) loop for the whole session, in raids too;
+        # Wine decodes them in software on 3-4 threads at 100% each. No H.264 decoder, no videos.
+        export WINEDLLOVERRIDES="msmpeg2vdec=d''${WINEDLLOVERRIDES:+;$WINEDLLOVERRIDES}"
+        ${common.exclusion}
+        ${common.gamePids}
+        ensure_exclusive SPT "Escape from Tarkov" "$HOME/Games/tarkov"
 
-      runtime="${dir}/SPT_Runtime"
-      # krane.spt.server: the remote server to use, empty to run this install's own.
-      remote=${lib.escapeShellArg (if server == null then "" else server)}
-      # krane.spt.cpus: the CPUs the launcher and the game are confined to, empty for all.
-      cpus=${lib.escapeShellArg (if cfg.cpus == null then "" else cfg.cpus)}
-      if [ ! -e "$runtime/SPT.Launcher.exe" ] || { [ -z "$remote" ] && [ ! -e "$runtime/SPT.Server.Linux.dll" ]; }; then
-        echo "No SPT in $runtime. Run spt-setup first." >&2
-        exit 1
-      fi
-
-      ${common.primeEnv}
-      ${common.renderEnv "SPT.Launcher.exe"}
-
-      # alive <pid>: running, a zombie not yet reaped by us does not count.
-      alive() {
-        local st
-        st=$(ps -o stat= -p "$1" 2>/dev/null) || return 1
-        case "''${st# }" in Z*) return 1 ;; *) return 0 ;; esac
-      }
-
-      server=
-      stop_server() {
-        [ -n "$server" ] || return 0
-        kill "$server" 2>/dev/null || true
-        for _ in $(seq 20); do
-          alive "$server" || return 0
-          sleep 0.5
-        done
-        kill -KILL "$server" 2>/dev/null || true
-      }
-      if [ -n "$remote" ]; then
-        # A remote server (krane.spt.server): nothing to start, but the launcher only shows a
-        # dead server as offline, so say so up front. The launcher keeps its own server list;
-        # add the address there once with "Add new server".
-        # The URL as the launcher takes it: scheme, host, then port, SPT's 6969 if none.
-        hostport=''${remote#*://}
-        hostport=''${hostport%%/*}
-        host=''${hostport%:*}
-        port=6969
-        [ "$host" = "$hostport" ] || port=''${hostport##*:}
-        # shellcheck disable=SC2016
-        if ! timeout 5 bash -c 'exec 3<>"/dev/tcp/$1/$2"' _ "$host" "$port" 2>/dev/null; then
-          msg="The SPT server at $remote does not answer."
-          echo "$msg" >&2
-          notify-send --urgency=critical --app-name=SPT SPT "$msg" || true
-          exit 1
-        fi
-      else
-        # The server is native. SPT.Server.Linux is a dynamically linked apphost that NixOS cannot
-        # run, so run its dll on the Nix runtime instead. It has to start in SPT_Runtime, where
-        # SPT_Data and user/ are. It keeps WINEPREFIX from above in its environment on purpose:
-        # that is how prefix_pids finds it, for the exclusion with live Tarkov and for the
-        # clean-up of a leftover one below. The Nix dotnet finds its own root, so DOTNET_ROOT is
-        # not set: it would leak into umu and Wine, and break the Windows launcher's hostfxr.
-        log="''${XDG_STATE_HOME:-$HOME/.local/state}/spt/server.log"
-        mkdir -p "$(dirname "$log")"
-
-        # A server left from an earlier run holds port 6969 and the profiles. Kill it, whichever
-        # SPT script started it, and wait for the port.
-        for pid in $(prefix_pids "$WINEPREFIX"); do
-          read -r comm <"/proc/$pid/comm" 2>/dev/null || continue
-          case "$comm" in dotnet*) kill -KILL "$pid" 2>/dev/null || true ;; esac
-        done
-        for _ in $(seq 20); do
-          [ -z "$(ss -ltnH 'sport = :6969')" ] && break
-          sleep 0.5
-        done
-        if [ -n "$(ss -ltnH 'sport = :6969')" ]; then
-          echo "Port 6969 is in use by something else, not starting the SPT server." >&2
+        runtime="${dir}/SPT_Runtime"
+        # krane.spt.server: the remote server to use, empty to run this install's own.
+        remote=${lib.escapeShellArg (if server == null then "" else server)}
+        # krane.spt.cpus: the CPUs the launcher and the game are confined to, empty for all.
+        cpus=${lib.escapeShellArg (if cfg.cpus == null then "" else cfg.cpus)}
+        if [ ! -e "$runtime/SPT.Launcher.exe" ] || { [ -z "$remote" ] && [ ! -e "$runtime/SPT.Server.Linux.dll" ]; }; then
+          echo "No SPT in $runtime. Run spt-setup first." >&2
           exit 1
         fi
 
-        trap stop_server EXIT
-        (
-          cd "$runtime"
-          export DOTNET_NOLOGO=1 DOTNET_CLI_TELEMETRY_OPTOUT=1
-          exec dotnet SPT.Server.Linux.dll
-        ) >"$log" 2>&1 &
-        server=$!
+        ${common.primeEnv}
+        ${common.renderEnv "SPT.Launcher.exe"}
 
-        # The listener on 6969 has to be our server: its process is alive and owns the port, so
-        # a stranger on the port does not pass. Listening means the profile and mods are loaded;
-        # the launcher cannot log in before. Checked on 127.0.0.1 although it binds all addresses.
-        ours() { ss -ltnpH 'sport = :6969' | grep -q "pid=$server,"; }
-        listening() { (exec 3<>/dev/tcp/127.0.0.1/6969) 2>/dev/null; }
-        for _ in $(seq 120); do
-          alive "$server" || { echo "SPT server exited, see $log" >&2; exit 1; }
-          ours && listening && break
-          sleep 1
-        done
-        if ! { alive "$server" && ours && listening; }; then
-          echo "SPT server not listening on 6969 after 2 minutes, see $log" >&2
-          exit 1
+        # alive <pid>: running, a zombie not yet reaped by us does not count.
+        alive() {
+          local st
+          st=$(ps -o stat= -p "$1" 2>/dev/null) || return 1
+          case "''${st# }" in Z*) return 1 ;; *) return 0 ;; esac
+        }
+
+        server=
+        stop_server() {
+          [ -n "$server" ] || return 0
+          kill "$server" 2>/dev/null || true
+          for _ in $(seq 20); do
+            alive "$server" || return 0
+            sleep 0.5
+          done
+          kill -KILL "$server" 2>/dev/null || true
+        }
+        if [ -n "$remote" ]; then
+          # A remote server (krane.spt.server): nothing to start, but the launcher only shows a
+          # dead server as offline, so say so up front. The launcher keeps its own server list;
+          # add the address there once with "Add new server".
+          # The URL as the launcher takes it: scheme, host, then port, SPT's 6969 if none.
+          hostport=''${remote#*://}
+          hostport=''${hostport%%/*}
+          host=''${hostport%:*}
+          port=6969
+          [ "$host" = "$hostport" ] || port=''${hostport##*:}
+          # shellcheck disable=SC2016
+          if ! timeout 5 bash -c 'exec 3<>"/dev/tcp/$1/$2"' _ "$host" "$port" 2>/dev/null; then
+            msg="The SPT server at $remote does not answer."
+            echo "$msg" >&2
+            notify-send --urgency=critical --app-name=SPT SPT "$msg" || true
+            exit 1
+          fi
+        else
+          # The server is native. SPT.Server.Linux is a dynamically linked apphost that NixOS cannot
+          # run, so run its dll on the Nix runtime instead. It has to start in SPT_Runtime, where
+          # SPT_Data and user/ are. It keeps WINEPREFIX from above in its environment on purpose:
+          # that is how prefix_pids finds it, for the exclusion with live Tarkov and for the
+          # clean-up of a leftover one below. The Nix dotnet finds its own root, so DOTNET_ROOT is
+          # not set: it would leak into umu and Wine, and break the Windows launcher's hostfxr.
+          log="''${XDG_STATE_HOME:-$HOME/.local/state}/spt/server.log"
+          mkdir -p "$(dirname "$log")"
+
+          # A server left from an earlier run holds port 6969 and the profiles. Kill it, whichever
+          # SPT script started it, and wait for the port.
+          for pid in $(prefix_pids "$WINEPREFIX"); do
+            read -r comm <"/proc/$pid/comm" 2>/dev/null || continue
+            case "$comm" in dotnet*) kill -KILL "$pid" 2>/dev/null || true ;; esac
+          done
+          for _ in $(seq 20); do
+            [ -z "$(ss -ltnH 'sport = :6969')" ] && break
+            sleep 0.5
+          done
+          if [ -n "$(ss -ltnH 'sport = :6969')" ]; then
+            echo "Port 6969 is in use by something else, not starting the SPT server." >&2
+            exit 1
+          fi
+
+          trap stop_server EXIT
+          (
+            cd "$runtime"
+            export DOTNET_NOLOGO=1 DOTNET_CLI_TELEMETRY_OPTOUT=1
+            exec dotnet SPT.Server.Linux.dll
+          ) >"$log" 2>&1 &
+          server=$!
+
+          # The listener on 6969 has to be our server: its process is alive and owns the port, so
+          # a stranger on the port does not pass. Listening means the profile and mods are loaded;
+          # the launcher cannot log in before. Checked on 127.0.0.1 although it binds all addresses.
+          ours() { ss -ltnpH 'sport = :6969' | grep -q "pid=$server,"; }
+          listening() { (exec 3<>/dev/tcp/127.0.0.1/6969) 2>/dev/null; }
+          for _ in $(seq 120); do
+            alive "$server" || { echo "SPT server exited, see $log" >&2; exit 1; }
+            ours && listening && break
+            sleep 1
+          done
+          if ! { alive "$server" && ours && listening; }; then
+            echo "SPT server not listening on 6969 after 2 minutes, see $log" >&2
+            exit 1
+          fi
         fi
-      fi
 
-      ${common.session "Single Player Tarkov"}
-      trap 'stop_server; session_end' EXIT
+        ${common.session "Single Player Tarkov"}
+        trap 'stop_server; session_end' EXIT
 
-      cd "$runtime"
-      # Unlike BSG's, the SPT launcher stays open while the game runs, and umu-run only returns
-      # once it closes. Run it in the background and watch the game instead. With
-      # krane.spt.cpus, taskset confines it before it starts, so every game thread inherits
-      # the set; gamemoded's own pinning only comes once it has registered the game.
-      if [ -n "$cpus" ]; then
-        taskset -c "$cpus" umu-run SPT.Launcher.exe "$@" &
-      else
-        umu-run SPT.Launcher.exe "$@" &
-      fi
-      launcher=$!
+        cd "$runtime"
+        # Unlike BSG's, the SPT launcher stays open while the game runs, and umu-run only returns
+        # once it closes. Run it in the background and watch the game instead. With
+        # krane.spt.cpus, taskset confines it before it starts, so every game thread inherits
+        # the set; gamemoded's own pinning only comes once it has registered the game.
+        if [ -n "$cpus" ]; then
+          taskset -c "$cpus" umu-run SPT.Launcher.exe "$@" &
+        else
+          umu-run SPT.Launcher.exe "$@" &
+        fi
+        launcher=$!
 
-      # Wait for the game, for as long as the launcher is open: the player may sit in it a
-      # while, and on a cold prefix the game takes a while to appear after Start. Only this
-      # prefix's game counts: live Tarkov's has the same name. The server has to outlive the
-      # game, so the trap stops it only when this script ends.
-      while alive "$launcher" && [ -z "$(game_pids "$WINEPREFIX")" ]; do
-        sleep 2
-      done
-      while [ -n "$(game_pids "$WINEPREFIX")" ]; do
-        sleep 5
-      done
+        # Wait for the game, for as long as the launcher is open: the player may sit in it a
+        # while, and on a cold prefix the game takes a while to appear after Start. Only this
+        # prefix's game counts: live Tarkov's has the same name. The server has to outlive the
+        # game, so the trap stops it only when this script ends.
+        while alive "$launcher" && [ -z "$(game_pids "$WINEPREFIX")" ]; do
+          sleep 2
+        done
+        while [ -n "$(game_pids "$WINEPREFIX")" ]; do
+          sleep 5
+        done
 
-      # The game has exited: close the launcher with it. KILL, as for the exclusion: nothing in
-      # the prefix needs a clean shutdown. That also ends umu's container and this session's
-      # helpers in the prefix, the server included; prefix_pids skips this shell.
-      if alive "$launcher"; then
-        # shellcheck disable=SC2046
-        kill -KILL $(prefix_pids "$WINEPREFIX") 2>/dev/null || true
-      fi
-      wait "$launcher" 2>/dev/null || true
-    '';
-  };
+        # The game has exited: close the launcher with it. KILL, as for the exclusion: nothing in
+        # the prefix needs a clean shutdown. That also ends umu's container and this session's
+        # helpers in the prefix, the server included; prefix_pids skips this shell.
+        if alive "$launcher"; then
+          # shellcheck disable=SC2046
+          kill -KILL $(prefix_pids "$WINEPREFIX") 2>/dev/null || true
+        fi
+        wait "$launcher" 2>/dev/null || true
+      '';
+    };
 
   # Greed.exe, the [SVM] Server Value Modifier's preset editor, in the SPT prefix. Presets are
   # written to this install's SPT_Runtime; a remote server needs them copied over and a restart.

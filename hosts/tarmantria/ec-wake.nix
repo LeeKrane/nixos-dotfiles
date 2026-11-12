@@ -28,12 +28,20 @@ let
   '';
 
   # The kernel only reads ACPI tables from an uncompressed cpio at the front of the initrd.
-  acpiOverride = pkgs.runCommand "acpi-ec-wake" { nativeBuildInputs = [ pkgs.acpica-tools pkgs.cpio ]; } ''
-    mkdir -p kernel/firmware/acpi
-    iasl -p kernel/firmware/acpi/ec-wake ${ssdt}
-    mkdir -p $out
-    find kernel | cpio -H newc --create --owner 0:0 > $out/initrd
-  '';
+  acpiOverride =
+    pkgs.runCommand "acpi-ec-wake"
+      {
+        nativeBuildInputs = [
+          pkgs.acpica-tools
+          pkgs.cpio
+        ];
+      }
+      ''
+        mkdir -p kernel/firmware/acpi
+        iasl -p kernel/firmware/acpi/ec-wake ${ssdt}
+        mkdir -p $out
+        find kernel | cpio -H newc --create --owner 0:0 > $out/initrd
+      '';
 in
 {
   boot.initrd.prepend = [ "${acpiOverride}/initrd" ];
