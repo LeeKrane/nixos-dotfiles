@@ -21,6 +21,8 @@
     ./disko.nix
     ./caddy.nix
     ./couchdb.nix
+    ./spt.nix
+    ./services.nix
   ];
 
   system.stateVersion = "26.05";
