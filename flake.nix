@@ -364,6 +364,14 @@
                 what = "greetd autologin does not follow krane.user.name";
               }
               {
+                ok =
+                  let
+                    server = builtins.head (import ./lib/wireguard.nix).wg0.sshServers;
+                  in
+                  hm.programs.ssh.settings.${server}.data.User == "tester";
+                what = "ssh server aliases do not follow krane.user.name";
+              }
+              {
                 ok = base.krane.keyboard.layout == "at" && base.krane.keyboard.variant == "nodeadkeys";
                 what = "default krane.keyboard is not at/nodeadkeys";
               }

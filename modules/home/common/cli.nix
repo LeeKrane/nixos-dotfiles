@@ -1,6 +1,11 @@
 # CLI basics for every host. modules/nixos/common/shells.nix aliases (eza, bat, z, lazygit,
 # btop, ...) and its fish init call these tools. Desktop-only extras: ../desktop/cli.nix.
-{ lib, pkgs, ... }:
+{
+  kraneUser,
+  lib,
+  pkgs,
+  ...
+}:
 let
   inherit (import ../../../lib/wireguard.nix) wg0;
 in
@@ -31,7 +36,7 @@ in
     # that is a wg0 peer, without relying on DNS.
     // lib.genAttrs wg0.sshServers (name: {
       HostName = if name == wg0.hub.name then wg0.hub.ip else wg0.peers.${name}.ip;
-      User = "krane";
+      User = kraneUser.name;
     });
   };
 
