@@ -11,6 +11,7 @@
     ./desktop.nix
     ./fonts.nix
     ./shells.nix
+    ./users.nix
     ./virtualisation.nix
     ./gaming.nix
     ./recording.nix

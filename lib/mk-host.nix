@@ -1,4 +1,5 @@
-# mkHost { hostName, system, role ? "desktop", extraModules ? [ ] } -> nixosSystem
+# mkHost { hostName, system, role ? "desktop", hostDir ? ../hosts/<hostName>, extraModules ? [ ] }
+#   -> nixosSystem
 # Shared host builder: wires disko, sops-nix, home-manager and the soymou
 # module, at the HM level to avoid a dconf eval error.
 { inputs }:
@@ -24,6 +25,8 @@ in
   # Picks modules/{nixos,home}/<role> next to common/; "desktop" also gets the
   # illogical-impulse home-manager module.
   role ? "desktop",
+  # Host module directory; only the flake's server-eval check points this elsewhere.
+  hostDir ? ../hosts/${hostName},
   extraModules ? [ ],
 }:
 let
@@ -38,6 +41,10 @@ roleInputs.nixpkgs.lib.nixosSystem {
   modules = [
     {
       networking.hostName = hostName;
+      # mkDefault: the desktops' hardware-configuration.nix set the same value at the same
+      # priority (equal values merge without conflict). A non-x86 host would not import
+      # such a file, or would override.
+      nixpkgs.hostPlatform = roleInputs.nixpkgs.lib.mkDefault system;
       # useGlobalPkgs (not a second overlays list) gets ii-fixes to both
       # NixOS and home-manager pkgs.
       nixpkgs.overlays = import ../overlays;
@@ -46,11 +53,15 @@ roleInputs.nixpkgs.lib.nixosSystem {
     roleInputs.disko.nixosModules.disko
     roleInputs.sops-nix.nixosModules.sops
     roleInputs.home-manager.nixosModules.home-manager
-    # Role before common: environment.systemPackages and other list options merge in import
-    # order, and the pre-split module order put common modules (sops) after desktop ones.
+    # Role before common, so list-valued options (environment.systemPackages, extraGroups,
+    # shell init text, ...) merge with the role's entries first, as the pre-split flat module
+    # list ordered them for the modules where it matters. Common is not a strict prefix
+    # of the old order: nix-settings, locale, users, user and keyboard used to load before
+    # the desktop modules and now load after them, so only order-insensitive options may live
+    # there. The home-manager side below has no such constraint, its order is free.
     ../modules/nixos/${role}
     ../modules/nixos/common
-    ../hosts/${hostName}
+    hostDir
     (
       { config, ... }:
       {

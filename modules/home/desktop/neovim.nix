@@ -1,12 +1,6 @@
-# Installs the standalone NixVim build (modules/nixvim, flake output
-# packages.<system>.nvim). Plugins, LSP servers and formatters live inside
-# that package; nothing is linked into ~/.config/nvim.
-{
-  inputs,
-  lib,
-  pkgs,
-  ...
-}:
+# Desktop-only parts of the editor setup: the kitty launcher entry and the MIME defaults.
+# The nvim package itself is installed for every role by ../common/neovim.nix.
+{ lib, ... }:
 let
   textTypes = [
     "text/plain"
@@ -32,13 +26,6 @@ let
   ];
 in
 {
-  home.packages = [ inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.nvim ];
-
-  home.sessionVariables = {
-    EDITOR = "nvim";
-    VISUAL = "nvim";
-  };
-
   # nvim.desktop from the package sets Terminal=true, which leaves the choice of
   # terminal to each launcher (Dolphin would pick konsole). This entry pins kitty.
   xdg.desktopEntries.nvim-kitty = {

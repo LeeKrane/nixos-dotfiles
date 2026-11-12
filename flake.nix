@@ -79,6 +79,21 @@
       };
       nvim = nvimEval.config.build.package;
 
+      # The same editor for role = "server" hosts: nixvim and nixpkgs both from the stable
+      # inputs (modules/home/common/neovim.nix picks it by role).
+      pkgsStable = import inputs.nixpkgs-stable {
+        inherit system;
+        overlays = overlaysList;
+        config.allowUnfree = true;
+      };
+      nvimStableEval = inputs.nixvim-stable.lib.evalNixvim {
+        modules = [
+          ./modules/nixvim
+          { nixpkgs.pkgs = pkgsStable; }
+        ];
+      };
+      nvim-stable = nvimStableEval.config.build.package;
+
       # Every directory under hosts/ is a host. install.sh's new-host flow adds one by
       # scaffolding hosts/<name>/ from templates/host/. install.sh, bootstrap-sops.sh's
       # known_hosts() and docker-check.sh's HOSTS glob the same directories. Plain files
@@ -92,7 +107,7 @@
       # role picks the module set mk-host.nix imports (modules/{nixos,home}/{common,<role>}).
       # Unknown attribute names or roles fail evaluation instead of silently falling back to
       # the defaults.
-      hostMeta =
+      hostMeta = nixpkgs.lib.genAttrs hosts (
         name:
         let
           file = ./hosts/${name}/host.nix;
@@ -104,14 +119,17 @@
           // given;
           unknown = builtins.filter (a: a != "system" && a != "role") (builtins.attrNames given);
         in
+        assert nixpkgs.lib.assertMsg (builtins.isAttrs given)
+          "hosts/${name}/host.nix: must evaluate to an attribute set { system, role }, got ${builtins.typeOf given}";
         assert nixpkgs.lib.assertMsg (unknown == [ ])
           "hosts/${name}/host.nix: unknown attribute(s) ${toString unknown}; only system and role are allowed";
         assert nixpkgs.lib.assertMsg (builtins.elem meta.role [
           "desktop"
           "server"
-        ]) "hosts/${name}/host.nix: role must be \"desktop\" or \"server\", got \"${meta.role}\"";
-        meta;
-      desktopHosts = builtins.filter (name: (hostMeta name).role == "desktop") hosts;
+        ]) "hosts/${name}/host.nix: role must be \"desktop\" or \"server\", got \"${toString meta.role}\"";
+        meta
+      );
+      desktopHosts = builtins.filter (name: hostMeta.${name}.role == "desktop") hosts;
     in
     {
       nixosConfigurations =
@@ -119,7 +137,7 @@
           hostName:
           mkHost {
             inherit hostName;
-            inherit (hostMeta hostName) system role;
+            inherit (hostMeta.${hostName}) system role;
           }
         )
         // {
@@ -127,7 +145,7 @@
           # switched off.
           tariognatha-vm = mkHost {
             hostName = "tariognatha";
-            inherit (hostMeta "tariognatha") system role;
+            inherit (hostMeta.tariognatha) system role;
             extraModules = [
               ./hosts/tariognatha/vm-overrides.nix
               # mkForce: overrides mk-host.nix's plain hostName definition.
@@ -137,7 +155,7 @@
         };
 
       packages.${system} = import ./pkgs { inherit pkgs; } // {
-        inherit nvim;
+        inherit nvim nvim-stable;
       };
 
       overlays.default = nixpkgs.lib.composeManyExtensions overlaysList;
@@ -282,6 +300,33 @@
           nixpkgs.lib.throwIf (failed != [ ])
             "checks.user-option: ${nixpkgs.lib.concatStringsSep "; " failed}"
             (pkgs.runCommand "krane-user-option" { } "touch $out");
+
+        # Evaluates a role = "server" config built from tests/server-host/ (not under hosts/, so it
+        # is no nixosConfiguration) on the stable channel, so server-role regressions surface
+        # here before a real server host exists. Eval-only: nothing is built.
+        server-eval =
+          let
+            fixture = mkHost {
+              hostName = "server-fixture";
+              inherit system;
+              role = "server";
+              hostDir = ./tests/server-host;
+            };
+            inherit (fixture) config;
+            release = config.system.nixos.release;
+            hmUser = config.home-manager.users.${config.krane.user.name};
+          in
+          nixpkgs.lib.throwIf (release != "26.05")
+            "checks.server-eval: server role evaluated on NixOS ${release}, expected 26.05 (stable inputs not swapped in)"
+            (
+              nixpkgs.lib.throwIf (!(builtins.elem nvim-stable hmUser.home.packages))
+                "checks.server-eval: the server home does not install packages.nvim-stable"
+                (
+                  pkgs.runCommand "krane-server-eval" {
+                    toplevel = builtins.unsafeDiscardOutputDependency config.system.build.toplevel.drvPath;
+                  } "echo \"$toplevel\" > $out"
+                )
+            );
 
         # NixVim's own startup test: fails on errors or warnings at startup.
         nvim = nvimEval.config.build.test;

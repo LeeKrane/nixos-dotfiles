@@ -1,5 +1,5 @@
 # Language toolchains and dev CLIs. direnv is a NixOS-level `programs.direnv` module instead
-# (modules/nixos/desktop/shells.nix), so it hooks fish's real init at /etc/fish, never wiped by ii.
+# (modules/nixos/common/shells.nix), so it hooks fish's real init at /etc/fish, never wiped by ii.
 { pkgs, ... }:
 {
   # jdk21 is also packaged below for Mason-free lspconfig/jdtls use. programs.java sets

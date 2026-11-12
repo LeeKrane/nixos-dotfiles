@@ -1,28 +1,14 @@
 # The one human user account, named by krane.user.name (modules/nixos/common/user.nix).
 { config, pkgs, ... }:
 {
-  # `i2c` group already exists via hardware.i2c.enable. `plugdev` is
-  # declared here since it's just a side effect of zsa.enable elsewhere.
-  users.groups.plugdev = { };
-
   users.users.${config.krane.user.name} = {
     isNormalUser = true;
     shell = pkgs.fish;
+    # Base groups only; desktop groups are added in modules/nixos/desktop/users.nix.
     extraGroups = [
       "wheel"
-      "networkmanager"
       "video"
-      "input"
-      "i2c"
-      "docker"
-      "libvirtd"
       "audio"
-      "plugdev"
-      # Required by peripherals.nix's programs.ydotool.enable, for uinput access.
-      "ydotool"
-      # gamemode's polkit rule lets only this group run its governor and sysctl helpers;
-      # without it gamemoded registers games but every privileged tweak is refused.
-      "gamemode"
     ];
   };
 

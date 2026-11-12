@@ -39,11 +39,11 @@ let
   # each one from scratch every switch. See docs/II-INTEGRATION.md "Patched files".
   iiPatches = [
     {
-      # modules/nixos/desktop/shells.nix aliases cat to bat at NixOS level (/etc/fish loads first);
+      # modules/nixos/common/shells.nix aliases cat to bat at NixOS level (/etc/fish loads first);
       # ii's config.fish must bypass that alias to print raw OSC sequences, not a bat frame.
       file = "${config.home.homeDirectory}/.config/fish/config.fish";
       sed = ''s|^\(\s*\)cat \(~/.local/state/quickshell/user/generated/terminal/sequences.txt\)|\1command cat \2|'';
-      why = "modules/nixos/shells.nix aliases cat to bat; bypass it for raw OSC sequences";
+      why = "modules/nixos/common/shells.nix aliases cat to bat; bypass it for raw OSC sequences";
     }
     {
       # The nix-wrapped quickshell binary's comm is truncated to .quickshell-wra, so
@@ -173,7 +173,7 @@ in
   # misordering.
   home.activation.kraneIiOverrides = lib.hm.dag.entryAfter [ "copyIllogicalImpulseConfigs" ] (
     ''
-      # Declarative Hyprland overrides (krane.hypr.*, modules/home/hypr-config.nix).
+      # Declarative Hyprland overrides (krane.hypr.*, modules/home/desktop/hypr-config.nix).
       # Regular files, not symlinks: the copy step above rm -rf's ~/.config/hypr.
     ''
     + lib.concatMapStrings installOwned ownedFiles

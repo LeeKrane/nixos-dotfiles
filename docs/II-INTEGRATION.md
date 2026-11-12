@@ -209,7 +209,7 @@ file is skipped rather than failing activation:
 
 - `~/.config/fish/config.fish`:
   `s|^\(\s*\)cat \(~/.local/state/quickshell/user/generated/terminal/sequences.txt\)|\1command cat \2|`.
-  `modules/nixos/desktop/shells.nix` aliases `cat` to `bat --color=always` at
+  `modules/nixos/common/shells.nix` aliases `cat` to `bat --color=always` at
   NixOS level (`/etc/fish` loads first), so ii's own line printing that
   file would emit a bat frame instead of raw OSC sequences. The patch
   makes that one line call `command cat` to bypass the alias.

@@ -26,6 +26,11 @@ VOLUME="nixstore"
 # the same directories, as do install.sh and bootstrap-sops.sh's known_hosts().
 HOSTS=()
 for d in "$REPO_ROOT"/hosts/*/; do
+    # Skip hosts that are not x86_64-linux (hosts/<name>/host.nix `system`, default
+    # x86_64-linux): the nixos/nix container cannot build aarch64 toplevels.
+    if [ -f "${d}host.nix" ] && ! grep -Eq 'system *= *"x86_64-linux"' "${d}host.nix"; then
+        continue
+    fi
     HOSTS+=("$(basename "$d")")
 done
 HOSTS_PIPE=$(

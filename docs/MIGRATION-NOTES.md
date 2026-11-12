@@ -15,7 +15,7 @@ was not carried over, since there is no equivalent to port it to. See
 
 krane's login shell is now fish (`modules/nixos/common/users.nix`). Aliases
 ported from `~/.krane-rc` live at the NixOS level (`/etc/fish/...`,
-`modules/nixos/desktop/shells.nix`), not home-manager, because ii's dotfiles
+`modules/nixos/common/shells.nix`), not home-manager, because ii's dotfiles
 copy step wipes `~/.config/fish` on every switch. See II-INTEGRATION.md.
 
 zsh, oh-my-zsh and powerlevel10k stay as a fallback behind

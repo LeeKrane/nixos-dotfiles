@@ -119,7 +119,7 @@ let
 
   header = target: ''
     -- GENERATED FILE -- DO NOT EDIT.
-    -- Rendered from krane.hypr.* by modules/home/hypr-config.nix and installed
+    -- Rendered from krane.hypr.* by modules/home/desktop/hypr-config.nix and installed
     -- as ~/.config/hypr/${target} by home.activation.kraneIiOverrides.
     -- Every `home-manager switch` overwrites (or re-appends) this content.
   '';

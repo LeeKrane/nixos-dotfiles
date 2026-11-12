@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Raises a desktop notification when the weekly update workflow has an
 # update pull request open, once per pushed head commit. Run by the
-# flake-update-notify user timer (modules/home/flake-update-notify.nix).
+# flake-update-notify user timer (modules/home/desktop/flake-update-notify.nix).
 #   REPO                   owner/name                                   required
 #   BRANCH                 head branch of the pull request              required
 #   PULLS_URL              overrides the API URL, for tests             optional
@@ -78,7 +78,7 @@ fi
 # Probes the notification daemon before writing state, so a daemon that
 # isn't up yet (racing the session at login) retries without a popup ever
 # having been shown. Exits 1 with state untouched: the systemd unit's
-# Restart=on-failure/RestartSec=2min (modules/home/flake-update-notify.nix)
+# Restart=on-failure/RestartSec=2min (modules/home/desktop/flake-update-notify.nix)
 # retries this, same as a curl failure above.
 if ! busctl --user call org.freedesktop.Notifications /org/freedesktop/Notifications \
     org.freedesktop.Notifications GetServerInformation >/dev/null; then

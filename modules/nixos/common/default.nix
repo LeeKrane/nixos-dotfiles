@@ -10,5 +10,6 @@
     ./user.nix
     ./keyboard.nix
     ./sops.nix
+    ./shells.nix
   ];
 }
