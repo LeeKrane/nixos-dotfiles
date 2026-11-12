@@ -1,6 +1,9 @@
 # CLI basics for every host. modules/nixos/common/shells.nix aliases (eza, bat, z, lazygit,
 # btop, ...) and its fish init call these tools. Desktop-only extras: ../desktop/cli.nix.
 { lib, pkgs, ... }:
+let
+  inherit (import ../../../lib/wireguard.nix) wg0;
+in
 {
   # bat/eza/btop configs aren't in the ii wipe set (docs/II-INTEGRATION.md), so home-manager can
   # manage them here. zoxide and fzf stay plain home.packages, not programs.zoxide/programs.fzf:
@@ -21,7 +24,15 @@
     # ssh_config directive names under settings, and warns on
     # enableDefaultConfig unless it's explicitly turned off.
     enableDefaultConfig = false;
-    settings."*".AddKeysToAgent = "yes";
+    settings = {
+      "*".AddKeysToAgent = "yes";
+    }
+    # The servers by name, over wg0 (lib/wireguard.nix): `ssh taragarmr` works from any host
+    # that is a wg0 peer, without relying on DNS.
+    // lib.genAttrs wg0.sshServers (name: {
+      HostName = if name == wg0.hub.name then wg0.hub.ip else wg0.peers.${name}.ip;
+      User = "krane";
+    });
   };
 
   home.packages = with pkgs; [
