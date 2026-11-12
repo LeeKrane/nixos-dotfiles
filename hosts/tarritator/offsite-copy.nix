@@ -87,23 +87,34 @@ in
       ls ${mount} >/dev/null # triggers the automount
       mountpoint -q ${mount} || { echo "${mount} did not mount" >&2; exit 1; }
       export RESTIC_PASSWORD_FILE=${secret "offsite-repo-password"}
+      # One function per repository: every step ends in an explicit `|| return 1`, as set -e is
+      # ignored in a function called on the left of `||`. A failed repository sets rc and the
+      # loop goes on with the next one, so the unit still fails at the end.
+      copy_repo() {
+        repo=$1
+        local_repo=$2
+        src=$3
+        pwfile=$4
+        echo "== $repo"
+        if ! restic cat config --repo "$local_repo" >/dev/null 2>&1; then
+          # The offsite repository gets its own password; copy needs the source chunker
+          # parameters to deduplicate identically, so it is initialised from the source.
+          mkdir -p "$local_repo" || return 1
+          restic init --repo "$local_repo" --from-repo "$src" --from-password-file "$pwfile" \
+            --copy-chunker-params || return 1
+        fi
+        restic copy --retry-lock 2h --repo "$local_repo" --from-repo "$src" \
+          --from-password-file "$pwfile" || return 1
+        # Retention is applied to the offsite copy only, never from the clients, and only
+        # after the copy succeeded.
+        restic forget --prune --retry-lock 2h --repo "$local_repo" ${retention} || return 1
+      }
       rc=0
       ${lib.concatMapStringsSep "\n" (repo: ''
-        (
-          set -eu
-          echo "== ${repo}"
-          from="--from-repo ${sourceRepo repo} --from-password-file ${secret "repo-password-${repo}"}"
-          if ! restic cat config --repo ${localRepo repo} >/dev/null 2>&1; then
-            # The offsite repository gets its own password; copy needs the source chunker
-            # parameters to deduplicate identically, so it is initialised from the source.
-            mkdir -p ${localRepo repo}
-            restic init --repo ${localRepo repo} $from --copy-chunker-params
-          fi
-          restic copy --retry-lock 2h --repo ${localRepo repo} $from
-          # Retention is applied to the offsite copy only, never from the clients.
-          restic forget --prune --retry-lock 2h --repo ${localRepo repo} ${retention}
-        ) || rc=1
-      '') repos}
+        copy_repo ${repo} ${localRepo repo} ${sourceRepo repo} ${secret "repo-password-${repo}"} || {
+          echo "restic-offsite-copy: ${repo} failed" >&2
+          rc=1
+        }'') repos}
       exit $rc
     '';
   };
