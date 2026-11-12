@@ -7,13 +7,16 @@
 #   nix run github:nix-community/nixos-anywhere -- --flake .#taragarmr \
 #     --generate-hardware-config nixos-generate-config ./hosts/taragarmr/hardware-configuration.nix \
 #     --target-host root@<installer-ip>
-# disko partitions the NVMe per ./disko.nix. The sops age key derives from the SSH host key
-# nixos-anywhere generates; add it with scripts/bootstrap-sops.sh, then create
-# secrets/taragarmr.yaml. Later deploys:
+# disko partitions the NVMe per ./disko.nix. The sops age key derives from this host's SSH
+# host key, pre-generated in ~/server-migration/host-keys/taragarmr/etc/ssh/ (its age recipient
+# is &host_taragarmr in .sops.yaml); inject it with
+#   nixos-anywhere ... --extra-files ~/server-migration/host-keys/taragarmr
+# so secrets/taragarmr.yaml decrypts on first boot. Do not run scripts/bootstrap-sops.sh. Later
+# deploys:
 #   nixos-rebuild switch --flake .#taragarmr --target-host krane@taragarmr --sudo --ask-sudo-password
 #
 # Secrets (secrets/taragarmr.yaml): wireguard/{wg0,wg1}-private-key, couchdb/env,
-# restic/{rest-env,repo-password}. A missing section switches that feature off.
+# restic/{rest-env,repo-password}, users/krane-password-hash. A missing section switches that feature off.
 { ... }:
 {
   imports = [

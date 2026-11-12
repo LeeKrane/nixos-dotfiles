@@ -9,8 +9,11 @@
 #   2. From a desktop (aarch64 closure from nixos-raspberrypi's cache):
 #        nix run github:nix-community/nixos-anywhere -- --flake .#taronychus \
 #          --target-host root@<installer-ip>
-#      disko partitions the NVMe per ./disko.nix. The sops age key derives from the SSH host
-#      key nixos-anywhere generates; add it with scripts/bootstrap-sops.sh before step 8.
+#      disko partitions the NVMe per ./disko.nix. The sops age key derives from this host's
+#      pre-generated SSH host key (~/server-migration/host-keys/taronychus/etc/ssh/, recipient
+#      &host_taronychus in .sops.yaml): add
+#        --extra-files ~/server-migration/host-keys/taronychus
+#      to the nixos-anywhere call. Do not run scripts/bootstrap-sops.sh.
 #   3. Check the EEPROM boot order prefers NVMe: `rpi-eeprom-config | grep BOOT_ORDER`
 #      (0xf416 = SD, then NVMe, then USB; remove the SD card after installing).
 # Later deploys: nixos-rebuild switch --flake .#taronychus --target-host krane@taronychus

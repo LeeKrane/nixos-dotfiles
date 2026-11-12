@@ -32,7 +32,9 @@
     };
   };
 
-  # No password hash is ever committed. The account's login password is set
-  # once at install with `nixos-enter -- passwd <krane.user.name>`.
+  # No plaintext password is ever committed. Desktops: the login password is set once at
+  # install with `nixos-enter -- passwd <krane.user.name>`. Servers: hashedPasswordFile from
+  # the sops secret users/krane-password-hash (modules/nixos/server/ssh.nix), applied at user
+  # creation only, since mutableUsers keeps existing passwords.
   users.mutableUsers = true;
 }
