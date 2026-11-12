@@ -15,6 +15,14 @@ keys:
   - &host_tarmantria age1779675ua8quw2d2shtejxgxz36fekj8ez90a7e7rhngsukj6dcpsqnctlx
   - &admin_taractias age1jwlqpsyazly7u24h5nwegaznc9mlgqnnek0xxn9nksmgxft3pg9sph75al
   - &host_taractias age18ln7hrxrhx59dk5cn4p8d9gndnftkcpyauvfkhttfhphu6kg3adq8q8wsf
+  # Servers: no admin key of their own. They are administered from tariognatha and
+  # tarmantria, so both of those admin keys are recipients of every server file. Host keys
+  # come from SSH host keys pre-generated before install (injected via nixos-anywhere
+  # --extra-files or copied onto the SD image), not from bootstrap-sops.sh.
+  - &host_taragarmr age1jmqpxrmz20clmnvaufnadxetv3q5ra79zpfhhh9p4sqh9rg8vucs8ck07k
+  - &host_taronychus age15wryrqekk749mc9s0dul4qxwt6x7vudeu44x7sex0d3tylggzveqs562w4
+  - &host_tarritator age1w486a5exr8rys6krgsgv4vvhss7hzn2an8hmzmfwxs6nwlh23eesr4z479
+  - &host_tarronax age1yv39slw5gr04kqm2u4900k8q2vlckph3jl7rat4ejnsnfpm3xg7qz5svtg
 
 creation_rules:
   - path_regex: secrets/tariognatha\.yaml$
@@ -34,3 +42,31 @@ creation_rules:
       - age:
           - *admin_taractias
           - *host_taractias
+
+  - path_regex: secrets/taragarmr\.yaml$
+    key_groups:
+      - age:
+          - *admin_tariognatha
+          - *admin_tarmantria
+          - *host_taragarmr
+
+  - path_regex: secrets/taronychus\.yaml$
+    key_groups:
+      - age:
+          - *admin_tariognatha
+          - *admin_tarmantria
+          - *host_taronychus
+
+  - path_regex: secrets/tarritator\.yaml$
+    key_groups:
+      - age:
+          - *admin_tariognatha
+          - *admin_tarmantria
+          - *host_tarritator
+
+  - path_regex: secrets/tarronax\.yaml$
+    key_groups:
+      - age:
+          - *admin_tariognatha
+          - *admin_tarmantria
+          - *host_tarronax
