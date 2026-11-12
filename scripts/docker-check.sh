@@ -22,21 +22,6 @@ cd "$REPO_ROOT"
 IMAGE="nixos/nix:latest"
 VOLUME="nixstore"
 
-# hosts/ is the single source of truth: flake.nix discovers its hosts from
-# the same directories, as do install.sh and bootstrap-sops.sh's known_hosts().
-HOSTS=()
-for d in "$REPO_ROOT"/hosts/*/; do
-    # Skip hosts that are not x86_64-linux (hosts/<name>/host.nix `system`, default
-    # x86_64-linux): the nixos/nix container cannot build aarch64 toplevels.
-    if [ -f "${d}host.nix" ] && ! grep -Eq 'system *= *"x86_64-linux"' "${d}host.nix"; then
-        continue
-    fi
-    HOSTS+=("$(basename "$d")")
-done
-HOSTS_PIPE=$(
-    IFS='|'
-    echo "${HOSTS[*]}"
-)
 # filter-syscalls=false works around seccomp restrictions on the Nix
 # sandbox. max-jobs/cores match the cgroup limits below, so Nix backs off
 # instead of the cgroup OOM-killing it. Override with NIX_MAX_JOBS/NIX_CORES.
@@ -79,6 +64,22 @@ run_in_container() {
         "
 }
 
+# The host list comes from the flake, the one source shared with CI: scripts/hosts.nix over
+# lib.hostMeta (hosts/*/host.nix), i.e. every x86_64-linux host, as the nixos/nix container
+# cannot build aarch64 toplevels. install.sh and bootstrap-sops.sh's known_hosts() glob the
+# same hosts/ directories. Called only by the modes that need it, after the volume is seeded.
+HOSTS=()
+HOSTS_PIPE=""
+load_hosts() {
+    local list
+    list=$(run_in_container "nix eval --raw --impure .#lib.hostMeta --apply 'm: toString (import ./scripts/hosts.nix m)'")
+    read -r -a HOSTS <<<"$list"
+    HOSTS_PIPE=$(
+        IFS='|'
+        echo "${HOSTS[*]}"
+    )
+}
+
 mode="${1:-check}"
 
 seed_volume_if_missing
@@ -88,6 +89,7 @@ case "$mode" in
         # seed_volume_if_missing above already did the work.
         ;;
     check)
+        load_hosts
         # Only the host list is spliced in here, $h expands in the container's sh.
         # shellcheck disable=SC2016 # expands inside the container's sh, not here
         run_in_container '
@@ -100,6 +102,7 @@ case "$mode" in
         '
         ;;
     build)
+        load_hosts
         host="${2:-}"
         if [ -z "$host" ]; then
             echo "usage: $0 build <$HOSTS_PIPE>" >&2
@@ -111,6 +114,7 @@ case "$mode" in
         run_in_container 'nix build .#nixosConfigurations.tariognatha-vm.config.system.build.vm'
         ;;
     eval)
+        load_hosts
         host="${2:-}"
         if [ -z "$host" ]; then
             echo "usage: $0 eval <$HOSTS_PIPE>" >&2

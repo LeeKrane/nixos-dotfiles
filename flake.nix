@@ -115,7 +115,7 @@
 
       # Every directory under hosts/ is a host. install.sh's new-host flow adds one by
       # scaffolding hosts/<name>/ from templates/host/. install.sh, bootstrap-sops.sh's
-      # known_hosts() and docker-check.sh's HOSTS glob the same directories. Plain files
+      # known_hosts() glob the same directories; docker-check.sh and CI read lib.hostMeta. Plain files
       # under hosts/ are ignored.
       hosts = nixpkgs.lib.attrNames (
         nixpkgs.lib.filterAttrs (_: type: type == "directory") (builtins.readDir ./hosts)
@@ -188,6 +188,10 @@
       desktopHosts = builtins.filter (name: hostMeta.${name}.role == "desktop") hosts;
     in
     {
+      # Per-host metadata (above), for scripts/hosts.nix and docker-check.sh: readable without
+      # instantiating any host's nixpkgs.
+      lib.hostMeta = hostMeta;
+
       nixosConfigurations =
         nixpkgs.lib.genAttrs hosts (
           hostName:

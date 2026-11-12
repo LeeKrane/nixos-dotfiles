@@ -35,7 +35,7 @@ jobs:
         run: |
           # scripts/hosts.nix is the one shared place for this list; check.yml's
           # eval matrix and the security job below use the same file.
-          nix eval --json --impure '.#nixosConfigurations' --apply 'import ./scripts/hosts.nix' > "$RUNNER_TEMP/hosts.json"
+          nix eval --json --impure '.#lib.hostMeta' --apply 'import ./scripts/hosts.nix' > "$RUNNER_TEMP/hosts.json"
           echo "hosts=$(command cat "$RUNNER_TEMP/hosts.json")" >> "$GITHUB_OUTPUT"
       - name: Save old flake.lock
         run: cp flake.lock "$RUNNER_TEMP/flake.lock.old"
@@ -152,7 +152,7 @@ jobs:
       - name: Evaluate toplevel derivations before and after
         run: |
           # shellcheck disable=SC2016 # ${h} is Nix antiquotation, not a shell variable
-          apply='cfgs: let hosts = import ./scripts/hosts.nix cfgs; in builtins.listToAttrs (map (h: { name = h; value = cfgs.${h}.config.system.build.toplevel.drvPath; }) hosts)'
+          apply='cfgs: let hosts = import ./scripts/hosts.nix (builtins.getFlake (toString ./.)).lib.hostMeta; in builtins.listToAttrs (map (h: { name = h; value = cfgs.${h}.config.system.build.toplevel.drvPath; }) hosts)'
           # git restore --worktree is no-overlay: unlike `git checkout <ref> --
           # <path>`, it deletes a path that exists in the worktree but not at
           # <ref> (e.g. pkgs/claude-code, if this update added it).

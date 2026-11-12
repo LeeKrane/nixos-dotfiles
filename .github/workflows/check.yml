@@ -63,7 +63,7 @@ jobs:
         run: |
           # scripts/hosts.nix is the one shared place for this list;
           # update.yml's update/security jobs use the same file.
-          nix eval --json --impure '.#nixosConfigurations' --apply 'import ./scripts/hosts.nix' > "$RUNNER_TEMP/hosts.json"
+          nix eval --json --impure '.#lib.hostMeta' --apply 'import ./scripts/hosts.nix' > "$RUNNER_TEMP/hosts.json"
           echo "hosts=$(command cat "$RUNNER_TEMP/hosts.json")" >> "$GITHUB_OUTPUT"
 
   eval:
