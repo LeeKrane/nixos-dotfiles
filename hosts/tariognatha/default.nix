@@ -10,6 +10,10 @@
 
   system.stateVersion = "26.05";
 
+  # Build the Raspberry Pi servers' images and closures here (qemu-user for the aarch64 steps
+  # that cannot be cross-built; the vendor kernels come from nixos-raspberrypi's cache).
+  boot.binfmt.emulatedSystems = [ "aarch64-linux" ];
+
   # display.nix sets krane.hypr.*, a home-manager module, imported at the user level.
   # tarkov.nix, spt.nix, stalker-gamma.nix and heuristiclab.nix are also home-manager,
   # here and not in modules/home/desktop/default.nix: only the hosts that use them.

@@ -12,6 +12,10 @@
 
   system.stateVersion = "26.05";
 
+  # Build the Raspberry Pi servers' images and closures here (qemu-user for the aarch64 steps
+  # that cannot be cross-built; the vendor kernels come from nixos-raspberrypi's cache).
+  boot.binfmt.emulatedSystems = [ "aarch64-linux" ];
+
   # zram at twice the RAM size instead of boot.nix's 1:1 default: Tarkov alone keeps ~9 GiB
   # resident plus swapped on this 16 GiB laptop, and its launcher another ~3 GiB.
   zramSwap.memoryPercent = 200;

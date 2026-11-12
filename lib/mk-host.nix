@@ -1,4 +1,5 @@
-# mkHost { hostName, system, role ? "desktop", hostDir ? ../hosts/<hostName>, extraModules ? [ ] }
+# mkHost { hostName, system, role ? "desktop", board ? null, hostDir ? ../hosts/<hostName>,
+#          extraModules ? [ ] }
 #   -> nixosSystem
 # Shared host builder: wires disko, sops-nix, home-manager and the soymou
 # module, at the HM level to avoid a dconf eval error.
@@ -25,19 +26,39 @@ in
   # Picks modules/{nixos,home}/<role> next to common/; "desktop" also gets the
   # illogical-impulse home-manager module.
   role ? "desktop",
+  # Raspberry Pi board ("rpi4" | "rpi5", from hosts/<name>/host.nix) or null for everything
+  # else. A board adds the nixos-raspberrypi modules (vendor kernel/firmware overlays,
+  # bootloader, board base profile, its binary cache); hosts add sd-image or disko themselves.
+  # Needs system = "aarch64-linux".
+  board ? null,
   # Host module directory; only the flake's server-eval check points this elsewhere.
   hostDir ? ../hosts/${hostName},
   extraModules ? [ ],
 }:
 let
   roleInputs = inputsFor role;
+  rpi = roleInputs.nixos-raspberrypi;
+  # Per RPi board: the module that sets variant, kernel and firmware. Only the plain
+  # overlays are injected (not inject-overlays-global, page-size-16k or a kernel override),
+  # which would miss nixos-raspberrypi's cache and need emulated kernel builds.
+  boardModules = {
+    rpi4 = rpi.nixosModules.raspberry-pi-4.base;
+    # The bootloader is set per host (hosts/taronychus: the generational "kernel" loader).
+    rpi5 = rpi.nixosModules.raspberry-pi-5.base;
+  };
 in
+assert roleInputs.nixpkgs.lib.assertMsg (board == null || boardModules ? ${board})
+  "mkHost ${hostName}: unknown board \"${toString board}\", expected one of ${toString (builtins.attrNames boardModules)}";
+assert roleInputs.nixpkgs.lib.assertMsg (
+  board == null || (system == "aarch64-linux" && role == "server")
+) "mkHost ${hostName}: board ${toString board} needs system aarch64-linux and role server";
 roleInputs.nixpkgs.lib.nixosSystem {
   inherit system;
   specialArgs = {
     inherit hostName role;
     inputs = roleInputs;
-  };
+  }
+  // roleInputs.nixpkgs.lib.optionalAttrs (board != null) { nixos-raspberrypi = rpi; };
   modules = [
     {
       networking.hostName = hostName;
@@ -62,6 +83,14 @@ roleInputs.nixpkgs.lib.nixosSystem {
     ../modules/nixos/${role}
     ../modules/nixos/common
     hostDir
+  ]
+  ++ roleInputs.nixpkgs.lib.optionals (board != null) [
+    rpi.lib.inject-overlays
+    rpi.nixosModules.nixpkgs-rpi
+    rpi.nixosModules.trusted-nix-caches
+    boardModules.${board}
+  ]
+  ++ [
     (
       { config, ... }:
       {

@@ -11,7 +11,14 @@
 
     # Stable channel for role = "server" hosts (lib/mk-host.nix swaps these in under the
     # names nixpkgs/home-manager/nixvim). Bump all three together at each NixOS release.
-    nixpkgs-stable.url = "github:NixOS/nixpkgs/nixos-26.05";
+    # Follows nixos-raspberrypi's pin (nixos-26.05) so every server, the Pis included, shares
+    # one nixpkgs revision and the Pi kernels/firmware come from their binary cache. The pin
+    # is checked against nixos-26.05 when bumping.
+    nixpkgs-stable.follows = "nixos-raspberrypi/nixpkgs";
+    nixos-raspberrypi = {
+      url = "github:nvmd/nixos-raspberrypi/main";
+      # Not following our nixpkgs: the cache only holds what its own pin builds.
+    };
     home-manager-stable = {
       url = "github:nix-community/home-manager/release-26.05";
       inputs.nixpkgs.follows = "nixpkgs-stable";
@@ -53,6 +60,15 @@
     # nixpkgs revision. Imported by taractias and by hosts scaffolded from
     # templates/host/ (GPU profile and form-factor imports).
     nixos-hardware.url = "github:NixOS/nixos-hardware/master";
+  };
+
+  # The Pi kernels, firmware and images are cached here; flake nixConfig needs
+  # `--accept-flake-config` (or trusted-users) to take effect.
+  nixConfig = {
+    extra-substituters = [ "https://nixos-raspberrypi.cachix.org" ];
+    extra-trusted-public-keys = [
+      "nixos-raspberrypi.cachix.org-1:4iMO9LXa8BqhU+Rpg6LQKiGa2lsNh/j2oiYLNOQ5sPI="
+    ];
   };
 
   outputs =
@@ -102,31 +118,50 @@
         nixpkgs.lib.filterAttrs (_: type: type == "directory") (builtins.readDir ./hosts)
       );
 
-      # Per-host metadata: an optional hosts/<name>/host.nix attrset `{ system, role }`. A missing
-      # file, or a missing attribute in it, takes the default: x86_64-linux, role "desktop".
-      # role picks the module set mk-host.nix imports (modules/{nixos,home}/{common,<role>}).
-      # Unknown attribute names or roles fail evaluation instead of silently falling back to
-      # the defaults.
+      # Per-host metadata: an optional hosts/<name>/host.nix attrset `{ system, role, board }`. A
+      # missing file, or a missing attribute in it, takes the default: x86_64-linux, role
+      # "desktop", no board. role picks the module set mk-host.nix imports
+      # (modules/{nixos,home}/{common,<role>}). board ("rpi4" | "rpi5") marks a Raspberry Pi:
+      # it adds the nixos-raspberrypi modules, and defaults system to aarch64-linux and role
+      # to "server" (both may only be given as those values). Unknown attribute names, roles
+      # or boards fail evaluation instead of silently falling back to the defaults.
       hostMeta = nixpkgs.lib.genAttrs hosts (
         name:
         let
           file = ./hosts/${name}/host.nix;
           given = if builtins.pathExists file then import file else { };
+          board = given.board or null;
           meta = {
-            inherit system;
-            role = "desktop";
+            system = if board == null then system else "aarch64-linux";
+            role = if board == null then "desktop" else "server";
+            inherit board;
           }
           // given;
-          unknown = builtins.filter (a: a != "system" && a != "role") (builtins.attrNames given);
+          unknown = builtins.filter (
+            a:
+            !builtins.elem a [
+              "system"
+              "role"
+              "board"
+            ]
+          ) (builtins.attrNames given);
         in
         assert nixpkgs.lib.assertMsg (builtins.isAttrs given)
-          "hosts/${name}/host.nix: must evaluate to an attribute set { system, role }, got ${builtins.typeOf given}";
+          "hosts/${name}/host.nix: must evaluate to an attribute set { system, role, board }, got ${builtins.typeOf given}";
         assert nixpkgs.lib.assertMsg (unknown == [ ])
-          "hosts/${name}/host.nix: unknown attribute(s) ${toString unknown}; only system and role are allowed";
+          "hosts/${name}/host.nix: unknown attribute(s) ${toString unknown}; only system, role and board are allowed";
         assert nixpkgs.lib.assertMsg (builtins.elem meta.role [
           "desktop"
           "server"
         ]) "hosts/${name}/host.nix: role must be \"desktop\" or \"server\", got \"${toString meta.role}\"";
+        assert nixpkgs.lib.assertMsg (builtins.elem meta.board [
+          null
+          "rpi4"
+          "rpi5"
+        ]) "hosts/${name}/host.nix: board must be \"rpi4\" or \"rpi5\", got \"${toString meta.board}\"";
+        assert nixpkgs.lib.assertMsg
+          (meta.board == null || (meta.system == "aarch64-linux" && meta.role == "server"))
+          "hosts/${name}/host.nix: board ${toString meta.board} needs system aarch64-linux and role \"server\"";
         meta
       );
       desktopHosts = builtins.filter (name: hostMeta.${name}.role == "desktop") hosts;
@@ -137,7 +172,7 @@
           hostName:
           mkHost {
             inherit hostName;
-            inherit (hostMeta.${hostName}) system role;
+            inherit (hostMeta.${hostName}) system role board;
           }
         )
         // {
