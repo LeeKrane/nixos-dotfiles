@@ -23,6 +23,7 @@
     ./couchdb.nix
     ./spt.nix
     ./services.nix
+    ./backup.nix
   ];
 
   system.stateVersion = "26.05";
