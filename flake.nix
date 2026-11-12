@@ -97,18 +97,21 @@
 
       # The same editor for role = "server" hosts: nixvim and nixpkgs both from the stable
       # inputs (modules/home/common/neovim.nix picks it by role).
-      pkgsStable = import inputs.nixpkgs-stable {
-        inherit system;
-        overlays = overlaysList;
-        config.allowUnfree = true;
-      };
-      nvimStableEval = inputs.nixvim-stable.lib.evalNixvim {
-        modules = [
-          ./modules/nixvim
-          { nixpkgs.pkgs = pkgsStable; }
-        ];
-      };
-      nvim-stable = nvimStableEval.config.build.package;
+      nvimStableFor =
+        sys:
+        (inputs.nixvim-stable.lib.evalNixvim {
+          modules = [
+            ./modules/nixvim
+            {
+              nixpkgs.pkgs = import inputs.nixpkgs-stable {
+                system = sys;
+                overlays = overlaysList;
+                config.allowUnfree = true;
+              };
+            }
+          ];
+        }).config.build.package;
+      nvim-stable = nvimStableFor system;
 
       # Every directory under hosts/ is a host. install.sh's new-host flow adds one by
       # scaffolding hosts/<name>/ from templates/host/. install.sh, bootstrap-sops.sh's
@@ -164,6 +167,13 @@
           "hosts/${name}/host.nix: board ${toString meta.board} needs system aarch64-linux and role \"server\"";
         meta
       );
+      # Raspberry Pi hosts (aarch64-linux). Never built here: CI builds x86_64 hosts only
+      # (scripts/hosts.nix), but they are evaluated by checks.pi-eval, and their images are
+      # exposed as packages (`nix build .#image-<host>`, via qemu binfmt or an aarch64 builder).
+      piHosts = builtins.filter (name: hostMeta.${name}.board != null) hosts;
+      sdImageHosts = builtins.filter (
+        name: self.nixosConfigurations.${name}.config.system.build ? sdImage
+      ) piHosts;
       desktopHosts = builtins.filter (name: hostMeta.${name}.role == "desktop") hosts;
     in
     {
@@ -189,9 +199,23 @@
           };
         };
 
-      packages.${system} = import ./pkgs { inherit pkgs; } // {
-        inherit nvim nvim-stable;
-      };
+      # aarch64-linux: only the server editor, which the Pi hosts' home-manager installs
+      # (modules/home/common/neovim.nix reads inputs.self.packages.<hostPlatform>).
+      packages.aarch64-linux.nvim-stable = nvimStableFor "aarch64-linux";
+
+      packages.${system} =
+        import ./pkgs { inherit pkgs; }
+        // {
+          inherit nvim nvim-stable;
+          # nixos-raspberrypi's installer SD images, for hosts that are installed with
+          # nixos-anywhere (taronychus: hosts/taronychus/default.nix).
+          image-installer-rpi4 = inputs.nixos-raspberrypi.installerImages.rpi4;
+          image-installer-rpi5 = inputs.nixos-raspberrypi.installerImages.rpi5;
+        }
+        # Ready-to-flash SD images of the Pi hosts that use the sd-image module.
+        // nixpkgs.lib.genAttrs (map (h: "image-${h}") sdImageHosts) (
+          name: self.nixosConfigurations.${nixpkgs.lib.removePrefix "image-" name}.config.system.build.sdImage
+        );
 
       overlays.default = nixpkgs.lib.composeManyExtensions overlaysList;
 
@@ -452,6 +476,60 @@
               spokeToplevel = builtins.unsafeDiscardOutputDependency spoke.system.build.toplevel.drvPath;
             } "echo \"$toplevel $hubToplevel $spokeToplevel\" > $out"
           );
+
+        # Evaluates every Raspberry Pi host (aarch64-linux, role server) on the stable channel and
+        # forces its toplevel (and sdImage) derivation paths: the x86_64 CI cannot build them, but
+        # evaluating works. Also asserts the Pi boot setup: nixos-raspberrypi's loader, the
+        # Pi 5 hosts on the generational "kernel" one, and no systemd-boot/grub.
+        pi-eval =
+          let
+            inherit (nixpkgs) lib;
+            cfgOf = name: self.nixosConfigurations.${name}.config;
+            expectations = lib.concatMap (
+              name:
+              let
+                cfg = cfgOf name;
+                board = hostMeta.${name}.board;
+                loader = cfg.boot.loader;
+              in
+              [
+                {
+                  ok = cfg.nixpkgs.hostPlatform.system == "aarch64-linux" && cfg.system.nixos.release == "26.05";
+                  what = "${name}: not aarch64-linux on NixOS 26.05";
+                }
+                {
+                  ok = loader.raspberry-pi.enable && !loader.grub.enable && !loader.systemd-boot.enable;
+                  what = "${name}: the nixos-raspberrypi loader is off, or grub/systemd-boot is on";
+                }
+                {
+                  ok = loader.raspberry-pi.bootloader == (if board == "rpi5" then "kernel" else "uboot");
+                  what = "${name}: bootloader ${loader.raspberry-pi.bootloader} is wrong for ${board}";
+                }
+                {
+                  ok = loader.raspberry-pi.variant == (if board == "rpi5" then "5" else "4");
+                  what = "${name}: loader variant does not match board ${board}";
+                }
+              ]
+            ) piHosts;
+            failed = map (e: e.what) (builtins.filter (e: !e.ok) expectations);
+            drv = name: self.nixosConfigurations.${name}.config.system.build.toplevel.drvPath;
+          in
+          nixpkgs.lib.throwIf (piHosts == [ ] || failed != [ ])
+            "checks.pi-eval: ${
+              if piHosts == [ ] then "no board hosts" else nixpkgs.lib.concatStringsSep "; " failed
+            }"
+            (
+              pkgs.runCommand "krane-pi-eval"
+                {
+                  drvs = map (n: builtins.unsafeDiscardOutputDependency (drv n)) piHosts;
+                  images = map (
+                    n: builtins.unsafeDiscardOutputDependency (cfgOf n).system.build.sdImage.drvPath
+                  ) sdImageHosts;
+                }
+                ''
+                  echo "$drvs $images" > $out
+                ''
+            );
 
         # NixVim's own startup test: fails on errors or warnings at startup.
         nvim = nvimEval.config.build.test;
