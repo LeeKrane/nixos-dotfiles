@@ -97,7 +97,8 @@ def tkey: [.cve, .package];
 # today) and rows for the "fixed" side come from $before (the version that
 # carried the CVE before the update), so .version is already the right side
 # per caller; group it into one deduplicated, comma-joined string in case it
-# somehow differs across the hosts a group spans.
+# somehow differs across the hosts a group spans. A group spanning every
+# scanned host shows "all" instead of listing them.
 def grouped($flat):
   $flat
   | group_by([.cve, .package])
@@ -106,14 +107,15 @@ def grouped($flat):
       cvss: (map(.cvss) | max),
       package: .[0].package,
       versions: (map(.version) | map(select(. != "")) | unique | join(", ")),
-      hosts: (map(.host) | unique | join(", ")),
+      hosts: (map(.host) | unique
+        | if length == $nhosts then "all" else join(", ") end),
     })
   | sort_by(-.cvss);
 { new: grouped($newFlat), fixed: grouped($fixedFlat) }
 JQ
 
 diff_json="$(jq -n --slurpfile before "$before_flat" --slurpfile after "$after_flat" \
-  -f "$WORK/diff.jq")"
+  --argjson nhosts "${#HOSTS[@]}" -f "$WORK/diff.jq")"
 
 new_count="$(jq '.new | length' <<<"$diff_json")"
 fixed_count="$(jq '.fixed | length' <<<"$diff_json")"
