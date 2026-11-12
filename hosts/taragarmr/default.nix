@@ -19,6 +19,7 @@
   imports = [
     ./hardware-configuration.nix
     ./disko.nix
+    ./caddy.nix
   ];
 
   system.stateVersion = "26.05";
