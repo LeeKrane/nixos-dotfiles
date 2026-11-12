@@ -1,14 +1,8 @@
-# Aggregate import for all NixOS modules. GPU modules are host-specific,
-# imported separately per host.
+# NixOS modules for role "desktop" (Hyprland, audio, gaming, ...).
 { ... }:
 {
   imports = [
-    ./nix-settings.nix
     ./hardware.nix
-    ./locale.nix
-    ./users.nix
-    ./user.nix
-    ./keyboard.nix
     ./boot.nix
     ./networking.nix
     ./audio.nix
@@ -22,6 +16,5 @@
     ./recording.nix
     ./flatpak.nix
     ./appimage.nix
-    ./sops.nix
   ];
 }

@@ -1720,7 +1720,7 @@ sops_placeholder_present() {
 # the same shape the committed hosts had before scripts/bootstrap-sops.sh
 # replaced their placeholders, so setup mode's run_bootstrap_sops and
 # sops_placeholder_present work unchanged. No secrets/$2.yaml is created:
-# modules/nixos/sops.nix's pathExists gate handles its absence. A no-op when
+# modules/nixos/common/sops.nix's pathExists gate handles its absence. A no-op when
 # either anchor already exists, matched whole so `tar` never hits
 # `&admin_taractias`.
 register_sops_host() {

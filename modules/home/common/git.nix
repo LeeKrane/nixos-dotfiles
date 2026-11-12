@@ -5,7 +5,7 @@
 
     settings = {
       # programs.git.userName/.userEmail are renamed to settings.user.{name,email} on this revision.
-      # Per host, from krane.user.gitName/gitEmail (modules/nixos/user.nix).
+      # Per host, from krane.user.gitName/gitEmail (modules/nixos/common/user.nix).
       user.name = kraneUser.gitName;
       user.email = kraneUser.gitEmail;
 

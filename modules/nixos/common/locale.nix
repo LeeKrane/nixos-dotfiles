@@ -22,7 +22,7 @@
   console.font = "eurlatgr";
 
   # Hyprland reads this even without an X server. Per-host layout/variant:
-  # modules/nixos/keyboard.nix.
+  # modules/nixos/common/keyboard.nix.
   services.xserver.xkb = {
     layout = config.krane.keyboard.layout;
     variant = config.krane.keyboard.variant;

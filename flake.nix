@@ -77,16 +77,48 @@
       hosts = nixpkgs.lib.attrNames (
         nixpkgs.lib.filterAttrs (_: type: type == "directory") (builtins.readDir ./hosts)
       );
+
+      # Per-host metadata: an optional hosts/<name>/host.nix attrset `{ system, role }`. A missing
+      # file, or a missing attribute in it, takes the default: x86_64-linux, role "desktop".
+      # role picks the module set mk-host.nix imports (modules/{nixos,home}/{common,<role>}).
+      # Unknown attribute names or roles fail evaluation instead of silently falling back to
+      # the defaults.
+      hostMeta =
+        name:
+        let
+          file = ./hosts/${name}/host.nix;
+          given = if builtins.pathExists file then import file else { };
+          meta = {
+            inherit system;
+            role = "desktop";
+          }
+          // given;
+          unknown = builtins.filter (a: a != "system" && a != "role") (builtins.attrNames given);
+        in
+        assert nixpkgs.lib.assertMsg (unknown == [ ])
+          "hosts/${name}/host.nix: unknown attribute(s) ${toString unknown}; only system and role are allowed";
+        assert nixpkgs.lib.assertMsg (builtins.elem meta.role [
+          "desktop"
+          "server"
+        ]) "hosts/${name}/host.nix: role must be \"desktop\" or \"server\", got \"${meta.role}\"";
+        meta;
+      desktopHosts = builtins.filter (name: (hostMeta name).role == "desktop") hosts;
     in
     {
       nixosConfigurations =
-        nixpkgs.lib.genAttrs hosts (hostName: mkHost { inherit hostName system; })
+        nixpkgs.lib.genAttrs hosts (
+          hostName:
+          mkHost {
+            inherit hostName;
+            inherit (hostMeta hostName) system role;
+          }
+        )
         // {
           # QEMU/UEFI check target: tariognatha with GPU/disko/real fs
           # switched off.
           tariognatha-vm = mkHost {
             hostName = "tariognatha";
-            inherit system;
+            inherit (hostMeta "tariognatha") system role;
             extraModules = [
               ./hosts/tariognatha/vm-overrides.nix
               # mkForce: overrides mk-host.nix's plain hostName definition.
@@ -121,7 +153,8 @@
 
       checks.${system} = {
         # custom/*.lua is parsed only at Hyprland session start. Catch
-        # syntax errors here instead. Parse-only, undefined globals are fine.
+        # syntax errors here instead. Parse-only, undefined globals are fine. Desktop
+        # hosts only: other roles have no krane.hypr.
         lua-syntax =
           let
             renderedFiles = nixpkgs.lib.concatMap (
@@ -130,7 +163,7 @@
                 cfg = self.nixosConfigurations.${host}.config;
               in
               nixpkgs.lib.attrValues cfg.home-manager.users.${cfg.krane.user.name}.krane.hypr._rendered
-            ) hosts;
+            ) desktopHosts;
           in
           # Refuse an empty `_rendered` list here, at eval time, and
           # again in the builder, so this check can't pass vacuously.
@@ -153,7 +186,7 @@
               ''
             );
 
-        # krane.user wiring (modules/nixos/user.nix): the stock hosts keep "krane", and
+        # krane.user wiring (modules/nixos/common/user.nix): the stock hosts keep "krane", and
         # overriding it moves the account, the home-manager user, the git identity,
         # nix trusted-users and greetd autologin with it. Eval-only: the derivation is
         # trivial, the assertions run while evaluating it.

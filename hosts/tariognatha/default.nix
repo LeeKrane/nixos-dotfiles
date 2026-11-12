@@ -5,21 +5,21 @@
     ./disko.nix
     ./storage.nix
     ../../modules/nixos/gpu/nvidia-desktop.nix
-    ../../modules/nixos/t7-win11.nix
+    ../../modules/nixos/desktop/t7-win11.nix
   ];
 
   system.stateVersion = "26.05";
 
   # display.nix sets krane.hypr.*, a home-manager module, imported at the user level.
   # tarkov.nix, spt.nix, stalker-gamma.nix and heuristiclab.nix are also home-manager,
-  # here and not in modules/home/default.nix: only the hosts that use them.
+  # here and not in modules/home/desktop/default.nix: only the hosts that use them.
   home-manager.users.${config.krane.user.name} = {
     imports = [
       ./display.nix
-      ../../modules/home/tarkov.nix
-      ../../modules/home/spt.nix
-      ../../modules/home/stalker-gamma.nix
-      ../../modules/home/heuristiclab.nix
+      ../../modules/home/desktop/tarkov.nix
+      ../../modules/home/desktop/spt.nix
+      ../../modules/home/desktop/stalker-gamma.nix
+      ../../modules/home/desktop/heuristiclab.nix
     ];
     # taragarmr's wg1 address, reached over wg0; the public port is closed.
     krane.spt.server = "https://192.168.83.1:6969";

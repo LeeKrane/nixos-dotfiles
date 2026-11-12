@@ -1,5 +1,5 @@
 # Activates graphical-session.target for the plain (non-UWSM) Hyprland session. greetd
-# autologins into start-hyprland (modules/nixos/desktop.nix), and nothing in that path starts
+# autologins into start-hyprland (modules/nixos/desktop/desktop.nix), and nothing in that path starts
 # the target. xdg-desktop-portal has Requisite=graphical-session.target, so without it every
 # portal call fails with "Dependency failed" and screen sharing, file pickers etc. never open.
 # graphical-session.target refuses manual start, so a bound target is started instead. The env

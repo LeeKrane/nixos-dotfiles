@@ -1,4 +1,4 @@
-# Go. The go toolchain is in modules/home/dev.nix; gopls finds it on PATH.
+# Go. The go toolchain is in modules/home/desktop/dev.nix; gopls finds it on PATH.
 { pkgs, ... }:
 {
   lsp.servers.gopls = {

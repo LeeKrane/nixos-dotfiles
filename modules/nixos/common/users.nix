@@ -1,4 +1,4 @@
-# The one human user account, named by krane.user.name (modules/nixos/user.nix).
+# The one human user account, named by krane.user.name (modules/nixos/common/user.nix).
 { config, pkgs, ... }:
 {
   # `i2c` group already exists via hardware.i2c.enable. `plugdev` is

@@ -1,5 +1,5 @@
 # home-manager module: display / input layout for @HOST@, imported at the user level from
-# hosts/@HOST@/default.nix, rendered to Lua by modules/home/hypr-config.nix. Scaffolded with
+# hosts/@HOST@/default.nix, rendered to Lua by modules/home/desktop/hypr-config.nix. Scaffolded with
 # one catch-all monitor rule because the live ISO runs no Hyprland to detect outputs: after
 # first login, check `hyprctl monitors -j` and name the real outputs here (see
 # hosts/tariognatha/display.nix for a multi-monitor layout).
@@ -16,7 +16,7 @@
       }
     ];
 
-    # Layout/variant come from krane.keyboard (modules/nixos/keyboard.nix), set
+    # Layout/variant come from krane.keyboard (modules/nixos/common/keyboard.nix), set
     # in default.nix, so locale.nix's xkb/TTY keymap and this Hyprland setting
     # never drift apart.
     settings.input = {

@@ -1,7 +1,7 @@
 # Declarative Hyprland overrides for ii. ii is configured in Lua, not hyprland.conf:
 # hyprland.lua sources hyprland/* then custom/*.lua and monitors.lua. This module only renders
 # krane.hypr.* into Lua files in the store (krane.hypr._rendered). Installing them into $HOME is
-# modules/home/illogical-impulse.nix's job, since that must run after soymou's dotfiles copy.
+# modules/home/desktop/illogical-impulse.nix's job, since that must run after soymou's dotfiles copy.
 # Sourcing order (dots/.config/hypr/hyprland.lua):
 #   hyprland.lib -> hyprland.services -> hyprland.env -> custom.env
 #   -> hyprland.{execs,general,rules,colors,keybinds} -> custom.execs
@@ -492,7 +492,7 @@ in
         Keep ii's hypridle idle listeners (lock, DPMS off, suspend). false strips
         every `listener` block from ~/.config/hypr/hypridle.conf, so the session
         never locks, blanks or suspends on its own; manual lock and lock-before-sleep
-        stay. Applied by modules/home/illogical-impulse.nix, not rendered to Lua.
+        stay. Applied by modules/home/desktop/illogical-impulse.nix, not rendered to Lua.
       '';
     };
 
@@ -502,7 +502,7 @@ in
       readOnly = true;
       description = ''
         Rendered Lua files, keyed by their path relative to ~/.config/hypr.
-        Consumed by modules/home/illogical-impulse.nix (installation) and by
+        Consumed by modules/home/desktop/illogical-impulse.nix (installation) and by
         the flake's `lua-syntax` check (`luac -p`).
       '';
     };

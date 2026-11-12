@@ -1,7 +1,7 @@
 # LaTeX: vimtex (compile/view/motions, uses the system texliveMedium) + texlab + latexindent.
 { pkgs, ... }:
 let
-  # Only latexindent is bundled (off PATH); TeX itself stays in modules/home/dev.nix.
+  # Only latexindent is bundled (off PATH); TeX itself stays in modules/home/desktop/dev.nix.
   latexindent = pkgs.texliveBasic.withPackages (ps: [ ps.latexindent ]);
 in
 {

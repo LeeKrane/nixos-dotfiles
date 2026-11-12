@@ -149,7 +149,7 @@ nmcli con up "<connection name>"
 
 ## NVIDIA black-screen ladder (`tariognatha`, or `tarmantria`'s dGPU path)
 
-Out-of-tree modules (`v4l2loopback`, NVIDIA) build against `boot.kernelPackages`, `linuxPackages_latest` by default (`mkDefault` in `modules/nixos/boot.nix`). If one fails to build against a new kernel, pin an older `linuxPackages_6_x` there first.
+Out-of-tree modules (`v4l2loopback`, NVIDIA) build against `boot.kernelPackages`, `linuxPackages_latest` by default (`mkDefault` in `modules/nixos/desktop/boot.nix`). If one fails to build against a new kernel, pin an older `linuxPackages_6_x` there first.
 
 If Hyprland fails to start with a black screen after switching, try these in order. Each is a one-line change in `modules/nixos/gpu/nvidia-desktop.nix` or `nvidia-prime.nix`. Re-switch after each.
 
@@ -165,7 +165,7 @@ If Hyprland fails to start with a black screen after switching, try these in ord
 sudo bootctl list
 ```
 
-If Windows lives on a second, separate ESP, systemd-boot won't find it automatically. `modules/nixos/boot.nix` has a commented `extraEntries` template for that case. Uncomment it, then re-derive the correct values:
+If Windows lives on a second, separate ESP, systemd-boot won't find it automatically. `modules/nixos/desktop/boot.nix` has a commented `extraEntries` template for that case. Uncomment it, then re-derive the correct values:
 
 ```sh
 efibootmgr -v                 # confirm the Windows boot entry exists
@@ -199,7 +199,7 @@ chmod 700 ~/.ssh ~/.gnupg
 chmod 600 ~/.ssh/id_*
 ```
 
-Bottles prefixes and Steam's `compatibilitytools.d` need care beyond a plain rsync: rsync `~/.local/share/bottles` after `bottles` (`modules/nixos/gaming.nix`) is installed, and rsync `compatibilitytools.d` for any Proton build besides GE-Proton, which `programs.steam.extraCompatPackages` already wires in.
+Bottles prefixes and Steam's `compatibilitytools.d` need care beyond a plain rsync: rsync `~/.local/share/bottles` after `bottles` (`modules/nixos/desktop/gaming.nix`) is installed, and rsync `compatibilitytools.d` for any Proton build besides GE-Proton, which `programs.steam.extraCompatPackages` already wires in.
 
 ## Appendix A: manual install (without `install.sh`)
 
@@ -314,14 +314,14 @@ Run nixos-install with `NIX_CONFIG=$'max-jobs = 1\ncores = 4'` (or half the mach
     flatpak install flathub <app-id>
     ```
 
-13. Install the Rust toolchain. `modules/home/dev.nix` installs `rustup` itself, not a pinned toolchain.
+13. Install the Rust toolchain. `modules/home/desktop/dev.nix` installs `rustup` itself, not a pinned toolchain.
 
     ```sh
     rustup default stable
     rustup component add rust-analyzer rust-src
     ```
 
-14. Migrate data and add a Windows dual-boot entry: see "Data migration" and "Windows dual-boot entry" above. Run an AppImage with `appimage-run <file>.AppImage`. Custom C tools are installed by hand. The out-of-scope package list is in the `modules/home/apps.nix` comment.
+14. Migrate data and add a Windows dual-boot entry: see "Data migration" and "Windows dual-boot entry" above. Run an AppImage with `appimage-run <file>.AppImage`. Custom C tools are installed by hand. The out-of-scope package list is in the `modules/home/desktop/apps.nix` comment.
 
 ## Appendix B: what `install.sh` does, step by step
 

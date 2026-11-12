@@ -71,7 +71,7 @@ matched. Only a cycle fails the build. A renamed or dropped
 `copyIllogicalImpulseConfigs` would let `kraneIiOverrides` run unordered,
 maybe before the wipe, and every override would be lost with no warning.
 
-`modules/home/illogical-impulse.nix` guards against that with an
+`modules/home/desktop/illogical-impulse.nix` guards against that with an
 assertion, `config.home.activation ? copyIllogicalImpulseConfigs`, which
 fails the build with a pointer to this document. Check it first after
 any `nix flake update` that moves `illogical-flake`.
@@ -88,7 +88,7 @@ any `nix flake update` that moves `illogical-flake`.
 | `custom/env.lua` | appended | Truncated with `cat >` every switch. Our block must land after. |
 | `custom/general.lua` | appended | The soymou module appends its `hl.plugin` block. Our block must land after. |
 
-Recording binds (`custom/keybinds.lua`) come from `modules/home/recording.nix`,
+Recording binds (`custom/keybinds.lua`) come from `modules/home/desktop/recording.nix`,
 which also unbinds ii's upstream wf-recorder binds
 (`hyprland/keybinds.lua:85-93`) so the freed keys can be rebound to
 `gsr-ui-cli`.
@@ -163,7 +163,7 @@ Two things worth getting right:
 ## How to add an override
 
 Pick the option for the file to affect, in `hosts/<host>/display.nix`
-for one host or a module under `modules/home/` for all hosts:
+for one host or a module under `modules/home/desktop/` for all desktop hosts:
 
 | Option | Renders to | Emits |
 | --- | --- | --- |
@@ -209,7 +209,7 @@ file is skipped rather than failing activation:
 
 - `~/.config/fish/config.fish`:
   `s|^\(\s*\)cat \(~/.local/state/quickshell/user/generated/terminal/sequences.txt\)|\1command cat \2|`.
-  `modules/nixos/shells.nix` aliases `cat` to `bat --color=always` at
+  `modules/nixos/desktop/shells.nix` aliases `cat` to `bat --color=always` at
   NixOS level (`/etc/fish` loads first), so ii's own line printing that
   file would emit a bat frame instead of raw OSC sequences. The patch
   makes that one line call `command cat` to bypass the alias.
@@ -223,7 +223,7 @@ file is skipped rather than failing activation:
   `s/property bool launchOnStartup: false/property bool launchOnStartup: true/`.
   Fresh hosts seed `~/.config/illogical-impulse/config.json` from this QML
   default the first time ii's copy step runs. Every host autologins via
-  greetd straight into Hyprland (`modules/nixos/desktop.nix`), so there's
+  greetd straight into Hyprland (`modules/nixos/desktop/desktop.nix`), so there's
   no session picker to lock behind; flip the default itself so ii locks
   immediately on startup. `config.json` stays ii-owned after that, the GUI
   can still flip it back off.
@@ -292,7 +292,7 @@ the next tick instead of restarting it.
 
 `0009` to `0011` are not fork backports. `0009`: ii's sidebar registers no
 BlueZ agent, so pairing needs one running (the `bluetooth-agent` root system
-service in `modules/nixos/bluetooth.nix`, bound to `bluetooth.service`;
+service in `modules/nixos/desktop/bluetooth.nix`, bound to `bluetooth.service`;
 check with `systemctl status bluetooth-agent`), and even then a
 paired-but-untrusted device makes BlueZ ask that agent to authorize every
 profile connection. `0009` sets `trusted` right after `pair()` so audio
@@ -593,7 +593,7 @@ also matched F-keys containing a "1" (F1, F10, F11) and dropped F9 (digit
 ## Rollback and escape hatches
 
 - UWSM session misbehaves: set `programs.hyprland.withUWSM = false` in
-  `modules/nixos/desktop.nix`. The plain Hyprland session is already on
+  `modules/nixos/desktop/desktop.nix`. The plain Hyprland session is already on
   the greeter, so this is a one-line, one-rebuild rollback.
 - Autologin/lock-on-start misbehaves: `systemctl restart greetd` gives you
   tuigreet back, not another autologin, because greetd's

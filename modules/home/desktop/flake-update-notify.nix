@@ -60,7 +60,7 @@ in
     # Enables by symlinking into graphical-session.target.wants/ (same pattern as
     # proton-drive.nix's service), so the timer starts -- and OnActiveSec begins
     # counting -- when the session's graphical-session.target does
-    # (modules/home/session-target.nix: hyprland-session.target BindsTo it).
+    # (modules/home/desktop/session-target.nix: hyprland-session.target BindsTo it).
     Install.WantedBy = [ "graphical-session.target" ];
   };
 }

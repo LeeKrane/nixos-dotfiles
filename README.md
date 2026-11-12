@@ -77,10 +77,10 @@ See [docs/INSTALL.md](docs/INSTALL.md) for the full runbook.
 ```
 flake.nix  lib/mk-host.nix   flake entry point, shared host builder
 install.sh                   live-ISO installer, post-boot setup script
-hosts/<host>/                 hardware, disko layout, Hyprland monitor/input
+hosts/<host>/                 hardware, disko layout, Hyprland monitor/input; optional host.nix = { system, role } (default x86_64-linux, desktop)
 templates/host/               new-host templates install.sh renders into hosts/<name>/
-modules/nixos/                system config: boot, gpu, desktop, sops, ...
-modules/home/                 home-manager config: ii wrapper, neovim, ...
+modules/nixos/{common,desktop,server}/  system config by role (hosts/<host>/host.nix), gpu/ per host
+modules/home/{common,desktop,server}/    home-manager config by role: ii wrapper, neovim, ...
 overlays/  pkgs/              ii-fixes overlay, plymouth-lone theme
 modules/nixvim/               standalone NixVim editor config (packages.nvim)
 config/zsh/                   vendored dotfiles
@@ -93,8 +93,8 @@ docs/                         INSTALL, VERIFY, MIGRATION-NOTES, II-INTEGRATION, 
 
 Left in because it is either meaningless to anyone else or needed for the config to work as shown:
 
-- `modules/nixos/user.nix` defaults the git identity to `krane <chris@krane.dev>`; each host can override it through `krane.user`.
-- `modules/nixos/locale.nix` sets the `Europe/Vienna` time zone. The keyboard layout comes from `krane.keyboard.{layout,variant}` (`modules/nixos/keyboard.nix`), default `at` / `nodeadkeys`.
+- `modules/nixos/common/user.nix` defaults the git identity to `krane <chris@krane.dev>`; each host can override it through `krane.user`.
+- `modules/nixos/common/locale.nix` sets the `Europe/Vienna` time zone. The keyboard layout comes from `krane.keyboard.{layout,variant}` (`modules/nixos/common/keyboard.nix`), default `at` / `nodeadkeys`.
 - The hostnames `tariognatha`, `tarmantria`, `taractias`.
 - The default username `krane` (`krane.user.name`, overridable per host).
 
@@ -106,7 +106,7 @@ If you fork this, change:
 
 - The git identity, locale, keyboard, and hostnames above.
 - Every `/dev/CHANGE-ME` disko placeholder, or run `./install.sh`, which does that for you.
-- The default username and git identity in `modules/nixos/user.nix`, or set `krane.user` per host. `./install.sh`'s new-host flow asks for both.
+- The default username and git identity in `modules/nixos/common/user.nix`, or set `krane.user` per host. `./install.sh`'s new-host flow asks for both.
 - Run your own `scripts/bootstrap-sops.sh` and fill in your own `secrets/*.yaml`. The committed `age1PLACEHOLDER_*` recipients decrypt nothing without the matching private keys, never published.
 
 ## History

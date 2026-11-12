@@ -1,4 +1,4 @@
-# Rust via rustaceanvim. rust-analyzer comes from rustup (modules/home/dev.nix), never nixpkgs:
+# Rust via rustaceanvim. rust-analyzer comes from rustup (modules/home/desktop/dev.nix), never nixpkgs:
 # rustaceanvim would otherwise pull nixpkgs' rust-analyzer onto PATH.
 {
   dependencies.rust-analyzer.enable = false;

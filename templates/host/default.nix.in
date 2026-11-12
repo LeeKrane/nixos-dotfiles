@@ -10,14 +10,14 @@
   ];
 @PROFILE@
 
-  # The login account and its git identity (modules/nixos/user.nix).
+  # The login account and its git identity (modules/nixos/common/user.nix).
   krane.user = {
     name = "@USERNAME@";
     gitName = "@GIT_NAME@";
     gitEmail = "@GIT_EMAIL@";
   };
 
-  # Keyboard layout/variant (modules/nixos/keyboard.nix), read by locale.nix
+  # Keyboard layout/variant (modules/nixos/common/keyboard.nix), read by locale.nix
   # and, via osConfig, by display.nix's Hyprland settings.
   krane.keyboard = {
     layout = "@KB_LAYOUT@";

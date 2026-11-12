@@ -13,7 +13,7 @@
 let
   # A Nix path, not a string, so `builtins.pathExists`/`sopsFile` get the
   # real store path.
-  hostSecretsFile = ../../secrets/${hostName}.yaml;
+  hostSecretsFile = ../../../secrets/${hostName}.yaml;
   hostSecretsExist = builtins.pathExists hostSecretsFile;
 
   # sops encrypts values, not key names, so the top-level sections are readable at eval time.
@@ -44,7 +44,7 @@ in
     # sops-nix validates every declared key at build time, and a section a host
     # doesn't use would otherwise fail the build.
     secrets =
-      # Consumed by modules/nixos/networking.nix's wg0 template.
+      # Consumed by modules/nixos/desktop/networking.nix's wg0 template.
       lib.optionalAttrs (hasSection "wireguard") {
         "wireguard/wg0-private-key" = {
           owner = "root";
@@ -82,7 +82,7 @@ in
 
     # Renders wg0.conf from the six wireguard/* secrets above so no cleartext
     # tunnel value (address, peer identity, endpoint) lands in the repo.
-    # Consumed by modules/nixos/networking.nix's networking.wg-quick.interfaces.wg0.
+    # Consumed by modules/nixos/desktop/networking.nix's networking.wg-quick.interfaces.wg0.
     templates = lib.optionalAttrs (hasSection "wireguard") {
       "wg0.conf" = {
         owner = "root";

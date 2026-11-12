@@ -15,7 +15,7 @@
 let
   # Interpolating a Nix path into a string yields its store path as plain text, the LOGO_PATH
   # format scripts/proton-drive-rclone-mount.sh expects.
-  logoPath = "${../../scripts/assets/proton-drive-logo.png}";
+  logoPath = "${../../../scripts/assets/proton-drive-logo.png}";
 
   # Shared by ExecStart and ExecStop, rather than ExecStop's old systemd specifier `%h`, which
   # happens to match config.home.homeDirectory today but isn't kept in sync with it.

@@ -23,7 +23,7 @@
       };
 
       # Boot straight into krane.user.name's plain (non-UWSM) Hyprland session; the session locks
-      # itself at start (modules/home/lock-on-start.nix), so the ii lock screen is the
+      # itself at start (modules/home/desktop/lock-on-start.nix), so the ii lock screen is the
       # first screen. tuigreet stays as default_session for logout. The disk is not
       # encrypted, so this trades the greeter's password gate for the lock screen's. See
       # docs/INSTALL.md. This is the same command tuigreet's "Hyprland" .desktop entry

@@ -38,7 +38,7 @@
   # Vega iGPU (amdgpu): VA-API decode goes through Mesa's radeonsi, not the NVIDIA hosts' shim.
   environment.sessionVariables.LIBVA_DRIVER_NAME = "radeonsi";
 
-  # modules/nixos/hardware.nix sets hardware.cpu.intel.updateMicrocode = mkDefault true (both
+  # modules/nixos/desktop/hardware.nix sets hardware.cpu.intel.updateMicrocode = mkDefault true (both
   # other hosts are Intel). This host is AMD, so plain `false` overrides it. AMD microcode uses
   # common-cpu-amd's mkDefault above.
   hardware.cpu.intel.updateMicrocode = false;
@@ -55,6 +55,6 @@
   # VERIFY ON TARGET: the ELAN I2C touchpad should work via the in-kernel i2c-hid + libinput
   # stack with no extra config. Check `libinput list-devices` before adding overrides in display.nix.
 
-  # VERIFY ON TARGET: no explicit backlight config here. modules/nixos/peripherals.nix already
+  # VERIFY ON TARGET: no explicit backlight config here. modules/nixos/desktop/peripherals.nix already
   # covers brightnessctl udev rules for all hosts. Confirm brightness keys work before adding more.
 }

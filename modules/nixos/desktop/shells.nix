@@ -12,7 +12,7 @@
   # every switch. This is the only place fish config survives.
   programs.fish.enable = true;
 
-  # Valid shell for modules/home/zsh-fallback.nix's HM fallback via chsh.
+  # Valid shell for modules/home/common/zsh-fallback.nix's HM fallback via chsh.
   programs.zsh.enable = true;
 
   # Explicit false: the soymou module's starship already inits the
@@ -87,7 +87,7 @@
     ${pkgs.pay-respects}/bin/pay-respects fish --alias fuck | source
   '';
 
-  # NixOS-level `programs.direnv`, not modules/home/cli.nix. Hooks fish
+  # NixOS-level `programs.direnv`, not modules/home/desktop/cli.nix. Hooks fish
   # via enableFishIntegration.
   programs.direnv = {
     enable = true;

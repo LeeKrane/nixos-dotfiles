@@ -13,13 +13,13 @@ was not carried over, since there is no equivalent to port it to. See
 
 ## Shell: zsh to fish
 
-krane's login shell is now fish (`modules/nixos/users.nix`). Aliases
+krane's login shell is now fish (`modules/nixos/common/users.nix`). Aliases
 ported from `~/.krane-rc` live at the NixOS level (`/etc/fish/...`,
-`modules/nixos/shells.nix`), not home-manager, because ii's dotfiles
+`modules/nixos/desktop/shells.nix`), not home-manager, because ii's dotfiles
 copy step wipes `~/.config/fish` on every switch. See II-INTEGRATION.md.
 
 zsh, oh-my-zsh and powerlevel10k stay as a fallback behind
-`krane.zshFallback.enable` (default true, `modules/home/zsh-fallback.nix`).
+`krane.zshFallback.enable` (default true, `modules/home/common/zsh-fallback.nix`).
 `exec zsh` drops into it at any time.
 
 ## Terminal: Alacritty to kitty
@@ -31,7 +31,7 @@ for reference.
 
 ## Bootloader: GRUB to systemd-boot
 
-`modules/nixos/boot.nix`. There is no systemd-boot equivalent to GRUB's
+`modules/nixos/desktop/boot.nix`. There is no systemd-boot equivalent to GRUB's
 theme. The Plymouth splash (`lone` theme, `pkgs/plymouth-lone`) carries
 over, since it is independent of the bootloader. See docs/INSTALL.md's
 Windows dual-boot section for how systemd-boot's auto-discovery compares
@@ -41,19 +41,19 @@ to the old GRUB setup.
 
 The old mount point was a dedicated btrfs subvolume. This repo mounts to
 a plain directory instead, `~/ProtonDrive`: `ensureProtonDriveMountpoint`
-(`modules/home/proton-drive.nix`) runs `mkdir -p`, not `home.file`,
+(`modules/home/desktop/proton-drive.nix`) runs `mkdir -p`, not `home.file`,
 since `rclone mount` refuses a non-empty directory.
 
 ## Git: `aa` alias fixed
 
 The old `.gitconfig` had `aa = "add all"`, not a valid alias body. Fixed
-to `aa = "add -A"` in `modules/home/git.nix`. Every other alias is
+to `aa = "add -A"` in `modules/home/common/git.nix`. Every other alias is
 unchanged.
 
 ## Neovim: NixVim build, no LazyVim, no Mason
 
 Neovim is a standalone NixVim build (`modules/nixvim/`, flake output
-`packages.x86_64-linux.nvim`), installed by `modules/home/neovim.nix`.
+`packages.x86_64-linux.nvim`), installed by `modules/home/desktop/neovim.nix`.
 Plugins, LSP servers, formatters and treesitter grammars are all inside
 that package; nothing is downloaded at runtime and `~/.config/nvim` is
 unused. Try changes without switching: `just nvim <file>`. Specs:
@@ -83,14 +83,14 @@ find ~ -name '*.hm-bak'
 
 `~/.config/rclone/rclone.conf` is seeded once, if absent, from the
 `rclone/config-seed` sops secret (`seedRcloneConfig` in
-`modules/home/proton-drive.nix`). After that it is a mutable file:
+`modules/home/desktop/proton-drive.nix`). After that it is a mutable file:
 `scripts/proton-drive-rclone-mount.sh`'s `update_rclone_config` rewrites
 its `2fa = ...` line whenever Proton's session expires. If it is lost,
 the fix is re-authenticating with `rclone config`.
 
 ## UWSM
 
-`programs.hyprland.withUWSM = true` (`modules/nixos/desktop.nix`). ii
+`programs.hyprland.withUWSM = true` (`modules/nixos/desktop/desktop.nix`). ii
 starts things through its own `hl.exec_cmd`, not UWSM-scoped launches,
 so some processes land outside a UWSM scope. This is expected. If it
 matters, set `withUWSM = false` in `desktop.nix` and re-switch: the
@@ -116,7 +116,7 @@ through `krane.hypr.binds` if it's missed.
 
 ## texlive packaging note
 
-`modules/home/dev.nix` uses `texlive.combined.scheme-medium`, which
+`modules/home/desktop/dev.nix` uses `texlive.combined.scheme-medium`, which
 nixpkgs flags as deprecated and due for removal in 27.05, though it
 still works today. Switch to `texliveSmall` or another top-level scheme
 before a `nix flake update` lands that release.
@@ -124,29 +124,29 @@ before a `nix flake update` lands that release.
 ## No standalone `python3` package
 
 System `python3` on `PATH` is the soymou module's own
-`python3.withPackages` environment, so `modules/home/dev.nix` cannot add
+`python3.withPackages` environment, so `modules/home/desktop/dev.nix` cannot add
 a plain `python3` too: it collides with `bin/idle`/`bin/python3` in
 home-manager's `buildEnv`. Use `uv` for project interpreters instead.
 
 ## rust-analyzer via rustup, not a standalone package
 
-`modules/home/dev.nix` installs `rustup`, not a pinned toolchain.
+`modules/home/desktop/dev.nix` installs `rustup`, not a pinned toolchain.
 `rustup` ships its own `bin/rust-analyzer` proxy, which collides with
 the standalone nixpkgs `rust-analyzer` in home-manager's `buildEnv`, so
-neither `modules/home/` nor the NixVim build installs that package. Run
+neither `modules/home/` (any role) nor the NixVim build installs that package. Run
 `rustup default stable && rustup component add rust-analyzer rust-src`
 once per user before Neovim's LSP works.
 
 ## Go toolchain in dev.nix
 
-`go` is installed globally by `modules/home/dev.nix`, like `rustup` and
+`go` is installed globally by `modules/home/desktop/dev.nix`, like `rustup` and
 `jdk21`, because the NixVim build's gopls needs it on `PATH`. The editor
 itself does not bundle `go`. Project-specific Go versions still work
 through a devShell that puts its own `go` first on `PATH`.
 
 ## `home.stateVersion` = "26.05"
 
-Set once in `modules/home/default.nix`. This pins home-manager's
+Set once in `modules/home/common/default.nix`. This pins home-manager's
 backward-compatibility behaviour. Do not bump it on an existing install
 without reading home-manager's own release notes first.
 
@@ -154,7 +154,7 @@ without reading home-manager's own release notes first.
 
 `hosts/*/display.nix` sets ii's `browser` variable to zen (the
 [zen-browser flake](https://github.com/0xc000022070/zen-browser-flake),
-`modules/home/apps.nix`). Firefox stays installed, not the ii default.
+`modules/home/desktop/apps.nix`). Firefox stays installed, not the ii default.
 
 ## Hostnames renamed
 

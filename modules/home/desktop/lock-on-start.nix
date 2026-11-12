@@ -1,4 +1,4 @@
-# Autologin (modules/nixos/desktop.nix initial_session) gives no password to PAM, so the
+# Autologin (modules/nixos/desktop/desktop.nix initial_session) gives no password to PAM, so the
 # session must lock itself before anything is visible. pidof only proves the qs process
 # exists; ii's Lock panel sits behind a LazyLoader gated on Config.ready, so its IpcHandler
 # appears seconds later. Wait for the handler, call it directly (no hypridle / global-shortcut

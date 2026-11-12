@@ -1,5 +1,5 @@
 # home-manager module: laptop display / input layout for tarmantria, imported at the user level
-# from hosts/tarmantria/default.nix, rendered to Lua by modules/home/hypr-config.nix.
+# from hosts/tarmantria/default.nix, rendered to Lua by modules/home/desktop/hypr-config.nix.
 { ... }:
 let
   # The panel is eDP-1 on the Intel iGPU in hybrid mode and eDP-2 on the NVIDIA dGPU once

@@ -11,7 +11,7 @@ only ignores `secrets/*.key`: commit a `.yaml` file like any other tracked
 file. Its contents stay sops-encrypted the whole time.
 
 Each host decrypts with an age identity derived from its own SSH host key
-(`modules/nixos/sops.nix`, `sops.age.sshKeyPaths`), so a compromised host's
+(`modules/nixos/common/sops.nix`, `sops.age.sshKeyPaths`), so a compromised host's
 key exposes only that host's file, not every secret ever created.
 
 ## Files
@@ -30,23 +30,23 @@ itself, either as the admin user with the personal key above, or as root
 there with `SOPS_AGE_SSH_PRIVATE_KEY_FILE=/etc/ssh/ssh_host_ed25519_key`.
 No host, and no single key, can decrypt or edit another host's file.
 
-`modules/nixos/sops.nix` reads:
+`modules/nixos/common/sops.nix` reads:
 
 | Key | Read by | Owner:mode |
 | --- | --- | --- |
-| `wireguard/wg0-private-key` | `modules/nixos/sops.nix`'s `wg0.conf` template (`PrivateKey`) | `root:0400` |
+| `wireguard/wg0-private-key` | `modules/nixos/common/sops.nix`'s `wg0.conf` template (`PrivateKey`) | `root:0400` |
 | `wireguard/address` | same template (`Address`) | `root:0400` |
 | `wireguard/peer-public-key` | same template (`PublicKey`) | `root:0400` |
 | `wireguard/peer-endpoint` | same template (`Endpoint`) | `root:0400` |
 | `wireguard/peer-allowed-ips` | same template (`AllowedIPs`) | `root:0400` |
 | `wireguard/listen-port` | same template (`ListenPort`) | `root:0400` |
-| `rclone/config-seed` | `modules/home/proton-drive.nix` (seeds `~/.config/rclone/rclone.conf` if absent) | `krane:0400` |
+| `rclone/config-seed` | `modules/home/desktop/proton-drive.nix` (seeds `~/.config/rclone/rclone.conf` if absent) | `krane:0400` |
 
 All six wireguard values live encrypted in `secrets/<host>.yaml`; none of
 them, including the address and peer identity, are cleartext anywhere in
-this repo. `modules/nixos/sops.nix` renders them into a `wg0.conf` template
+this repo. `modules/nixos/common/sops.nix` renders them into a `wg0.conf` template
 (fixed `PersistentKeepalive 25`), which
-`modules/nixos/networking.nix` points `networking.wg-quick.interfaces.wg0.configFile`
+`modules/nixos/desktop/networking.nix` points `networking.wg-quick.interfaces.wg0.configFile`
 at. The secret alone does not bring up WireGuard on a new host: add all six
 keys with `sops set`, for example:
 
@@ -59,7 +59,7 @@ sops set secrets/<hostname>.yaml '["wireguard"]["peer-allowed-ips"]' '"<peer sub
 sops set secrets/<hostname>.yaml '["wireguard"]["listen-port"]' '"51820"'
 ```
 
-Both sections are optional per host: `modules/nixos/sops.nix` only declares
+Both sections are optional per host: `modules/nixos/common/sops.nix` only declares
 a `sops.secrets` entry for a section that's actually present in
 `secrets/<host>.yaml`. To disable WireGuard or the Proton Drive seed on a
 host, delete that whole top-level section (`wireguard:` or `rclone:`) with

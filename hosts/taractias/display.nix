@@ -1,5 +1,5 @@
 # home-manager module: laptop display / input layout for taractias, imported at the user level
-# from hosts/taractias/default.nix, rendered to Lua by modules/home/hypr-config.nix.
+# from hosts/taractias/default.nix, rendered to Lua by modules/home/desktop/hypr-config.nix.
 # VERIFY ON TARGET: the IdeaPad 330S ships in more than one panel resolution. Some units are
 # 1366x768, not the 1920x1080 `mode = "preferred"` would pick on a Full HD panel. Check
 # `hyprctl monitors -j` after first login and adjust `scale` if text is illegible.

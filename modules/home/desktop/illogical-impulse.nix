@@ -39,7 +39,7 @@ let
   # each one from scratch every switch. See docs/II-INTEGRATION.md "Patched files".
   iiPatches = [
     {
-      # modules/nixos/shells.nix aliases cat to bat at NixOS level (/etc/fish loads first);
+      # modules/nixos/desktop/shells.nix aliases cat to bat at NixOS level (/etc/fish loads first);
       # ii's config.fish must bypass that alias to print raw OSC sequences, not a bat frame.
       file = "${config.home.homeDirectory}/.config/fish/config.fish";
       sed = ''s|^\(\s*\)cat \(~/.local/state/quickshell/user/generated/terminal/sequences.txt\)|\1command cat \2|'';
@@ -59,7 +59,7 @@ let
       # Fresh hosts seed ~/.config/illogical-impulse/config.json from this QML default the
       # first time ii's copy step runs; config.json stays ii-owned after that, so the GUI
       # can still flip it back off. Every host autologins via greetd straight into Hyprland
-      # (modules/nixos/desktop.nix), so there's no session picker to lock behind — flip the
+      # (modules/nixos/desktop/desktop.nix), so there's no session picker to lock behind — flip the
       # default itself so ii locks immediately on startup.
       file = "${config.home.homeDirectory}/.config/quickshell/ii/modules/common/Config.qml";
       sed = "s/property bool launchOnStartup: false/property bool launchOnStartup: true/";
@@ -127,7 +127,7 @@ in
         lib.sort lib.lessThan (ownedFiles ++ appendedFiles)
         == lib.sort lib.lessThan (lib.attrNames rendered);
       message = ''
-        modules/home/illogical-impulse.nix: every file rendered by
+        modules/home/desktop/illogical-impulse.nix: every file rendered by
         krane.hypr._rendered must be classified as owned or appended.
         Rendered: ${toString (lib.attrNames rendered)}
         Classified: ${toString (ownedFiles ++ appendedFiles)}

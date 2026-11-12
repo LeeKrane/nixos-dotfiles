@@ -15,7 +15,7 @@ in
       description = ''
         Install a zsh + oh-my-zsh + powerlevel10k fallback shell, ported from
         the previous Stow-managed dotfiles' .zshrc. krane's actual login shell is fish
-        (modules/nixos/users.nix); this exists as an `exec zsh` escape hatch
+        (modules/nixos/common/users.nix); this exists as an `exec zsh` escape hatch
         during the fish/ii transition, not as the default.
       '';
     };
@@ -64,6 +64,6 @@ in
 
     # ~/.p10k.zsh isn't in the ii wipe set (only ~/.config/zshrc.d is, docs/II-INTEGRATION.md),
     # so this plain symlink survives every switch.
-    home.file.".p10k.zsh".source = ../../config/zsh/p10k.zsh;
+    home.file.".p10k.zsh".source = ../../../config/zsh/p10k.zsh;
   };
 }

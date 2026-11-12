@@ -1,5 +1,5 @@
 # Hyprland side of GPU Screen Recorder (the NixOS side, programs.gpu-screen-recorder, lives in
-# modules/nixos/recording.nix). gsr-ui's first launch starts its background daemon, which then
+# modules/nixos/desktop/recording.nix). gsr-ui's first launch starts its background daemon, which then
 # listens for gsr-ui-cli commands; everything below drives that daemon through Hyprland binds
 # instead of gsr-ui's own native evdev hotkeys, so upstream ii's wf-recorder binds are unbound
 # to free the keys and gsr-ui's config is seeded to disable its own hotkey grabbing.

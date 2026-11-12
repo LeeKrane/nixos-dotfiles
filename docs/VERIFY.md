@@ -76,8 +76,8 @@ means anything to check. See [docs/II-INTEGRATION.md](II-INTEGRATION.md).
 ### Autologin and lock-on-start
 
 Every host autologins into Hyprland and locks itself at session start
-(`modules/nixos/desktop.nix`'s `initial_session`,
-`modules/home/lock-on-start.nix`). Don't trust a systemd session property
+(`modules/nixos/desktop/desktop.nix`'s `initial_session`,
+`modules/home/desktop/lock-on-start.nix`). Don't trust a systemd session property
 like `loginctl`'s `LockedHint` for this: that flag just reflects whatever
 last called `loginctl lock-session`/`unlock-session`, not whether ii's own
 lock surface is actually drawn on screen, so it can read locked while the
@@ -101,12 +101,12 @@ compositor shows a bare desktop underneath. Check instead:
 
 | Check | Command | Host |
 | --- | --- | --- |
-| Owned Hyprland files carry the generated header (`modules/home/hypr-config.nix`'s `header` function) | `head -4 ~/.config/hypr/custom/keybinds.lua` | All |
+| Owned Hyprland files carry the generated header (`modules/home/desktop/hypr-config.nix`'s `header` function) | `head -4 ~/.config/hypr/custom/keybinds.lua` | All |
 | Override block appears exactly once in `env.lua`, want `1` | `grep -c -- '-- >>> krane overrides >>>' ~/.config/hypr/custom/env.lua` | All |
 | Override block appears exactly once in `general.lua`, want `1` | `grep -c -- '-- >>> krane overrides >>>' ~/.config/hypr/custom/general.lua` | All |
 | Hyprland accepted the whole config, no unknown-key errors: output of `hyprctl configerrors` is empty | `hyprctl configerrors` | All |
 | Keybinds survived the switch (no latched emergency mode) | `hyprctl binds \| head -5` | All |
-| Cursor theme from `modules/home/cursor.nix` is installed and set for GTK, want `Bibata-Modern-Classic` twice | `ls /etc/profiles/per-user/$USER/share/icons \| grep Bibata-Modern-Classic$; grep gtk-cursor-theme-name ~/.config/gtk-3.0/settings.ini` | All |
+| Cursor theme from `modules/home/desktop/cursor.nix` is installed and set for GTK, want `Bibata-Modern-Classic` twice | `ls /etc/profiles/per-user/$USER/share/icons \| grep Bibata-Modern-Classic$; grep gtk-cursor-theme-name ~/.config/gtk-3.0/settings.ini` | All |
 | Monitor layout matches `hosts/<host>/display.nix` | `hyprctl monitors -j \| jq '.[] \| {name, width, height, refreshRate, scale, transform}'` | All |
 | Logitech G502 libinput device name matches `display.nix`'s `devices[].name` | `hyprctl devices \| grep -i logitech` | tariognatha |
 | Built-in ELAN I2C touchpad shows up with no extra config | `hyprctl devices \| grep -i touchpad` | taractias |
@@ -121,7 +121,7 @@ compositor shows a bare desktop underneath. Check instead:
 | wg0 tunnel up, peer reachable | `sudo wg show wg0` shows the peer with a recent latest handshake | All with a `wireguard:` section in `secrets/<host>.yaml` |
 | wg0 has this host's tunnel address | `ip -br addr show wg0` shows the host's tunnel address | All with a `wireguard:` section in `secrets/<host>.yaml` |
 
-`modules/nixos/hardware.nix`'s `hardware.enableRedistributableFirmware`
+`modules/nixos/desktop/hardware.nix`'s `hardware.enableRedistributableFirmware`
 makes the iwlwifi, rtw88 and Bluetooth adapters work on the laptop hosts.
 `nixos-generate-config` never turns it on by itself, so these two checks
 are the one thing docker verification cannot prove. On taractias,

@@ -4,12 +4,12 @@ The soymou module is a single-maintainer project and has already gone
 stale for a while. This repo depends on exactly one internal detail of
 it, `home.activation.copyIllogicalImpulseConfigs` existing by that name,
 and guards that dependency with an assertion
-(`modules/home/illogical-impulse.nix`) so a rename or removal fails
+(`modules/home/desktop/illogical-impulse.nix`) so a rename or removal fails
 loudly instead of silently misordering activation. If the soymou module
 ever stops working entirely, rather than going quiet, this is the plan
 to stop depending on it.
 
-`krane.iiVendored.enable` (`modules/home/fallback-vendoring.nix`) is a
+`krane.iiVendored.enable` (`modules/home/desktop/fallback-vendoring.nix`) is a
 stub for this today: flipping it on fails the build with a pointer back
 to this document. The steps below are what implementing it looks like.
 
@@ -18,7 +18,7 @@ to this document. The steps below are what implementing it looks like.
 - `dots-hyprland` (end-4's actual dotfiles) is already a pinned flake
   input (`flake.nix`). Only the layer that installs it, the soymou
   module, is being replaced.
-- `modules/home/hypr-config.nix` and `modules/home/illogical-impulse.nix`'s
+- `modules/home/desktop/hypr-config.nix` and `modules/home/desktop/illogical-impulse.nix`'s
   DAG entry (`kraneIiOverrides`) stay exactly as they are: they run after
   whatever step puts the upstream dots on disk, and don't care how.
   `hosts/<host>/display.nix` doesn't change either.
@@ -48,7 +48,7 @@ to this document. The steps below are what implementing it looks like.
 4. The soymou module's package list also installs illogical-impulse
    (ii)'s runtime dependencies: Quickshell, matugen, the CLI tools ii's
    Lua and QML shells exec, and python packages for its own scripts. Port
-   that list into a new `modules/home/` file, applying the `ii-fixes`
+   that list into a new `modules/home/desktop/` file, applying the `ii-fixes`
    overlay logic (`gnome-icon-theme` to `adwaita-icon-theme`, and
    whatever else has accumulated in `overlays/ii-fixes.nix`) directly,
    since no upstream input remains to intercept.
@@ -63,7 +63,7 @@ to this document. The steps below are what implementing it looks like.
    `python3.withPackages (ps: [ ... ])`, the soymou module wires up for
    ii's own scripts, rather than guessing at the package set.
 7. For fonts, the soymou module's README lists the font families ii
-   expects, already cross-referenced into `modules/nixos/fonts.nix`.
+   expects, already cross-referenced into `modules/nixos/desktop/fonts.nix`.
    Confirm that list stays complete once the module's own font side
    effects are gone.
 

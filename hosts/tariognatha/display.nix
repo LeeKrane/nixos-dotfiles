@@ -1,5 +1,5 @@
 # home-manager module: desktop display / input layout for tariognatha, imported at the user
-# level from hosts/tariognatha/default.nix, rendered to Lua by modules/home/hypr-config.nix.
+# level from hosts/tariognatha/default.nix, rendered to Lua by modules/home/desktop/hypr-config.nix.
 { ... }:
 {
   krane.hypr = {

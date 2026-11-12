@@ -4,7 +4,7 @@
   # manage them here. zoxide and fzf stay plain home.packages, not programs.zoxide/programs.fzf:
   # both default enableFishIntegration to true and would inject init lines into HM's fish config,
   # which only lands in the wiped ~/.config/fish/config.fish. The real init (and direnv) lives in
-  # modules/nixos/shells.nix instead (/etc/fish, never wiped).
+  # modules/nixos/desktop/shells.nix instead (/etc/fish, never wiped).
   programs.bat.enable = true;
   programs.eza.enable = true;
   # btop-cuda adds /run/opengl-driver/lib to the rpath so btop can dlopen libnvidia-ml for the GPU box.
@@ -14,12 +14,12 @@
   };
 
   # Point ssh at the gcr ssh-agent component gnome-keyring already runs
-  # (services.gnome.gnome-keyring.enable in modules/nixos/desktop.nix), and let
+  # (services.gnome.gnome-keyring.enable in modules/nixos/desktop/desktop.nix), and let
   # ssh add used keys to it. home.sessionVariables only reaches bash/zsh via
   # /etc/profile.d, so fish also gets SSH_AUTH_SOCK from
-  # modules/nixos/shells.nix, and GUI-launched clients get it from
+  # modules/nixos/desktop/shells.nix, and GUI-launched clients get it from
   # krane.hypr.env below (Hyprland is started by greetd without
-  # hm-session-vars, same reasoning as modules/home/cursor.nix).
+  # hm-session-vars, same reasoning as modules/home/desktop/cursor.nix).
   home.sessionVariables.SSH_AUTH_SOCK = "$XDG_RUNTIME_DIR/gcr/ssh";
   krane.hypr.env.SSH_AUTH_SOCK = "/run/user/1000/gcr/ssh"; # hl.env is a literal string, no $VAR expansion
 
@@ -62,7 +62,7 @@
     libnotify
     ani-cli
 
-    # modules/nixos/users.nix enables sshd only so sshd-keygen creates the host key sops-nix
+    # modules/nixos/common/users.nix enables sshd only so sshd-keygen creates the host key sops-nix
     # derives its age identity from (openFirewall = false). Listed explicitly, not an accidental
     # transitive dep of the ssh/scp client.
     openssh
