@@ -28,6 +28,7 @@
   ...
 }:
 let
+  inherit (import ../../lib/wireguard.nix) wg0;
   hostSecrets = import ../../lib/host-secrets.nix { inherit lib hostName; };
   home = config.users.users.${config.krane.user.name}.home;
   stage = "/var/lib/krane-backup-stage";
@@ -69,7 +70,7 @@ in
 
     krane.backup = {
       enable = true;
-      repository = "rest:http://taragarmr@192.168.82.2:8000/taragarmr";
+      repository = "rest:http://taragarmr@${wg0.peers.taronychus.ip}:8000/taragarmr";
       passwordFile = config.sops.secrets."restic/repo-password".path;
       environmentFile = config.sops.secrets."restic/rest-env".path;
       pruneOpts = [ ];

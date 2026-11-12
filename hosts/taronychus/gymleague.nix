@@ -26,6 +26,8 @@
   ...
 }:
 let
+  lan = import ../../lib/lan.nix;
+  inherit (import ../../lib/wireguard.nix) wg0;
   hostSecrets = import ../../lib/host-secrets.nix { inherit lib hostName; };
   enable = hostSecrets.hasSection "gymleague";
 
@@ -45,8 +47,8 @@ let
 
   # Backend clients: taragarmr's LAN address and wg0 address (Caddy runs there).
   proxyHosts = [
-    "192.168.178.23"
-    "192.168.82.1"
+    lan.hosts.taragarmr
+    wg0.hub.ip
   ];
   inIfaces = [
     "end0"

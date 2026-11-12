@@ -16,7 +16,7 @@ in
     enable = mkEnableOption "the restic backup job";
     repository = mkOption {
       type = types.str;
-      example = "rest:http://backup@192.168.82.2:8000/taragarmr";
+      example = "rest:http://backup@<taronychus wg0 IP>:8000/taragarmr";
       description = "restic repository URL.";
     };
     passwordFile = mkOption {
@@ -51,11 +51,8 @@ in
     };
     pruneOpts = mkOption {
       type = types.listOf types.str;
-      default = [
-        "--keep-daily 7"
-        "--keep-weekly 4"
-        "--keep-monthly 6"
-      ];
+      default = (import ../../../lib/backup-retention.nix).primary;
+      defaultText = lib.literalExpression "(import lib/backup-retention.nix).primary";
       description = ''
         `restic forget --prune` arguments run after each backup. An append-only server
         refuses deletes: set this to [ ] for such a repository and prune from the server side.

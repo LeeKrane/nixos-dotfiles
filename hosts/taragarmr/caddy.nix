@@ -2,6 +2,10 @@
 # domains. The router forwards 80/443 here. Certificates are reissued on first start, so
 # /var/lib/caddy is not backed up.
 { config, ... }:
+let
+  lan = import ../../lib/lan.nix;
+  inherit (import ../../lib/wireguard.nix) wg0;
+in
 {
   services.caddy = {
     enable = true;
@@ -23,7 +27,7 @@
       # gym-league on taronychus, which accepts this host's LAN address (192.168.178.23) and wg0
       # address only.
       "api-gymleague.paulbankl.dev".extraConfig = ''
-        reverse_proxy 192.168.178.22:8080
+        reverse_proxy ${lan.hosts.taronychus}:8080
       '';
 
       # Fritzbox admin UI for the LAN and wg0 (firewall below), replacing the old nginx proxy
@@ -31,10 +35,10 @@
       # clients get a certificate warning until its root (/var/lib/caddy/.local/share/caddy/pki/
       # authorities/local/root.crt) is trusted. Like the nginx it keeps the client's Host header
       # (Caddy's default) and sets X-Forwarded-*.
-      "https://fritz.krane.dev:4242, https://192.168.178.23:4242, https://192.168.82.1:4242".extraConfig =
+      "https://fritz.krane.dev:4242, https://${lan.hosts.taragarmr}:4242, https://${wg0.hub.ip}:4242".extraConfig =
         ''
           tls internal
-          reverse_proxy http://192.168.178.1
+          reverse_proxy http://${lan.router}
         '';
     };
   };
@@ -48,10 +52,10 @@
     # 4242 (Fritzbox proxy): the LAN only; wg0 is a trusted interface already. The firewall
     # backend is iptables (networking.nftables is off), hence extraCommands, not extraInputRules.
     extraCommands = ''
-      iptables -A nixos-fw -s 192.168.178.0/24 -p tcp --dport 4242 -j nixos-fw-accept
+      iptables -A nixos-fw -s ${lan.network} -p tcp --dport 4242 -j nixos-fw-accept
     '';
     extraStopCommands = ''
-      iptables -D nixos-fw -s 192.168.178.0/24 -p tcp --dport 4242 -j nixos-fw-accept || true
+      iptables -D nixos-fw -s ${lan.network} -p tcp --dport 4242 -j nixos-fw-accept || true
     '';
   };
 }
