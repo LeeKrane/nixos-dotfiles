@@ -20,6 +20,7 @@
     ./hardware-configuration.nix
     ./disko.nix
     ./caddy.nix
+    ./couchdb.nix
   ];
 
   system.stateVersion = "26.05";
