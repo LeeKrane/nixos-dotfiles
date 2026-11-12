@@ -15,12 +15,20 @@
       flake = false;
     };
 
-    # soymou/illogical-flake wraps dots-hyprland. quickshell and NUR
-    # inputs aren't followed, to avoid pulling in unvetted changes.
+    # soymou/illogical-flake wraps dots-hyprland. NUR isn't followed, to avoid
+    # pulling in unvetted changes.
     illogical-flake = {
       url = "github:soymou/illogical-flake";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.dotfiles.follows = "dots-hyprland";
+      inputs.quickshell.follows = "quickshell";
+    };
+
+    # Pinned past soymou's May 2026 quickshell, which fails to build against Qt 6.12
+    # (MOC "Meta Types must be fully defined"). Fixed upstream in 5d5d498 / 1c1cc91.
+    quickshell = {
+      url = "git+https://git.outfoxxed.me/outfoxxed/quickshell?rev=9b0f339b19057f4731bf3b48293307d7ef241671";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
 
     sops-nix.url = "github:Mic92/sops-nix";
