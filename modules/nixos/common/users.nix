@@ -1,5 +1,10 @@
 # The one human user account, named by krane.user.name (modules/nixos/common/user.nix).
-{ config, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 {
   users.users.${config.krane.user.name} = {
     isNormalUser = true;
@@ -15,10 +20,11 @@
   security.sudo.wheelNeedsPassword = true;
 
   # Enabled only so sshd-keygen creates the host's age-identity key at
-  # first boot. openFirewall stays false: this never listens for SSH.
+  # first boot. openFirewall stays false here (mkDefault): desktops never listen for SSH; servers
+  # open port 22 in modules/nixos/server/ssh.nix.
   services.openssh = {
     enable = true;
-    openFirewall = false;
+    openFirewall = lib.mkDefault false;
     settings = {
       PasswordAuthentication = false;
       KbdInteractiveAuthentication = false;

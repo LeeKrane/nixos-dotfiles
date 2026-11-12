@@ -3,7 +3,10 @@
 { ... }:
 {
   imports = [
+    ./base.nix
+    ./docker.nix
     ./networking.nix
+    ./ssh.nix
     ./zram.nix
   ];
 }
