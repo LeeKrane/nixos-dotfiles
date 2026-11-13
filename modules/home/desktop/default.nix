@@ -18,6 +18,7 @@
     ./session-target.nix
     ./qwertz-binds.nix
     ./recording.nix
+    ./drawing.nix
     ./teamclaude.nix
     ./flake-update-notify.nix
     ./steam.nix
