@@ -12,7 +12,7 @@
 # is &host_taragarmr in .sops.yaml); inject it with
 #   nixos-anywhere ... --extra-files ~/server-migration/host-keys/taragarmr
 # so secrets/taragarmr.yaml decrypts on first boot. Do not run scripts/bootstrap-sops.sh.
-# krane's password is not in the repo or sops; set it on site: add --no-reboot to the
+# krane's password is not in the repo or sops; set it on site: add `--phases kexec,disko,install` (skips the reboot phase) to the
 # nixos-anywhere call above (same command, same --extra-files), then
 #   ssh root@<installer-ip> nixos-enter --root /mnt -c 'passwd krane'    (interactive)
 # and reboot the installer. Without it sudo is unusable and deploys fail. Later deploys:
