@@ -17,6 +17,7 @@
       zed-editor
       code-cursor
       pycharm # unified edition; its free tier includes Jupyter notebooks
+      jetbrains.idea # unified edition; Scala plugin installs from its Marketplace, sbt/JDK from dev.nix
 
       # File manager
       kdePackages.dolphin
