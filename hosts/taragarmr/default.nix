@@ -11,8 +11,11 @@
 # host key, pre-generated in ~/server-migration/host-keys/taragarmr/etc/ssh/ (its age recipient
 # is &host_taragarmr in .sops.yaml); inject it with
 #   nixos-anywhere ... --extra-files ~/server-migration/host-keys/taragarmr
-# so secrets/taragarmr.yaml decrypts on first boot. Do not run scripts/bootstrap-sops.sh. Later
-# deploys:
+# so secrets/taragarmr.yaml decrypts on first boot. Do not run scripts/bootstrap-sops.sh.
+# krane's password is not in the repo or sops; set it on site: add --no-reboot to the
+# nixos-anywhere call above (same command, same --extra-files), then
+#   ssh root@<installer-ip> nixos-enter --root /mnt -c 'passwd krane'    (interactive)
+# and reboot the installer. Without it sudo is unusable and deploys fail. Later deploys:
 #   nixos-rebuild switch --flake .#taragarmr --target-host krane@taragarmr --sudo --ask-sudo-password
 #
 # Secrets (secrets/taragarmr.yaml): wireguard/{wg0,wg1}-private-key, couchdb/env,
