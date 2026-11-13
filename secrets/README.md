@@ -78,8 +78,8 @@ the `&host_<name>` entries in `.sops.yaml`. taragarmr and taronychus get the key
 `nixos-anywhere --extra-files ~/server-migration/host-keys/<host>`; the SD-card hosts
 (tarritator, tarronax) get `ssh_host_ed25519_key` (root:root 0600) and `.pub` (0644) copied
 into `/etc/ssh` on the flashed root partition before first boot. sshd only generates a host
-key when the file is missing, so a pre-placed key is kept. Every server file also has
-`users/krane-password-hash` (a yescrypt hash) for the login account.
+key when the file is missing, so a pre-placed key is kept. The login password is NOT in sops
+(not even as a hash): it is set on site at install, see the host header comments.
 
 ## How to create one
 

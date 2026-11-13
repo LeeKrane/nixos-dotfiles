@@ -18,7 +18,7 @@
 #      (0xf416 = SD, then NVMe, then USB; remove the SD card after installing).
 # Later deploys: nixos-rebuild switch --flake .#taronychus --target-host krane@taronychus
 #
-# Secrets (secrets/taronychus.yaml): wireguard/wg0-private-key, users/krane-password-hash,
+# Secrets (secrets/taronychus.yaml): wireguard/wg0-private-key,
 # restic/{htpasswd,rest-env,repo-password,repo-password-taragarmr}, gymleague/env. A section absent from the file switches that
 # feature off, so the config evaluates before the file exists.
 {

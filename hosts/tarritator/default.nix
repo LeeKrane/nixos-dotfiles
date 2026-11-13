@@ -10,7 +10,7 @@
 # sshd keeps it instead of generating one. Do not run scripts/bootstrap-sops.sh. Later deploys:
 #   nixos-rebuild switch --flake .#tarritator --target-host krane@192.168.82.3
 #
-# Secrets (secrets/tarritator.yaml): wireguard/wg0-private-key, users/krane-password-hash,
+# Secrets (secrets/tarritator.yaml): wireguard/wg0-private-key,
 # restic/{rest-env,repo-password-taragarmr,repo-password-taronychus,offsite-repo-password}.
 { inputs, ... }:
 {

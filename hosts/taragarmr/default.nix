@@ -16,7 +16,7 @@
 #   nixos-rebuild switch --flake .#taragarmr --target-host krane@taragarmr --sudo --ask-sudo-password
 #
 # Secrets (secrets/taragarmr.yaml): wireguard/{wg0,wg1}-private-key, couchdb/env,
-# restic/{rest-env,repo-password}, users/krane-password-hash. A missing section switches that feature off.
+# restic/{rest-env,repo-password}. A missing section switches that feature off.
 { ... }:
 {
   imports = [
