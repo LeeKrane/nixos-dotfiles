@@ -17,11 +17,17 @@
 {
   config,
   lib,
+  pkgs,
   hostName,
   ...
 }:
 let
   hostSecrets = import ../../lib/host-secrets.nix { inherit lib hostName; };
+  # The image's entrypoint (set -e) chowns and chmods everything under /opt/couchdb; on a
+  # read-only bind mount from the store that fails and the container exits 1 without output.
+  # So the ini is copied to a host file it already owns (5984, 0644) before every start.
+  etcDir = "/var/lib/couchdb-etc";
+  ini = "${etcDir}/10-livesync.ini";
 in
 {
   config = lib.mkIf (hostSecrets.hasSection "couchdb") {
@@ -40,8 +46,13 @@ in
       ports = [ "127.0.0.1:5984:5984" ];
       volumes = [
         "/srv/couchdb:/opt/couchdb/data"
-        "${./couchdb/livesync.ini}:/opt/couchdb/etc/local.d/10-livesync.ini:ro"
+        "${ini}:/opt/couchdb/etc/local.d/10-livesync.ini"
       ];
     };
+
+    systemd.services.docker-couchdb.preStart = ''
+      ${pkgs.coreutils}/bin/install -d -m 0755 ${etcDir}
+      ${pkgs.coreutils}/bin/install -m 0644 -o 5984 -g 5984 ${./couchdb/livesync.ini} ${ini}
+    '';
   };
 }
