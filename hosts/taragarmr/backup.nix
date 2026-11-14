@@ -11,8 +11,6 @@
 #                              minute or so after the first one; sync clients retry. With the
 #                              drive missing the unit fails on RequiresMountsFor before the
 #                              prepare command runs, so CouchDB is never stopped for nothing.
-#   /srv/gymleague/dumps       the nightly pg_dump of gym-league (02:30, gymleague.nix); only
-#                              while gym-league is enabled (its secrets section exists).
 #   /home/krane/spt-server     profiles, mods and their configs (SPT_Runtime/user), the profile
 #                              archives in backups/, web-admin-credentials.txt, the scripts. The
 #                              reproducible server runtime and download cache are excluded.
@@ -80,9 +78,7 @@ in
         "/srv/couchdb"
         "${home}/spt-server"
         stage
-      ]
-      # restic exits non-zero on a missing path; the dumps dir only exists with gym-league on.
-      ++ lib.optional (hostSecrets.hasSection "gymleague") "/srv/gymleague/dumps";
+      ];
       exclude = [
         "${home}/spt-server/_download"
         "${home}/spt-server/smoketest.*"

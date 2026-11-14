@@ -1,16 +1,10 @@
 # Public ingress: Caddy terminates TLS (Let's Encrypt, HTTP challenge on port 80) for the kept
 # domains. The router forwards 80/443 here. Certificates are reissued on first start, so
 # /var/lib/caddy is not backed up.
-{
-  config,
-  lib,
-  hostName,
-  ...
-}:
+{ config, ... }:
 let
   lan = import ../../lib/lan.nix;
   inherit (import ../../lib/wireguard.nix) wg0;
-  hostSecrets = import ../../lib/host-secrets.nix { inherit lib hostName; };
 in
 {
   services.caddy = {
@@ -40,13 +34,6 @@ in
           tls internal
           reverse_proxy http://${lan.router}
         '';
-    }
-    # gym-league backend (hosts/taragarmr/gymleague.nix), published on loopback only. Same gate
-    # as the backend, so the domain never proxies to an empty port.
-    // lib.optionalAttrs (hostSecrets.hasSection "gymleague") {
-      "api-gymleague.paulbankl.dev".extraConfig = ''
-        reverse_proxy 127.0.0.1:8080
-      '';
     };
   };
 
