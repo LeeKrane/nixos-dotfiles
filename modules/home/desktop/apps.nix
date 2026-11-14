@@ -23,6 +23,7 @@
       kdePackages.dolphin
       kdePackages.kio-extras # thumbnails/protocols
       kdePackages.qtsvg # icons
+      kdePackages.ark # archive manager; adds Extract/Compress to Dolphin's context menu
       # ii themes Qt only through ~/.config/kdeglobals (MaterialYouDark, Darkly, breeze-dark),
       # which only the "kde" platform theme reads. lib/mk-host.nix patches illogical-flake
       # to keep QT_QPA_PLATFORMTHEME=kde; these packages make that theme resolvable.
