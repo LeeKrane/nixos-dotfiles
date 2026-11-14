@@ -16,6 +16,8 @@
       Name = "en* eth*";
     };
     networkConfig.DHCP = "yes";
+    # Identify by MAC like the old OSes did, so the Fritzbox's pinned leases keep matching.
+    dhcpV4Config.ClientIdentifier = "mac";
   };
 
   services.resolved.enable = true;
