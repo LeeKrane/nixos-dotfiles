@@ -225,10 +225,8 @@
         import ./pkgs { inherit pkgs; }
         // {
           inherit nvim nvim-stable;
-          # nixos-raspberrypi's installer SD images, for hosts that are installed with
-          # nixos-anywhere (taronychus: hosts/taronychus/default.nix).
+          # nixos-raspberrypi's installer SD image for the Pi 4.
           image-installer-rpi4 = inputs.nixos-raspberrypi.installerImages.rpi4;
-          image-installer-rpi5 = inputs.nixos-raspberrypi.installerImages.rpi5;
         }
         # Ready-to-flash SD images of the Pi hosts that use the sd-image module.
         // nixpkgs.lib.genAttrs (map (h: "image-${h}") sdImageHosts) (
@@ -448,20 +446,12 @@
                 what = "krane.backup did not define services.restic.backups.default";
               }
               {
-                ok =
-                  config.services.restic.server.enable
-                  && config.services.restic.server.appendOnly
-                  && config.services.restic.server.listenAddress == "192.168.82.2:8000"
-                  && builtins.elem 8000 config.networking.firewall.interfaces.wg0.allowedTCPPorts;
-                what = "krane.backupServer is not an append-only REST server on 192.168.82.2:8000 with port 8000 open on wg0";
-              }
-              {
                 ok = !(config.networking.wg-quick.interfaces ? wg0) && !config.krane.wireguard.enable;
                 what = "a host outside lib/wireguard.nix got a wg0 interface";
               }
               {
-                ok = lib.length wg0Hub.peers == 7 && lib.all (p: lib.length p.allowedIPs == 1) wg0Hub.peers;
-                what = "the hub's wg0 does not have exactly 7 /32 peers";
+                ok = lib.length wg0Hub.peers == 5 && lib.all (p: lib.length p.allowedIPs == 1) wg0Hub.peers;
+                what = "the hub's wg0 does not have exactly 5 /32 peers";
               }
               {
                 ok =
@@ -506,7 +496,7 @@
         # Evaluates every Raspberry Pi host (aarch64-linux, role server) on the stable channel and
         # forces its toplevel (and sdImage) derivation paths: the x86_64 CI cannot build them, but
         # evaluating works. Also asserts the Pi boot setup: nixos-raspberrypi's loader, the
-        # Pi 5 hosts on the generational "kernel" one, and no systemd-boot/grub.
+        # Pi 5 on the generational "kernel" one, Pi 4 on u-boot, and no systemd-boot/grub.
         pi-eval =
           let
             inherit (nixpkgs) lib;

@@ -14,16 +14,11 @@
 
   krane.backup = {
     enable = true;
-    repository = "rest:http://backup@192.168.82.2:8000/fixture";
+    repository = "/mnt/backup/restic/fixture";
     passwordFile = "/run/secrets/restic/password";
-    environmentFile = "/run/secrets/restic/environment";
     paths = [ "/var/lib" ];
     exclude = [ "/var/lib/docker" ];
     backupPrepareCommand = "true";
-  };
-  krane.backupServer = {
-    enable = true;
-    htpasswdFile = "/run/secrets/restic/htpasswd";
   };
 
   # No secrets/<host>.yaml exists for the fixture names, so hand the interfaces their keys.

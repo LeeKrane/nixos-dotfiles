@@ -19,14 +19,6 @@
       publicKey = "+OYINXtWTR6kIPSeCpWQUQKmVqkuJAQzNfGr0a3E3yc=";
     };
     peers = {
-      taronychus = {
-        ip = "192.168.82.2";
-        publicKey = "ZofEjXMSywPlOFByfa4XOa7StMVxsvotY+K2CxkTDRA=";
-      };
-      tarritator = {
-        ip = "192.168.82.3";
-        publicKey = "A0IBd3i6msVUI0J58jQ6FhqeFpBr9jsrVOr5emfhrUw=";
-      };
       tarronax = {
         ip = "192.168.82.4";
         publicKey = "ipzkgDDEwlzek50bneRP8dNv1iPUHy/9XIVRDG8JxjE=";
@@ -53,8 +45,6 @@
     # each so desktops reach them over wg0.
     sshServers = [
       "taragarmr"
-      "taronychus"
-      "tarritator"
       "tarronax"
     ];
   };

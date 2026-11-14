@@ -1,23 +1,17 @@
-# restic backups, two halves, both off until a host enables them:
-#   krane.backup        a client: one services.restic.backups job with this repo's defaults.
-#   krane.backupServer  the repository host (taronychus): services.restic.server on wg0.
-# Secrets are plain paths here; hosts point them at sops secrets.
+# krane.backup: one services.restic.backups job with this repo's defaults, off until a host
+# enables it. Secrets are plain paths here; hosts point them at sops secrets.
 { config, lib, ... }:
 let
   inherit (lib) mkOption mkEnableOption types;
   cfg = config.krane.backup;
-  srv = config.krane.backupServer;
-  inherit (import ../../../lib/wireguard.nix) wg0;
-  # The port is the last ":"-separated part of listenAddress.
-  srvPort = lib.last (lib.splitString ":" srv.listenAddress);
 in
 {
   options.krane.backup = {
     enable = mkEnableOption "the restic backup job";
     repository = mkOption {
       type = types.str;
-      example = "rest:http://backup@<taronychus wg0 IP>:8000/taragarmr";
-      description = "restic repository URL.";
+      example = "/mnt/backup/restic/taragarmr";
+      description = "restic repository: a local path or a restic URL (e.g. rest:http://...).";
     };
     passwordFile = mkOption {
       type = types.str;
@@ -54,8 +48,8 @@ in
       default = (import ../../../lib/backup-retention.nix).primary;
       defaultText = lib.literalExpression "(import lib/backup-retention.nix).primary";
       description = ''
-        `restic forget --prune` arguments run after each backup. An append-only server
-        refuses deletes: set this to [ ] for such a repository and prune from the server side.
+        `restic forget --prune` arguments run after each backup. Set this to [ ] for a
+        repository the client may not delete from (e.g. an append-only server).
       '';
     };
     retryLock = mkOption {
@@ -80,63 +74,23 @@ in
     };
   };
 
-  options.krane.backupServer = {
-    enable = mkEnableOption "the restic REST server";
-    dataDir = mkOption {
-      type = types.path;
-      default = "/var/lib/restic";
-      description = "Directory holding the repositories.";
-    };
-    appendOnly = mkOption {
-      type = types.bool;
-      default = true;
-      description = "Reject deletes and overwrites, so a compromised client cannot destroy its backups.";
-    };
-    listenAddress = mkOption {
-      type = types.str;
-      default = "${wg0.peers.taronychus.ip}:8000";
-      defaultText = lib.literalExpression ''"<taronychus' wg0 IP>:8000"'';
-      description = "ip:port to listen on (socket-activated). The port is opened on wg0 only.";
-    };
-    htpasswdFile = mkOption {
-      type = types.nullOr types.path;
-      default = null;
-      example = "/run/secrets/restic/htpasswd";
-      description = "htpasswd file for client authentication; null disables authentication.";
+  config = lib.mkIf cfg.enable {
+    services.restic.backups.default = {
+      inherit (cfg)
+        repository
+        passwordFile
+        environmentFile
+        paths
+        exclude
+        timerConfig
+        pruneOpts
+        backupPrepareCommand
+        backupCleanupCommand
+        ;
+      initialize = true;
+      # A prune holds an exclusive repository lock now and then (other backups take shared
+      # ones, which do not block); wait for it instead of failing the run (restic >= 0.16).
+      extraBackupArgs = [ "--retry-lock ${cfg.retryLock}" ];
     };
   };
-
-  config = lib.mkMerge [
-    (lib.mkIf cfg.enable {
-      services.restic.backups.default = {
-        inherit (cfg)
-          repository
-          passwordFile
-          environmentFile
-          paths
-          exclude
-          timerConfig
-          pruneOpts
-          backupPrepareCommand
-          backupCleanupCommand
-          ;
-        initialize = true;
-        # The server-side prune holds an exclusive repository lock now and then (the offsite copy
-        # and other backups take shared ones, which do not block); wait for it instead of
-        # failing the run (restic >= 0.16).
-        extraBackupArgs = [ "--retry-lock ${cfg.retryLock}" ];
-      };
-    })
-
-    (lib.mkIf srv.enable {
-      services.restic.server = {
-        enable = true;
-        inherit (srv) dataDir appendOnly listenAddress;
-        htpasswd-file = srv.htpasswdFile;
-      };
-      # The address is wg0's, which may not exist yet when the socket is created at boot.
-      systemd.sockets.restic-rest-server.socketConfig.FreeBind = true;
-      networking.firewall.interfaces.${wg0.interface}.allowedTCPPorts = [ (lib.toInt srvPort) ];
-    })
-  ];
 }

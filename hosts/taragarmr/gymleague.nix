@@ -1,23 +1,19 @@
 # gym-league (Paul's app): Postgres 17 and the Spring backend, as docker containers on a
-# dedicated network. taragarmr's Caddy proxies api-gymleague.paulbankl.dev to port 8080 here.
+# dedicated network. Caddy (caddy.nix) proxies api-gymleague.paulbankl.dev to 127.0.0.1:8080;
+# the backend is published on loopback only, so nothing else can reach it.
 #
 # Source: github.com/PaulBankl/GymLeague is public, so it is pinned with fetchFromGitHub
 # (bump `rev` and `hash` to deploy a newer backend). A oneshot unit `docker build`s
 # backend/Dockerfile from that store path into gymleague-backend:local before the container
 # starts; the build downloads the Maven dependencies, so it needs network access (once per rev).
 #
-# Secrets: one sops env file, secret `gymleague/env` (secrets/taronychus.yaml, section
+# Secrets: one sops env file, secret `gymleague/env` (secrets/taragarmr.yaml, section
 # `gymleague`), read by both containers. Variable names, from the old Coolify deployment:
 #   POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD    (postgres)
 #   DB_URL, DB_USERNAME, DB_PASSWORD, SPRING_PROFILES_ACTIVE (backend)
 # DB_URL must point at the container name: jdbc:postgresql://gymleague-postgres:5432/<db>.
-# Without the section the whole module stays off, so the host evaluates before step 8.
+# Without the section the whole module stays off, so the host evaluates before it is added.
 #
-# 16K PAGE-SIZE RISK: the Pi 5 vendor kernel uses 16 KiB pages. Binaries bundling jemalloc
-# built for 4 KiB pages (some postgres builds, Rust apps) may crash at startup there. The
-# official postgres:17 image is Debian with glibc malloc and the backend is a JVM, so both
-# are expected to be fine, but test them on taronychus first. Fallback: a 4K kernel
-# (config.txt kernel=kernel8.img) or running gym-league on taragarmr.
 {
   config,
   lib,
@@ -26,8 +22,6 @@
   ...
 }:
 let
-  lan = import ../../lib/lan.nix;
-  inherit (import ../../lib/wireguard.nix) wg0;
   hostSecrets = import ../../lib/host-secrets.nix { inherit lib hostName; };
   enable = hostSecrets.hasSection "gymleague";
 
@@ -45,40 +39,7 @@ let
   envFile = config.sops.secrets."gymleague/env".path;
   docker = lib.getExe config.virtualisation.docker.package;
 
-  # Backend clients: taragarmr's LAN address and wg0 address (Caddy runs there).
-  proxyHosts = [
-    lan.hosts.taragarmr
-    wg0.hub.ip
-  ];
-  inIfaces = [
-    "end0"
-    "wg0"
-  ];
   port = "8080";
-
-  # Docker's published ports are DNATed and so bypass the NixOS firewall's INPUT rules; the
-  # DOCKER-USER chain is the place to filter them. ctorigdstport is the port as the client
-  # addressed it; only traffic arriving on the LAN and wg0 is filtered, so containers on
-  # their bridge are unaffected.
-  fwRules =
-    action:
-    let
-      iptables = lib.getExe' pkgs.iptables "iptables";
-      match = i: "-i ${i} -p tcp -m conntrack --ctorigdstport ${port} --ctdir ORIGINAL";
-      # -I puts a rule at the top: the DROPs first, then the RETURNs above them.
-      ins =
-        rule:
-        if action == "add" then
-          "${iptables} -C DOCKER-USER ${rule} 2>/dev/null || ${iptables} -I DOCKER-USER ${rule}"
-        else
-          "${iptables} -D DOCKER-USER ${rule} 2>/dev/null || true";
-    in
-    pkgs.writeShellScript "gymleague-fw-${action}" ''
-      ${lib.concatMapStringsSep "\n" (i: ins "${match i} -j DROP") inIfaces}
-      ${lib.concatMapStringsSep "\n" (
-        i: lib.concatMapStringsSep "\n" (s: ins "${match i} -s ${s} -j RETURN") proxyHosts
-      ) inIfaces}
-    '';
 in
 {
   config = lib.mkIf enable {
@@ -150,33 +111,12 @@ in
         requires = [
           "gymleague-network.service"
           "gymleague-build.service"
-          "gymleague-firewall.service"
         ];
         after = [
           "gymleague-network.service"
-          "gymleague-firewall.service"
           "gymleague-build.service"
           "docker-gymleague-postgres.service"
         ];
-      };
-
-      # Starts before the backend, which requires it: the published port is never reachable
-      # without the DOCKER-USER rules. DOCKER-USER exists once docker.service is up, and a
-      # docker restart (which flushes it) restarts this unit and the backend with it. The rules
-      # are removed when this unit stops, which also stops the backend; a plain backend
-      # restart leaves them in place.
-      gymleague-firewall = {
-        description = "DOCKER-USER rules for the gym-league backend port";
-        after = [ "docker.service" ];
-        requires = [ "docker.service" ];
-        before = [ "docker-gymleague-backend.service" ];
-        requiredBy = [ "docker-gymleague-backend.service" ];
-        serviceConfig = {
-          Type = "oneshot";
-          RemainAfterExit = true;
-          ExecStart = fwRules "add";
-          ExecStop = fwRules "del";
-        };
       };
 
       gymleague-dump = {
@@ -223,7 +163,7 @@ in
         # Built locally by gymleague-build.service, never pulled.
         pull = "never";
         environmentFiles = [ envFile ];
-        ports = [ "0.0.0.0:${port}:8080" ];
+        ports = [ "127.0.0.1:${port}:8080" ];
         dependsOn = [ "gymleague-postgres" ];
         extraOptions = [ "--network=${network}" ];
       };

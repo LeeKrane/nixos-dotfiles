@@ -43,7 +43,7 @@ let
   # which would miss nixos-raspberrypi's cache and need emulated kernel builds.
   boardModules = {
     rpi4 = rpi.nixosModules.raspberry-pi-4.base;
-    # The bootloader is set per host (hosts/taronychus: the generational "kernel" loader).
+    # The bootloader is set per host (a Pi 5 uses the generational "kernel" loader).
     rpi5 = rpi.nixosModules.raspberry-pi-5.base;
   };
 in

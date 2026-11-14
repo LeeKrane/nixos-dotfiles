@@ -1,6 +1,8 @@
 # taragarmr: AZW SER mini PC (Ryzen 7 6800H, 27 GiB RAM, 512 GB NVMe), role server. The home
 # server: WireGuard hub (modules/nixos/server/wireguard.nix, from lib/wireguard.nix), public
-# ingress (the router forwards 80/443 here), SPT/Fika, CouchDB, teamclaude. LAN address
+# ingress (the router forwards 80/443 here), SPT/Fika, CouchDB, teamclaude, gym-league
+# (Postgres + backend, behind Caddy), and restic backups to an external USB drive at
+# /mnt/backup (backup-drive.nix). LAN address
 # 192.168.178.23 (DHCP lease pinned in the Fritzbox).
 #
 # First install (replaces the Fedora/Nobara host; back up per ~/server-migration first):
@@ -19,7 +21,7 @@
 #   nixos-rebuild switch --flake .#taragarmr --target-host krane@taragarmr --sudo --ask-sudo-password
 #
 # Secrets (secrets/taragarmr.yaml): wireguard/{wg0,wg1}-private-key, couchdb/env,
-# restic/{rest-env,repo-password}. A missing section switches that feature off.
+# restic/repo-password, gymleague/env. A missing section switches that feature off.
 { ... }:
 {
   imports = [
@@ -30,6 +32,8 @@
     ./spt.nix
     ./services.nix
     ./backup.nix
+    ./backup-drive.nix
+    ./gymleague.nix
   ];
 
   system.stateVersion = "26.05";
