@@ -6,7 +6,7 @@
 #      for the install; the NVMe is the target):
 #        nix build .#image-installer-rpi5   (nixos-raspberrypi's installer, cached)
 #      then `zstd -d` the result and dd it to the card. Boot it, note its IP, and put your SSH
-#      key in (the installer shows a root password on its console). BOOT_ORDER is read right
+#      key in (image-installer-rpi5 already has the keys from lib/ssh-keys.nix for root). BOOT_ORDER is read right
 #      to left: the Pi 5 default 0xf461 tries SD first, but 0xf416 tries NVMe first and skips
 #      the installer while the NVMe still holds a bootable OS.
 #   2. From a desktop (aarch64 closure from nixos-raspberrypi's cache):
