@@ -397,6 +397,7 @@ action buttons are visible without a right-click.
 |---|---|---|---|
 | `0001` keep awake by default and across reboots | `local` | local | pinned `Idle.qml` restores `states.idle.inhibit` on a new Hyprland instance and defaults it to `true` |
 | `0002` re-arm the inhibitor once its surface is mapped | `local` | local | Hyprland rechecks idle inhibitors when a layer surface maps |
+| `0003` also hold a logind idle lock while Keep awake is on | `local` | local | Hyprland counts layer-surface inhibitors regardless of the layer's alpha |
 
 Upstream resets "Keep awake" to off on every new Hyprland instance, so it
 never survives a reboot. `0001` defaults it to on and always restores the
@@ -406,6 +407,13 @@ saved value from `~/.local/state/quickshell/states.json`.
 Hyprland counts it as not visible and only rechecks on window or focus
 events, so "Keep awake" could stay ineffective after login. The patch
 recreates the inhibitor once, 3 s after start.
+
+`0003`: Hyprland also ignores the inhibitor while its layer's alpha is zero,
+which happens during the fade-in and whenever a fullscreen window covers the
+monitor, so hypridle could still lock with "Keep awake" on. While it is on,
+`Idle.qml` also runs `systemd-inhibit --what=idle ... cat`, an idle lock that
+hypridle honours on its own. `cat` exits on stdin EOF, so the lock goes away
+when the toggle turns off or Quickshell exits.
 
 ### Workflow
 
