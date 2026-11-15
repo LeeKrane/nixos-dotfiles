@@ -20,6 +20,8 @@ keys:
   # come from SSH host keys pre-generated before install (injected via nixos-anywhere
   # --extra-files or copied onto the SD image), not from bootstrap-sops.sh.
   - &host_taragarmr age1jmqpxrmz20clmnvaufnadxetv3q5ra79zpfhhh9p4sqh9rg8vucs8ck07k
+  - &host_taronychus age14fnls22n45sm2pp6862xygmkwermfwrhcgxf3jye6u0dnc83hgqq22qf3r
+  - &host_tarritator age19ctxr0wfve8ageyeq4du59hz9qfmekg5xscgluftcr226w384pmsjgtr4r
   - &host_tarronax age1yv39slw5gr04kqm2u4900k8q2vlckph3jl7rat4ejnsnfpm3xg7qz5svtg
 
 creation_rules:
@@ -47,6 +49,20 @@ creation_rules:
           - *admin_tariognatha
           - *admin_tarmantria
           - *host_taragarmr
+
+  - path_regex: secrets/taronychus\.yaml$
+    key_groups:
+      - age:
+          - *admin_tariognatha
+          - *admin_tarmantria
+          - *host_taronychus
+
+  - path_regex: secrets/tarritator\.yaml$
+    key_groups:
+      - age:
+          - *admin_tariognatha
+          - *admin_tarmantria
+          - *host_tarritator
 
   - path_regex: secrets/tarronax\.yaml$
     key_groups:

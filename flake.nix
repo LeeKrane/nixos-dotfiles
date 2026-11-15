@@ -225,8 +225,9 @@
         import ./pkgs { inherit pkgs; }
         // {
           inherit nvim nvim-stable;
-          # nixos-raspberrypi's installer SD image for the Pi 4.
+          # nixos-raspberrypi's installer SD images (rpi5: taronychus, installed with nixos-anywhere).
           image-installer-rpi4 = inputs.nixos-raspberrypi.installerImages.rpi4;
+          image-installer-rpi5 = inputs.nixos-raspberrypi.installerImages.rpi5;
         }
         # Ready-to-flash SD images of the Pi hosts that use the sd-image module.
         // nixpkgs.lib.genAttrs (map (h: "image-${h}") sdImageHosts) (
@@ -450,8 +451,8 @@
                 what = "a host outside lib/wireguard.nix got a wg0 interface";
               }
               {
-                ok = lib.length wg0Hub.peers == 5 && lib.all (p: lib.length p.allowedIPs == 1) wg0Hub.peers;
-                what = "the hub's wg0 does not have exactly 5 /32 peers";
+                ok = lib.length wg0Hub.peers == 7 && lib.all (p: lib.length p.allowedIPs == 1) wg0Hub.peers;
+                what = "the hub's wg0 does not have exactly 7 /32 peers";
               }
               {
                 ok =
