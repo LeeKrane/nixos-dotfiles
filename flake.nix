@@ -225,7 +225,7 @@
         import ./pkgs { inherit pkgs; }
         // {
           inherit nvim nvim-stable;
-          # nixos-raspberrypi's installer SD images (rpi5: taronychus, installed with nixos-anywhere).
+          # nixos-raspberrypi's installer SD images.
           image-installer-rpi4 = inputs.nixos-raspberrypi.installerImages.rpi4;
           # rpi5 with root's authorized keys from lib/ssh-keys.nix, so nixos-anywhere reaches it
           # headless (the stock image has no keys and an empty root password: console only).

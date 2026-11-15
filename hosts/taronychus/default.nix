@@ -1,39 +1,32 @@
 # taronychus: Raspberry Pi 5 (8 GB), boots from a 1 TB NVMe (Lexar NM710). Service node: the
 # base server role plus its wg0 spoke (192.168.82.2), nothing else yet.
 #
-# First install (no image of this host exists, the NVMe is formatted by disko):
-#   1. Build and flash the nixos-raspberrypi installer to a spare SD card or USB stick (only
-#      for the install; the NVMe is the target):
-#        nix build .#image-installer-rpi5   (nixos-raspberrypi's installer, cached)
-#      then `zstd -d` the result and dd it to the card. Boot it, note its IP, and put your SSH
-#      key in (image-installer-rpi5 already has the keys from lib/ssh-keys.nix for root). BOOT_ORDER is read right
-#      to left: the Pi 5 default 0xf461 tries SD first, but 0xf416 tries NVMe first and skips
-#      the installer while the NVMe still holds a bootable OS.
-#   2. From a desktop (aarch64 closure from nixos-raspberrypi's cache):
-#        nix run github:nix-community/nixos-anywhere -- --flake .#taronychus \
-#          --phases kexec,disko,install \
-#          --extra-files ~/server-migration/host-keys/taronychus \
-#          --target-host root@<installer-ip>
-#      disko partitions the NVMe per ./disko.nix. The sops age key derives from the
-#      pre-generated SSH host key in --extra-files (recipient &host_taronychus in .sops.yaml).
-#      Do not run scripts/bootstrap-sops.sh. Before rebooting, set krane's password:
-#        ssh -t root@<installer-ip> "nixos-enter --root /mnt -c 'passwd krane'"
-#      Without it sudo is unusable and deploys fail.
-#   3. Remove the installer medium; the Pi then boots the NVMe with either boot order.
+# Image: nix build .#image-taronychus, then write it straight to the NVMe (USB-NVMe adapter on a
+# desktop): `zstd -dc ... | dd of=/dev/sdX`. The sd-image module mounts / by label (NIXOS_SD),
+# so the same image boots from NVMe, and its root partition grows to fill the disk on first
+# boot. BOOT_ORDER is read right to left: 0xf461 (SD, NVMe, USB) and 0xf416 both reach the NVMe
+# without an SD card. The sops age key derives from this host's pre-generated SSH host key
+# (~/server-migration/host-keys/taronychus/etc/ssh/, recipient &host_taronychus in .sops.yaml):
+# before first boot, copy ssh_host_ed25519_key (root:root 0600) and .pub (0644) from there into
+# /etc/ssh on the flashed root partition; sshd keeps an existing key. Do not run
+# scripts/bootstrap-sops.sh. Secrets: wireguard/wg0-private-key; without that section wg0
+# stays unconfigured.
+# krane's password is not in the repo or sops. After first boot, ssh in as krane (key auth) and
+# run `passwd`: the empty initial password needs no current one (pam_unix nullok). Until then
+# sudo is unusable, so deploys fail.
 # Later deploys: nixos-rebuild switch --flake .#taronychus --target-host krane@taronychus
-#
-# Secrets (secrets/taronychus.yaml): wireguard/wg0-private-key; without that section wg0 stays
-# unconfigured.
-{ ... }:
+{ config, inputs, ... }:
 {
-  imports = [ ./disko.nix ];
+  imports = [ inputs.nixos-raspberrypi.nixosModules.sd-image ];
 
   system.stateVersion = "26.05";
 
-  # Pi 5: the generational "kernel" bootloader (U-Boot cannot boot from NVMe/USB on a Pi 5).
-  # Firmware, kernels and initrds sit on /boot/firmware (disko.nix). No other bootloader is
-  # enabled: servers import no systemd-boot or grub config, checks.pi-eval asserts it.
-  boot.loader.raspberry-pi.bootloader = "kernel";
+  # Never-booted image has no /etc yet, so the password cannot be set before first boot.
+  # Empty initial password, applied at user creation only (mutableUsers = true).
+  users.users.${config.krane.user.name}.initialHashedPassword = "";
+
+  # Pi 5: the sd-image module selects the generational "kernel" bootloader. No other
+  # bootloader is enabled for Pis.
 
   # Firewall: ssh only (server module). wg0 is outbound to the hub.
 }
