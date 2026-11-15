@@ -76,6 +76,9 @@
     ${pkgs.zoxide}/bin/zoxide init fish | source
     ${pkgs.fzf}/bin/fzf --fish | source
     ${pkgs.pay-respects}/bin/pay-respects fish --alias fuck | source
+    # Also clear the scrollback (\e[3J), which plain `clear` leaves in kitty. The desktops get
+    # the same alias from ii's fish config; servers have no ii.
+    alias clear "printf '\e[2J\e[3J\e[1;1H'"
   '';
 
   # NixOS-level `programs.direnv`, not modules/home/common/cli.nix. Hooks fish
