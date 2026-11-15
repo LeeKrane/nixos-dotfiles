@@ -227,7 +227,14 @@
           inherit nvim nvim-stable;
           # nixos-raspberrypi's installer SD images (rpi5: taronychus, installed with nixos-anywhere).
           image-installer-rpi4 = inputs.nixos-raspberrypi.installerImages.rpi4;
-          image-installer-rpi5 = inputs.nixos-raspberrypi.installerImages.rpi5;
+          # rpi5 with root's authorized keys from lib/ssh-keys.nix, so nixos-anywhere reaches it
+          # headless (the stock image has no keys and an empty root password: console only).
+          image-installer-rpi5 =
+            (inputs.nixos-raspberrypi.nixosConfigurations.rpi5-installer.extendModules {
+              modules = [
+                { users.users.root.openssh.authorizedKeys.keys = builtins.attrValues (import ./lib/ssh-keys.nix); }
+              ];
+            }).config.system.build.sdImage;
         }
         # Ready-to-flash SD images of the Pi hosts that use the sd-image module.
         // nixpkgs.lib.genAttrs (map (h: "image-${h}") sdImageHosts) (
