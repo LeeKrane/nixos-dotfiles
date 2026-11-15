@@ -22,5 +22,6 @@
     ./teamclaude.nix
     ./flake-update-notify.nix
     ./steam.nix
+    ./ani-cli.nix
   ];
 }

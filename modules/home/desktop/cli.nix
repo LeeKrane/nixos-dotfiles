@@ -25,6 +25,5 @@
     scrcpy
     android-tools
     libnotify
-    ani-cli
   ];
 }

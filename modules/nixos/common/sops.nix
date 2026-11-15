@@ -32,12 +32,20 @@ in
     # Owned by the login account (krane.user.name), not root: copied verbatim into
     # that account's own rclone.conf. The wireguard secrets are declared by
     # modules/nixos/desktop/networking.nix.
-    secrets = lib.optionalAttrs (hasSection "rclone") {
-      "rclone/config-seed" = {
-        owner = config.krane.user.name;
-        mode = "0400";
+    secrets =
+      lib.optionalAttrs (hasSection "rclone") {
+        "rclone/config-seed" = {
+          owner = config.krane.user.name;
+          mode = "0400";
+        };
+      }
+      # curl config (`user = "ani-cli:<password>"`) for modules/home/desktop/ani-cli.nix.
+      // lib.optionalAttrs (hasSection "ani-cli") {
+        "ani-cli/curl-auth" = {
+          owner = config.krane.user.name;
+          mode = "0400";
+        };
       };
-    };
   };
 
   # Also on $PATH on the installed system for scripts/bootstrap-sops.sh

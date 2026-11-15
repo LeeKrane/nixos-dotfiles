@@ -41,6 +41,7 @@ No host, and no single key, can decrypt or edit another host's file.
 | `wireguard/peer-allowed-ips` | same template (`AllowedIPs`) | `root:0400` |
 | `wireguard/listen-port` | same template (`ListenPort`) | `root:0400` |
 | `rclone/config-seed` | `modules/home/desktop/proton-drive.nix` (seeds `~/.config/rclone/rclone.conf` if absent) | `krane:0400` |
+| `ani-cli/curl-auth` | `modules/home/desktop/ani-cli.nix` (curl config `user = "ani-cli:<password>"` for the history sync) | `krane:0400` |
 
 All six wireguard values live encrypted in `secrets/<host>.yaml`; none of
 them, including the address and peer identity, are cleartext anywhere in
