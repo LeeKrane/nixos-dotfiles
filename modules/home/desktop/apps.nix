@@ -2,8 +2,22 @@
 # already wired into its keybinds.
 # Out of scope, never add here or elsewhere in this repo: jetbrains-toolbox, kate,
 # android-studio, audacity, brave, thunderbird, notesnook, alpaca, gnome-clocks,
-# super-productivity, Path of Building, Hytale Launcher, DaVinci Resolve, VirtualBox.
+# super-productivity, Hytale Launcher, DaVinci Resolve, VirtualBox.
 { inputs, pkgs, ... }:
+let
+  # APT's overlay backend (electron-overlay-window, uiohook) is X11-only. NIXOS_OZONE_WL=1
+  # makes Electron run native Wayland, where the overlay cannot track or cover the game
+  # (PoE runs under Proton in XWayland). Force XWayland. The overlay window is
+  # override-redirect, so Hyprland window rules do not apply to it.
+  awakened-poe-trade-x11 = pkgs.symlinkJoin {
+    name = "awakened-poe-trade-x11";
+    paths = [ pkgs.awakened-poe-trade ];
+    nativeBuildInputs = [ pkgs.makeWrapper ];
+    postBuild = ''
+      wrapProgram $out/bin/awakened-poe-trade --add-flags --ozone-platform=x11
+    '';
+  };
+in
 {
   home.packages =
     with pkgs;
@@ -58,7 +72,13 @@
       cartridges
       keypunch
       keymapp
-      awakened-poe-trade
+
+      # Path of Exile
+      awakened-poe-trade-x11
+      # Rust runtime for Path of Building Community. The "Path of Building" desktop entry runs
+      # PoE 1 (`rusty-path-of-building poe1`), "Path of Building 2" runs PoE 2. It downloads
+      # PoB's Lua sources on first start and updates them itself.
+      path-of-building
     ]
     ++ [
       # Third-party flake (github:0xc000022070/zen-browser-flake, input zen-browser), not
