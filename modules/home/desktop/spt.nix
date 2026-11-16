@@ -471,13 +471,6 @@ let
     dir = sptDir;
     inherit (cfg) server;
   };
-  # The Vagabond server's install: a reflinked copy of SPT in the same prefix, with the
-  # Vagabond client plugin, which must not load against the main server.
-  sptVagabond = mkSpt {
-    name = "spt-vagabond";
-    dir = "$WINEPREFIX/drive_c/SPT-Vagabond";
-    server = cfg.vagabondServer;
-  };
 
   sptGreed = pkgs.writeShellApplication {
     name = "spt-greed";
@@ -509,16 +502,6 @@ in
     '';
   };
 
-  options.krane.spt.vagabondServer = lib.mkOption {
-    type = lib.types.nullOr lib.types.str;
-    default = null;
-    example = "https://spt.example.org:6970";
-    description = ''
-      URL of the remote SPT server running the Vagabond mod. When set, `spt-vagabond` starts
-      the copy of SPT in drive_c/SPT-Vagabond against it.
-    '';
-  };
-
   options.krane.spt.cpus = lib.mkOption {
     type = lib.types.nullOr lib.types.str;
     default = null;
@@ -534,16 +517,7 @@ in
     sptSetup
     spt
     sptGreed
-  ]
-  ++ lib.optional (cfg.vagabondServer != null) sptVagabond;
-
-  config.xdg.desktopEntries.spt-vagabond = lib.mkIf (cfg.vagabondServer != null) {
-    name = "SPT Vagabond";
-    comment = "SPT with Fika and Vagabond, against the Vagabond server";
-    exec = "${sptVagabond}/bin/spt-vagabond";
-    icon = "applications-games";
-    categories = [ "Game" ];
-  };
+  ];
 
   config.xdg.desktopEntries.spt = {
     name = "SPT Tarkov";
