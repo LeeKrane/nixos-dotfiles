@@ -33,6 +33,10 @@
     # monitor ID, which is DP-1 here. Pin them to DP-2 so the lock screen and startup land there.
     settings.cursor.default_monitor = "DP-2";
 
+    # Auto-HDR modesets DP-2 whenever a fullscreen window asks for HDR, which blanks the
+    # 4K240 panel for seconds and warns about 8-bit output. Keep SDR.
+    settings.render.cm_auto_hdr = 0;
+
     # Desktop stays awake once booted: no idle lock, DPMS off or suspend.
     idleTimeouts = false;
     extraGeneralLua = ''
