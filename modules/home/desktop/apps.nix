@@ -5,17 +5,20 @@
 # super-productivity, Hytale Launcher, DaVinci Resolve, VirtualBox.
 { inputs, pkgs, ... }:
 let
-  # APT's overlay backend (electron-overlay-window, uiohook) is X11-only. NIXOS_OZONE_WL=1
-  # makes Electron run native Wayland, where the overlay cannot track or cover the game
-  # (PoE runs under Proton in XWayland). Force XWayland. The overlay window is
-  # override-redirect, so Hyprland window rules do not apply to it.
-  awakened-poe-trade-x11 = pkgs.symlinkJoin {
-    name = "awakened-poe-trade-x11";
-    paths = [ pkgs.awakened-poe-trade ];
-    nativeBuildInputs = [ pkgs.makeWrapper ];
-    postBuild = ''
-      wrapProgram $out/bin/awakened-poe-trade --add-flags --ozone-platform=x11
-    '';
+  awakened-poe-trade = pkgs.awakened-poe-trade.override {
+    # Upstream bundles Electron 40. From Electron 44 on, clipboard.readText()/writeText()
+    # return Promises; APT's clipboard poller then throws inside a timer and price checks
+    # silently never open. 43 is the newest nixpkgs Electron that keeps them synchronous
+    # and is not EOL. Revisit when APT supports the async clipboard or 43 goes EOL.
+    electron = pkgs.electron_43-bin;
+    # APT's overlay backend (electron-overlay-window, uiohook) is X11-only. NIXOS_OZONE_WL=1
+    # makes Electron run native Wayland, where the overlay cannot track or cover the game
+    # (PoE runs under Proton in XWayland). Force XWayland. The overlay window is
+    # override-redirect, so Hyprland window rules do not apply to it. It cannot take focus
+    # from the game either, so in PoE use Windowed Fullscreen and turn off "Confine Mouse to
+    # Window": exclusive fullscreen and confinement make Wine grab the pointer, which leaves
+    # the price-check panel unclickable and drops the first copy keypress.
+    commandLineArgs = [ "--ozone-platform=x11" ];
   };
 in
 {
@@ -74,7 +77,7 @@ in
       keymapp
 
       # Path of Exile
-      awakened-poe-trade-x11
+      awakened-poe-trade
       # Rust runtime for Path of Building Community. The "Path of Building" desktop entry runs
       # PoE 1 (`rusty-path-of-building poe1`), "Path of Building 2" runs PoE 2. It downloads
       # PoB's Lua sources on first start and updates them itself.
