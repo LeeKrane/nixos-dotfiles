@@ -44,9 +44,10 @@ fetch() {
   esac
 }
 
-# merge BASE LOCAL REMOTE: a show whose local line differs from BASE was changed here and
-# wins; otherwise the remote line wins. A show missing on one side but present in BASE was
-# deleted there and is dropped.
+# merge BASE LOCAL REMOTE: a show changed on only one side (its line differs from BASE)
+# takes that side's line. Changed on both, as on a first sync with an empty BASE, the higher
+# episode wins. A show missing on one side but present in BASE was deleted there and is
+# dropped.
 merge() {
   awk -F'\t' '
     NF < 2 { next }
@@ -57,7 +58,12 @@ merge() {
       for (i = 1; i <= m; i++) {
         id = rorder[i]; seen[id] = 1
         if (id in loc) {
-          print ((loc[id] != base[id]) ? loc[id] : rem[id])
+          if (loc[id] == base[id]) print rem[id]
+          else if (rem[id] == base[id]) print loc[id]
+          else {
+            split(loc[id], l, "\t"); split(rem[id], r, "\t")
+            print ((l[1] + 0 >= r[1] + 0) ? loc[id] : rem[id])
+          }
         } else if (!(id in base)) {
           print rem[id]
         }
