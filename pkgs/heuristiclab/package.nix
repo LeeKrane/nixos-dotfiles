@@ -17,6 +17,7 @@
   winetricks,
   libnotify,
   coreutils,
+  gnugrep,
 }:
 let
   pname = "heuristiclab";
@@ -53,6 +54,7 @@ let
       winetricks
       libnotify
       coreutils
+      gnugrep
     ];
     text = ''
       export WINEPREFIX="''${HEURISTICLAB_PREFIX:-''${XDG_DATA_HOME:-$HOME/.local/share}/heuristiclab/prefix}"
@@ -76,10 +78,20 @@ let
       fi
 
       # Wine's DPI (96 = 100 %). WinForms scales fonts and controls from it;
-      # 144 = 150 %. HEURISTICLAB_DPI overrides.
+      # 144 = 150 %. HEURISTICLAB_DPI overrides. The reg calls start wineserver
+      # and the desktop process, which read the old DPI and keep it for the
+      # session, so after a change Wine is shut down before the app starts.
       dpi="''${HEURISTICLAB_DPI:-144}"
-      wine reg add 'HKCU\Control Panel\Desktop' /v LogPixels /t REG_DWORD /d "$dpi" /f >/dev/null
-      wine reg add 'HKLM\System\CurrentControlSet\Hardware Profiles\Current\Software\Fonts' /v LogPixels /t REG_DWORD /d "$dpi" /f >/dev/null
+      dpi_hex=$(printf '0x%x' "$dpi")
+      desktop_key='HKCU\Control Panel\Desktop'
+      fonts_key='HKLM\System\CurrentControlSet\Hardware Profiles\Current\Software\Fonts'
+      if ! wine reg query "$desktop_key" /v LogPixels 2>/dev/null | grep -qi "$dpi_hex" \
+        || ! wine reg query "$fonts_key" /v LogPixels 2>/dev/null | grep -qi "$dpi_hex"; then
+        wine reg add "$desktop_key" /v LogPixels /t REG_DWORD /d "$dpi" /f >/dev/null
+        wine reg add "$fonts_key" /v LogPixels /t REG_DWORD /d "$dpi" /f >/dev/null
+        wineserver -k
+        wineserver -w
+      fi
 
       cd "$install_dir"
       exec wine "HeuristicLab 3.3.exe" "$@"
