@@ -75,6 +75,12 @@ let
         echo "${release}" > "$install_dir/.nix-release"
       fi
 
+      # Wine's DPI (96 = 100 %). WinForms scales fonts and controls from it;
+      # 144 = 150 %. HEURISTICLAB_DPI overrides.
+      dpi="''${HEURISTICLAB_DPI:-144}"
+      wine reg add 'HKCU\Control Panel\Desktop' /v LogPixels /t REG_DWORD /d "$dpi" /f >/dev/null
+      wine reg add 'HKLM\System\CurrentControlSet\Hardware Profiles\Current\Software\Fonts' /v LogPixels /t REG_DWORD /d "$dpi" /f >/dev/null
+
       cd "$install_dir"
       exec wine "HeuristicLab 3.3.exe" "$@"
     '';
