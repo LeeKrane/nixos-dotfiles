@@ -62,14 +62,10 @@
     nixos-hardware.url = "github:NixOS/nixos-hardware/master";
   };
 
-  # The Pi kernels, firmware and images are cached here; flake nixConfig needs
-  # `--accept-flake-config` (or trusted-users) to take effect.
-  nixConfig = {
-    extra-substituters = [ "https://nixos-raspberrypi.cachix.org" ];
-    extra-trusted-public-keys = [
-      "nixos-raspberrypi.cachix.org-1:4iMO9LXa8BqhU+Rpg6LQKiGa2lsNh/j2oiYLNOQ5sPI="
-    ];
-  };
+  # No flake-level nix config here: nix prompts to accept it on every invocation,
+  # which hangs direnv (`use flake`). Caches belong in nix.settings instead; the
+  # nixos-raspberrypi cache is in modules/nixos/common/nix-settings.nix.
+  # checks.no-flake-nixconfig enforces this.
 
   outputs =
     { self, nixpkgs, ... }@inputs:
@@ -262,6 +258,19 @@
       };
 
       checks.${system} = {
+        # A top-level nix config attribute in this file makes every nix command, and so
+        # direnv's `use flake`, stop at an interactive "do you want to allow configuration
+        # setting" prompt. It was dropped once (451e2af) and came back (fde342b); fail here
+        # so it cannot return unnoticed. The pattern is split so this file doesn't match.
+        no-flake-nixconfig =
+          let
+            src = builtins.readFile ./flake.nix;
+            found = builtins.match ".*\n  ${"nix" + "Config"} *=.*" src != null;
+          in
+          nixpkgs.lib.throwIf found
+            "checks.no-flake-nixconfig: flake.nix sets a top-level nix config attribute; move it to nix.settings (modules/nixos/common/nix-settings.nix)"
+            (pkgs.runCommand "krane-no-flake-nixconfig" { } "touch $out");
+
         # custom/*.lua is parsed only at Hyprland session start. Catch
         # syntax errors here instead. Parse-only, undefined globals are fine. Desktop
         # hosts only: other roles have no krane.hypr.
