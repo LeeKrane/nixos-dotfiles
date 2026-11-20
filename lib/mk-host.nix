@@ -8,11 +8,13 @@ let
   # Servers follow the stable channel: the stable nixpkgs, home-manager and nixvim inputs
   # stand in under their usual names, so every module that reads inputs.nixpkgs (for
   # example the nix registry) sees stable on servers. Desktops get `inputs` unchanged.
+  # nixpkgs-unstable keeps the desktop pin reachable for single packages stable lacks.
   inputsFor =
     role:
     if role == "server" then
       inputs
       // {
+        nixpkgs-unstable = inputs.nixpkgs;
         nixpkgs = inputs.nixpkgs-stable;
         home-manager = inputs.home-manager-stable;
         nixvim = inputs.nixvim-stable;
