@@ -1,5 +1,13 @@
 { pkgs }:
+let
+  ani-cli-launcher = pkgs.callPackage ./ani-cli-launcher/package.nix { };
+in
 {
+  # Termux launcher entries for ani-cli (APK, unsigned) and the script that signs it, see
+  # scripts/ani-cli-launcher.sh.
+  inherit ani-cli-launcher;
+  ani-cli-launcher-sign = ani-cli-launcher.sign;
+
   # Overrides nixpkgs' claude-code with the vendored copy, so its version
   # is set by pkgs/claude-code/manifest.zst.json rather than the nixpkgs pin.
   claude-code = pkgs.callPackage ./claude-code/package.nix { };
