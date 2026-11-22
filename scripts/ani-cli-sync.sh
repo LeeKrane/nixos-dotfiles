@@ -21,7 +21,8 @@ touch "$hist" "$base"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-warn() { printf 'ani-cli sync: %s\n' "$*" >&2; }
+# `|| true`: after a hangup stderr is a dead terminal, and errexit must not abort the push.
+warn() { printf 'ani-cli sync: %s\n' "$*" >&2 || true; }
 
 # Fetch the server doc into $tmp/remote and $tmp/remote-rev. A missing doc is an empty
 # history with no rev. Returns non-zero when the server can't be reached.
@@ -118,10 +119,21 @@ else
   warn "no credentials at $ANI_SYNC_AUTH, not syncing"
 fi
 
+finish() {
+  if [ -r "$ANI_SYNC_AUTH" ]; then
+    push || warn "push failed, will retry next run"
+  fi
+}
+
+# Closing the terminal window (SIGHUP) or Ctrl-C kills ani-cli too; push before dying, or the
+# episodes watched this run stay local until the next clean exit.
+trap 'finish; exit 129' HUP
+trap 'finish; exit 130' INT
+trap 'finish; exit 143' TERM
+
 status=0
 "$ANI_CLI_REAL" "$@" || status=$?
 
-if [ -r "$ANI_SYNC_AUTH" ]; then
-  push || warn "push failed, will retry next run"
-fi
+trap - HUP INT TERM
+finish
 exit "$status"
