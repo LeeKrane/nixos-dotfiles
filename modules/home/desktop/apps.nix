@@ -3,7 +3,12 @@
 # Out of scope, never add here or elsewhere in this repo: jetbrains-toolbox, kate,
 # android-studio, audacity, brave, thunderbird, notesnook, alpaca, gnome-clocks,
 # super-productivity, Hytale Launcher, DaVinci Resolve, VirtualBox.
-{ inputs, pkgs, ... }:
+{
+  inputs,
+  lib,
+  pkgs,
+  ...
+}:
 let
   awakened-poe-trade = pkgs.awakened-poe-trade.override {
     # Upstream bundles Electron 40. From Electron 44 on, clipboard.readText()/writeText()
@@ -49,6 +54,7 @@ in
       kdePackages.breeze-icons # Icons Theme=breeze-dark named in ii's kdeglobals
 
       # Media
+      qview # image viewer; default for image types below
       obs-studio
       vlc
       mpv
@@ -97,10 +103,23 @@ in
   xdg.mimeApps =
     let
       zen = "zen-beta.desktop";
+      imageTypes = [
+        "image/png"
+        "image/jpeg"
+        "image/gif"
+        "image/webp"
+        "image/bmp"
+        "image/tiff"
+        "image/avif"
+        "image/heic"
+        "image/jxl"
+        "image/svg+xml"
+        "image/x-icon"
+      ];
     in
     {
       enable = true;
-      defaultApplications = {
+      defaultApplications = lib.genAttrs imageTypes (_: "com.interversehq.qView.desktop") // {
         "inode/directory" = "org.kde.dolphin.desktop";
         "x-scheme-handler/http" = zen;
         "x-scheme-handler/https" = zen;
