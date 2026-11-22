@@ -48,7 +48,8 @@ ssh -p "$port" "$host" "
   o='-o Dpkg::Options::=--force-confnew -o Dpkg::Options::=--force-confdef'
   apt-get update -q >/dev/null
   apt-get full-upgrade -y -q \$o >/dev/null
-  apt-get install -y -q \$o aria2 ffmpeg fzf grep sed wget curl jq gawk diffutils >/dev/null
+  # No recommends: ffmpeg pulls python, whose python-pip recommends a ~340 MB clang toolchain.
+  apt-get install -y -q --no-install-recommends \$o aria2 ffmpeg fzf grep sed wget curl jq gawk diffutils >/dev/null
   mkdir -p \$PREFIX/libexec ~/.config/ani-cli-sync ~/.shortcuts
   # Termux:Widget scripts, always dubbed. ~/.shortcuts feeds the widgets; dynamic_shortcuts
   # becomes app shortcuts (long-press the Termux:Widget icon, launcher search) once
