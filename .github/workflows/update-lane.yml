@@ -47,7 +47,9 @@ jobs:
           nix eval --json --impure --expr \
             'import ./scripts/update-lanes.nix (builtins.fromJSON (builtins.readFile ./flake.lock))' \
             > "$RUNNER_TEMP/lanes.json"
-          echo "inputs=$(jq -r --arg l "$LANE" '.[$l] | join(" ")' "$RUNNER_TEMP/lanes.json")" >> "$GITHUB_OUTPUT"
+          # Two steps, so a jq failure fails the step instead of passing an empty list on.
+          inputs="$(jq -r --arg l "$LANE" '.[$l] | join(" ")' "$RUNNER_TEMP/lanes.json")"
+          echo "inputs=$inputs" >> "$GITHUB_OUTPUT"
       - name: Save old flake.lock
         run: cp flake.lock "$RUNNER_TEMP/flake.lock.old"
       - name: Update lane inputs
@@ -55,6 +57,8 @@ jobs:
           INPUTS: ${{ steps.meta.outputs.inputs }}
         run: |
           set -o pipefail
+          # A bare `nix flake update` would bump every input, the other lane's included.
+          [ -n "$INPUTS" ] || { echo "lane $LANE has no inputs" >&2; exit 1; }
           # shellcheck disable=SC2086 # INPUTS is a space-separated list of input names
           nix flake update $INPUTS 2>&1 | tee "$RUNNER_TEMP/update.log"
           # pkgs/claude-code is installed on servers too, so it rides the server lane.

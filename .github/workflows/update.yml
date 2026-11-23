@@ -46,7 +46,10 @@ jobs:
           LANE_INPUT: ${{ inputs.lane }}
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: echo "lanes=$(scripts/update-select-lanes.sh)" >> "$GITHUB_OUTPUT"
+        # Two steps: a failed command substitution inside echo's argument would not fail the step.
+        run: |
+          lanes="$(scripts/update-select-lanes.sh)"
+          echo "lanes=$lanes" >> "$GITHUB_OUTPUT"
 
   lane:
     needs: select
