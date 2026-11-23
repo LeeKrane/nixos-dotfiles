@@ -136,8 +136,12 @@ stub `gh`.
 
 ### Concurrency
 
-The single `update` concurrency group stays (`cancel-in-progress: false`). A conflict
-refresh queues behind a running weekly run instead of racing it on the lane branches.
+There is no workflow-level group. GitHub keeps one pending run per group, so with a single
+`update` group a conflict refresh queued behind a running update would silently cancel a
+pending scheduled run. Instead, `update.yml`'s `lane` job takes the group
+`update-lane-<lane>` (`cancel-in-progress: false`). A second run for a lane queues behind the
+running one instead of racing it on that lane's branches. A third replaces the pending
+one, which loses nothing: both regenerate the same lane from the latest `main`.
 
 ### update job (per lane)
 
@@ -170,10 +174,14 @@ SHA, then create or edit the lane's PR (same-repo filter kept). Titles:
 
 ## PR body
 
-- **Server PR**, first line: "Merging deploys to every server within about an hour
-  (promote.yml moves deploy)."
-- **Desktop PR**, first line when the changed hosts include any server: "Also changes:
-  <collapsed server list> (user profile)."
+- **Deploy banner**, first line of either lane's PR whenever the changed hosts include a
+  server: "Merging deploys to: <collapsed server list> (promote.yml moves deploy; they
+  upgrade within about an hour)." `promote.yml` moves `deploy` on any green `main` commit,
+  so the banner follows the changed servers, not the lane. A server PR that changes no
+  server shows none, and a desktop PR that reaches servers (codegraph) shows it.
+- The body is rendered by `scripts/update-pr-body.sh`. Per-lane strings (title, commit
+  message, claude-code bump, suggested `just switch` host) live in one table,
+  `scripts/update-lane-meta.sh`.
 - **Gate line, version table and security section**: as today, limited to the changed
   hosts.
 - **Before-merge commands**: these name the lane branch:
