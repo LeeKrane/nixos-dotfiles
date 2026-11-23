@@ -32,11 +32,11 @@ invocation on a bigger or smaller machine: `DOCKER_CPUS`,
 ### What it proves
 
 - `nix flake check --no-build`: every module evaluates. `checks.lua-syntax`
-  runs `luac -p` over every rendered Hyprland Lua file for all three
-  hosts. Option types and assertions all pass.
+  runs `luac -p` over every rendered Hyprland Lua file for every
+  host. Option types and assertions all pass.
 - `nix eval …pkgs.gnome-icon-theme.pname`: the `ii-fixes` overlay reaches
   home-manager's package set, not just the NixOS-level one.
-- `nix build …toplevel --dry-run` for all three hosts: every derivation in
+- `nix build …toplevel --dry-run` for every host (three desktops, four servers): every derivation in
   the closure would build. The dependency graph is sound, with no missing
   or renamed nixpkgs attrs and no `throw`s hit.
 - `just docker-build <host>`: a real build succeeds. It runs slow, because
@@ -94,7 +94,7 @@ compositor shows a bare desktop underneath. Check instead:
   `~/.config/quickshell/ii/scripts/keyring/is_unlocked.sh` and confirm it
   prints `Keyring is unlocked`. Autologin gives PAM no password, so
   nothing unlocks the login keyring the normal way; ii's lock screen
-  unlocks it itself via `scripts/keyring/unlock.sh` when
+  unlocks it itself via `~/.config/quickshell/ii/scripts/keyring/unlock.sh` when
   `security.unlockKeyring` is `true`. If the script instead prints that
   the keyring is locked, expect a keyring prompt later from
   NetworkManager or a browser.

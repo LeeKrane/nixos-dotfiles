@@ -10,7 +10,7 @@
 
 <div align="center">
 
-**end-4's illogical-impulse Hyprland shell, made fully declarative on NixOS, across three machines.**
+**end-4's illogical-impulse Hyprland shell, made fully declarative on NixOS, across seven machines: three desktops and four servers.**
 
 <sub>Built on [end-4's dots-hyprland](https://github.com/end-4/dots-hyprland), wrapped by [soymou's illogical-flake](https://github.com/soymou/illogical-flake), with fixes from [pctrade's end4-pC](https://github.com/pctrade/end4-pC).</sub>
 
@@ -36,11 +36,15 @@
 
 ## Hosts
 
-| Host | Role | GPU |
+| Host | Role | GPU / hardware |
 | --- | --- | --- |
 | `tariognatha` | Desktop | NVIDIA RTX-4070-Ti-class, open kernel module, single GPU |
 | `tarmantria` | Laptop | Intel iGPU + NVIDIA dGPU, PRIME offload |
 | `taractias` | Laptop | AMD Vega iGPU, no dGPU |
+| `taragarmr` | Server | x86_64 mini PC (AZW SER, Ryzen 7 6800H): the server stack, WireGuard hub and public ingress |
+| `taronychus` | Server | Raspberry Pi 5, aarch64 |
+| `tarritator` | Server | Raspberry Pi 5, aarch64 |
+| `tarronax` | Server | Raspberry Pi 4, aarch64 |
 
 ## How ii is wired in
 
@@ -56,7 +60,9 @@ just check
 
 `just check` evaluates the flake and dry-run-builds every host's toplevel in a throwaway Docker sandbox, needing Docker but no local Nix. `just docker-build <host>` runs a real build. Both cache the Nix store in a persistent volume between runs.
 
-CI runs the same eval and lint gate on every push to `main` and every pull request (`.github/workflows/check.yml`), and a weekly job opens a pull request with updated flake inputs and claude-code (`.github/workflows/update.yml`). Both are eval-only, not builds.
+CI runs the same eval and lint gate on every push to `main` and every pull request (`.github/workflows/check.yml`), and a weekly job (`.github/workflows/update.yml`) opens two pull requests, one per update lane: servers (stable channel, shared inputs, claude-code) and desktops (everything else). `.github/workflows/update-lane.yml` does each lane's work. Hosts are evaluated, not built; CI builds only the nvim checks, the Lua syntax check and the server-only packages (`server-upgrade`, `claude-code`). When a commit on `main` passes the check, `.github/workflows/promote.yml` moves the `deploy` branch to it, and the servers auto-upgrade from `deploy`.
+
+To run the lint locally before every push, enable the pre-push hook once per checkout with `just hooks`. It runs `scripts/lint.sh`.
 
 To install onto real hardware, boot a NixOS unstable minimal ISO, clone this repo, then preview the installer before running it for real:
 
@@ -85,7 +91,7 @@ overlays/  pkgs/              ii-fixes overlay, plymouth-lone theme
 modules/nixvim/               standalone NixVim editor config (packages.nvim)
 config/zsh/                   vendored dotfiles
 scripts/                      bootstrap-sops.sh, docker-check.sh, Proton Drive mount
-secrets/                      nothing committed but README.md and .gitkeep
+secrets/                      one sops-encrypted <host>.yaml per host (per-host age recipients in .sops.yaml), plus README.md and .gitkeep
 docs/                         INSTALL, VERIFY, MIGRATION-NOTES, II-INTEGRATION, FALLBACK-VENDORING
 ```
 
