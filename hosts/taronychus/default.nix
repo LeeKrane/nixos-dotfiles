@@ -21,6 +21,13 @@
 
   system.stateVersion = "26.05";
 
+  # Reboots after a kernel-changing upgrade only inside this hour, one host per hour (the
+  # Pis first, the WireGuard hub last).
+  krane.autoUpgrade.rebootWindow = {
+    lower = "04:00";
+    upper = "05:00";
+  };
+
   # Never-booted image has no /etc yet, so the password cannot be set before first boot.
   # Empty initial password, applied at user creation only (mutableUsers = true).
   users.users.${config.krane.user.name}.initialHashedPassword = "";

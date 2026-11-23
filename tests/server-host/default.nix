@@ -12,6 +12,11 @@
     fsType = "ext4";
   };
 
+  krane.autoUpgrade.rebootWindow = {
+    lower = "02:00";
+    upper = "03:00";
+  };
+
   krane.backup = {
     enable = true;
     repository = "/mnt/backup/restic/fixture";

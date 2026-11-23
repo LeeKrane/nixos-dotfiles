@@ -1,10 +1,34 @@
 # Public ingress: Caddy terminates TLS (Let's Encrypt, HTTP challenge on port 80) for the kept
 # domains. The router forwards 80/443 here. Certificates are reissued on first start, so
 # /var/lib/caddy is not backed up.
-{ config, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 let
   lan = import ../../lib/lan.nix;
   inherit (import ../../lib/wireguard.nix) wg0;
+
+  # Every vhost served on 443, from the config: a site address may list several, with a scheme
+  # or a port (the Fritzbox proxy on 4242 is not a 443 site, so it is skipped).
+  tlsHosts = lib.unique (
+    lib.filter (h: !lib.hasInfix ":" h) (
+      map (lib.removePrefix "https://") (
+        lib.concatMap (lib.splitString ", ") (lib.attrNames config.services.caddy.virtualHosts)
+      )
+    )
+  );
+  # Resolved to this host, so the check needs no DNS. Auth-protected vhosts answer 401/403: any
+  # status below 500 means Caddy and TLS work, 000 means no answer at all.
+  caddyHealth = pkgs.writeShellScript "caddy-health" ''
+    for host in ${lib.escapeShellArgs tlsHosts}; do
+      code=$(${lib.getExe pkgs.curl} --resolve "$host:443:127.0.0.1" -s -o /dev/null --max-time 10 \
+        -w '%{http_code}' "https://$host/") || true
+      [ "$code" -ge 100 ] && [ "$code" -lt 500 ] || { echo "$host answered $code" >&2; exit 1; }
+    done
+  '';
 in
 {
   services.caddy = {
@@ -36,6 +60,9 @@ in
         '';
     };
   };
+
+  # An upgrade is healthy only if Caddy still serves every 443 vhost over TLS.
+  krane.autoUpgrade.healthChecks = [ "${caddyHealth}" ];
 
   networking.firewall = {
     allowedTCPPorts = [

@@ -36,6 +36,13 @@
 
   system.stateVersion = "26.05";
 
+  # Reboots after a kernel-changing upgrade only inside this hour, one host per hour (the
+  # Pis first, the WireGuard hub last).
+  krane.autoUpgrade.rebootWindow = {
+    lower = "05:00";
+    upper = "06:00";
+  };
+
   boot.loader.systemd-boot = {
     enable = true;
     # The ESP holds every generation's kernel and initrd.

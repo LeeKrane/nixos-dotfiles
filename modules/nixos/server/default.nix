@@ -3,6 +3,7 @@
 { ... }:
 {
   imports = [
+    ./auto-upgrade.nix
     ./backup.nix
     ./base.nix
     ./docker.nix

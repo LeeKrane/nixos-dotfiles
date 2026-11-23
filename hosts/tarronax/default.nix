@@ -20,6 +20,13 @@
 
   system.stateVersion = "26.05";
 
+  # Reboots after a kernel-changing upgrade only inside this hour, one host per hour (the
+  # Pis first, the WireGuard hub last).
+  krane.autoUpgrade.rebootWindow = {
+    lower = "02:00";
+    upper = "03:00";
+  };
+
   # Never-booted SD image has no /etc yet, so the password cannot be set before first boot.
   # Empty initial password: console login works (login service allowNullPassword, nixpkgs
   # nixos/modules/programs/shadow.nix) and `passwd` needs no current password (pam_unix

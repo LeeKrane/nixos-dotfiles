@@ -64,6 +64,9 @@ roleInputs.nixpkgs.lib.nixosSystem {
   modules = [
     {
       networking.hostName = hostName;
+      # `nixos-version --configuration-revision` reads the commit a host runs; "dirty" for a
+      # build from an unclean tree (`just switch`). The server upgrade hooks compare it with `deploy`.
+      system.configurationRevision = inputs.self.rev or "dirty";
       # mkDefault: the desktops' hardware-configuration.nix set the same value at the same
       # priority (equal values merge without conflict). A non-x86 host would not import
       # such a file, or would override.

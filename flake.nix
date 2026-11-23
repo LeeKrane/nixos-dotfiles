@@ -182,6 +182,33 @@
       # Pis that build an SD image, from host.nix metadata (no evaluation of the Pi configs).
       sdImageHosts = builtins.filter (name: hostMeta.${name}.image == "sd") piHosts;
       desktopHosts = builtins.filter (name: hostMeta.${name}.role == "desktop") hosts;
+      serverHosts = builtins.filter (name: hostMeta.${name}.role == "server") hosts;
+      # Expectations for one server host's automatic upgrade (modules/nixos/server/auto-upgrade.nix),
+      # shared by checks.server-eval (x86_64 servers) and checks.pi-eval (the Pis).
+      upgradeExpectationsFor =
+        name:
+        let
+          cfg = self.nixosConfigurations.${name}.config;
+          au = cfg.system.autoUpgrade;
+          upgrade = cfg.systemd.services.nixos-upgrade;
+        in
+        [
+          {
+            ok = au.enable && au.allowReboot && au.flake == "github:LeeKrane/nixos-dotfiles/deploy#${name}";
+            what = "${name}: system.autoUpgrade does not follow the deploy branch with reboots allowed";
+          }
+          {
+            ok =
+              upgrade.onFailure == [ "server-upgrade-failed.service" ]
+              && nixpkgs.lib.hasSuffix " post" (toString upgrade.serviceConfig.ExecStartPost)
+              && nixpkgs.lib.hasSuffix " condition" (toString upgrade.serviceConfig.ExecCondition);
+            what = "${name}: the upgrade hooks (condition, post, OnFailure) are not wired";
+          }
+          {
+            ok = cfg.krane.autoUpgrade.allHealthChecks != [ ];
+            what = "${name}: no health check configured for the upgrade";
+          }
+        ];
     in
     {
       # Per-host metadata (above), for scripts/hosts.nix and docker-check.sh: readable without
@@ -500,7 +527,32 @@
                 what = "a spoke's wg0 is not a keepalive client of the hub with address 192.168.82.4/24 and no wg1";
               }
             ];
-            failed = map (e: e.what) (builtins.filter (e: !e.ok) expectations);
+            x86Servers = builtins.filter (n: hostMeta.${n}.system == "x86_64-linux") serverHosts;
+            windows = lib.genAttrs serverHosts (
+              n: self.nixosConfigurations.${n}.config.system.autoUpgrade.rebootWindow
+            );
+            upgradeExpectations = lib.concatMap upgradeExpectationsFor x86Servers ++ [
+              {
+                ok =
+                  lib.sort (a: b: a < b) (map (w: w.lower) (builtins.attrValues windows)) == [
+                    "02:00"
+                    "03:00"
+                    "04:00"
+                    "05:00"
+                  ];
+                what = "the servers' reboot windows are not four distinct hours 02:00 to 06:00";
+              }
+              {
+                ok =
+                  windows.taragarmr.lower == "05:00" && lib.all (w: w.upper > w.lower) (builtins.attrValues windows);
+                what = "taragarmr's reboot window is not the last, or a window ends before it starts";
+              }
+              {
+                ok = lib.all (n: !self.nixosConfigurations.${n}.config.system.autoUpgrade.enable) desktopHosts;
+                what = "a desktop has system.autoUpgrade enabled";
+              }
+            ];
+            failed = map (e: e.what) (builtins.filter (e: !e.ok) (expectations ++ upgradeExpectations));
           in
           lib.throwIf (failed != [ ]) "checks.server-eval: ${lib.concatStringsSep "; " failed}" (
             pkgs.runCommand "krane-server-eval" {
@@ -544,7 +596,8 @@
                 }
               ]
             ) piHosts;
-            failed = map (e: e.what) (builtins.filter (e: !e.ok) expectations);
+            upgradeExpectations = lib.concatMap upgradeExpectationsFor piHosts;
+            failed = map (e: e.what) (builtins.filter (e: !e.ok) (expectations ++ upgradeExpectations));
             drv = name: self.nixosConfigurations.${name}.config.system.build.toplevel.drvPath;
           in
           nixpkgs.lib.throwIf (piHosts == [ ] || failed != [ ])
