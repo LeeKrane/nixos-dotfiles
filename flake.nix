@@ -93,9 +93,9 @@
 
       # The same editor for role = "server" hosts: nixvim and nixpkgs both from the stable
       # inputs (modules/home/common/neovim.nix picks it by role).
-      nvimStableFor =
+      nvimStableEvalFor =
         sys:
-        (inputs.nixvim-stable.lib.evalNixvim {
+        inputs.nixvim-stable.lib.evalNixvim {
           modules = [
             ./modules/nixvim
             {
@@ -106,7 +106,8 @@
               };
             }
           ];
-        }).config.build.package;
+        };
+      nvimStableFor = sys: (nvimStableEvalFor sys).config.build.package;
       nvim-stable = nvimStableFor system;
 
       # Every directory under hosts/ is a host. install.sh's new-host flow adds one by
@@ -677,6 +678,9 @@
 
         # NixVim's own startup test: fails on errors or warnings at startup.
         nvim = nvimEval.config.build.test;
+
+        # The same startup test against the stable nixvim and nixpkgs (role = "server" hosts).
+        nvim-stable = (nvimStableEvalFor system).config.build.test;
 
         # Headless Lua specs in modules/nixvim/tests/, one fresh nvim each.
         # Each run is bounded by `timeout 120` (a hung spec, e.g. from an

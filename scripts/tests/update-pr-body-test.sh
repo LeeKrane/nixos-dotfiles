@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Tests scripts/update-lane-meta.sh, scripts/update-pr-body.sh and scripts/host-drvs.nix. Run:
+# Tests scripts/update-lane-meta.sh, scripts/update-pr-body.sh and scripts/host-drvs.nix,
+# scripts/host-warnings.nix and scripts/lib/warnings-diff.jq. Run:
 #   nix shell nixpkgs#jq --command bash scripts/tests/update-pr-body-test.sh
 set -euo pipefail
 
@@ -63,6 +64,43 @@ body desktops '["taractias"]' RESULT=failure SECURITY_RESULT=failure
 check 'gate failing: title prefix' [ "$title" = '[gate failing] Update desktop inputs' ]
 check 'gate failing: gate line' has 'Gate: ❌ failing'
 check 'security failed: says so' has 'Security scan failed ([run](https://run))'
+
+# --- eval warnings section -----------------------------------------------------
+body servers '["taragarmr"]'
+check 'no warnings env: no section' eval '! has "Eval warnings"'
+echo '{}' >"$WORK/warnings.json"
+body servers '["taragarmr"]' WARNINGS="$WORK/warnings.json"
+check 'empty warnings: no section' eval '! has "Eval warnings"'
+
+echo '{"taractias":{"new":["a is deprecated"],"existing":[]},"tariognatha":{"new":["a is deprecated"],"existing":["old one"]},"taragarmr":{"new":[],"existing":["old one"]}}' >"$WORK/warnings.json"
+body desktops '["taractias","tariognatha","taragarmr"]' WARNINGS="$WORK/warnings.json"
+check 'new warnings: section' has '### Eval warnings'
+check 'new warnings: shown once for identical hosts' [ "$(grep -cF 'a is deprecated' "$WORK/body.md")" = 1 ]
+check 'new warnings: hosts collapsed' has 'New on taractias, tariognatha'
+check 'existing warnings: in details' has '<summary>Existing warnings</summary>'
+check 'existing warnings: shown once for identical hosts' [ "$(grep -cF 'old one' "$WORK/body.md")" = 1 ]
+check 'existing warnings: hosts' has 'tariognatha, taragarmr'
+
+echo '{"taragarmr":{"new":[],"existing":["old one"]}}' >"$WORK/warnings.json"
+body servers '["taragarmr"]' WARNINGS="$WORK/warnings.json"
+check 'existing only: section' has '### Eval warnings'
+check 'existing only: no new list' eval '! has "New on"'
+check 'existing only: details' has '<summary>Existing warnings</summary>'
+
+# --- warnings-diff.jq ----------------------------------------------------------
+echo '{"warnings":{"a":["x /nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-source/f","same"],"b":["gone"],"c":[]}}' >"$WORK/wb.json"
+printf "%s\n" '{"warnings":{"a":["x /nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-source/f","same","new\n one"],"b":[],"c":[]}}' >"$WORK/wa.json"
+diff_out="$(jq -cn -f "$SCRIPTS/lib/warnings-diff.jq" --argjson hosts '["a","b","c"]' \
+    --slurpfile a "$WORK/wa.json" --slurpfile b "$WORK/wb.json" 2>/dev/null || true)"
+check 'warnings-diff: new vs existing, store paths ignored, empty hosts dropped' \
+    [ "$diff_out" = '{"a":{"new":["new one"],"existing":["x source/f","same"]}}' ]
+
+# --- host-warnings.nix ---------------------------------------------------------
+warns="$(nix eval --json --impure --expr "import $SCRIPTS/host-warnings.nix {
+    a.config.warnings = [ \"w1\" ];
+    b.config.warnings = throw \"boom\";
+  } [ \"a\" \"b\" ]" 2>/dev/null || true)"
+check 'host-warnings: warnings, and [] when evaluation throws' [ "$warns" = '{"a":["w1"],"b":[]}' ]
 
 # --- host-drvs.nix -------------------------------------------------------------
 drvs="$(nix eval --json --impure --expr "import $SCRIPTS/host-drvs.nix {

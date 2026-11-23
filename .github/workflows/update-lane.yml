@@ -91,7 +91,7 @@ jobs:
           ROLES_JSON: ${{ steps.meta.outputs.roles }}
         run: |
           # One eval per state: every host's toplevel drvPath plus its package versions.
-          apply='cfgs: let hosts = builtins.attrNames (builtins.fromJSON (builtins.getEnv "ROLES_JSON")); in { drvs = import ./scripts/host-drvs.nix cfgs hosts; versions = import ./scripts/update-versions.nix cfgs hosts; }'
+          apply='cfgs: let hosts = builtins.attrNames (builtins.fromJSON (builtins.getEnv "ROLES_JSON")); in { drvs = import ./scripts/host-drvs.nix cfgs hosts; versions = import ./scripts/update-versions.nix cfgs hosts; warnings = import ./scripts/host-warnings.nix cfgs hosts; }'
           nix eval --json --impure '.#nixosConfigurations' --apply "$apply" > "$RUNNER_TEMP/eval-after.json"
           # The update commit hasn't happened yet, so HEAD still holds the pre-update
           # content. If pkgs/claude-code is new (untracked at HEAD), restore fails on it with
@@ -106,6 +106,10 @@ jobs:
           hosts="$(jq -cn --slurpfile a "$RUNNER_TEMP/eval-after.json" --slurpfile b "$RUNNER_TEMP/eval-before.json" \
             '$a[0].drvs as $A | $b[0].drvs as $B | [$A | keys[] | select($A[.] != $B[.])]')"
           echo "hosts=$hosts" >> "$GITHUB_OUTPUT"
+          # Eval warnings of the changed hosts, new vs already there before the update.
+          jq -n -f scripts/lib/warnings-diff.jq --argjson hosts "$hosts" \
+            --slurpfile a "$RUNNER_TEMP/eval-after.json" --slurpfile b "$RUNNER_TEMP/eval-before.json" \
+            > "$RUNNER_TEMP/eval-warnings.json"
           # The version table covers the changed hosts only.
           for state in before after; do
             jq --argjson hosts "$hosts" '.versions | with_entries(select(.key as $k | $hosts | index($k)))' \
@@ -124,7 +128,9 @@ jobs:
         with:
           # Both lanes share one workflow run, so every artifact name carries the lane.
           name: update-summary-${{ inputs.lane }}
-          path: ${{ runner.temp }}/summary.md
+          path: |
+            ${{ runner.temp }}/summary.md
+            ${{ runner.temp }}/eval-warnings.json
           retention-days: 7
           overwrite: true
       - name: Commit and push
@@ -157,6 +163,7 @@ jobs:
     with:
       ref: ${{ needs.update.outputs.sha }}
       force-nvim: true
+      force-server-pkgs: ${{ inputs.lane == 'servers' }}
 
   # Report-only: a vulnix CVE diff and a local-build count per changed host, never gating
   # the PR or its title. Skipped when the update changed no host's closure. The exact commit
@@ -314,6 +321,7 @@ jobs:
           HOSTS: ${{ needs.update.outputs.hosts }}
           ROLES: ${{ needs.update.outputs.roles }}
           SUMMARY: ${{ runner.temp }}/summary.md
+          WARNINGS: ${{ runner.temp }}/eval-warnings.json
           SECURITY_SUMMARY: ${{ runner.temp }}/security-summary.md
         run: |
           title="$(scripts/update-pr-body.sh "$RUNNER_TEMP/body.md")"

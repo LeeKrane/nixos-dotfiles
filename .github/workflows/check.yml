@@ -16,6 +16,10 @@ on:
         description: Build the nvim checks regardless of changed paths.
         type: boolean
         default: false
+      force-server-pkgs:
+        description: Build the server packages regardless of changed paths.
+        type: boolean
+        default: false
 
 # Under workflow_call, github.ref is the caller's ref (main), so key on
 # inputs.ref first; otherwise update.yml's gate would cancel, or be
@@ -35,14 +39,12 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
       - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
-      - name: nixfmt
-        run: nix fmt -- --ci
-      - name: statix
-        run: nix shell --inputs-from . nixpkgs#statix -c statix check .
-      - name: deadnix
-        run: nix shell --inputs-from . nixpkgs#deadnix -c deadnix --fail --exclude hosts/*/hardware-configuration.nix -- .
-      - name: shellcheck
-        run: nix shell --inputs-from . nixpkgs#shellcheck -c shellcheck -x -S style install.sh scripts/*.sh scripts/tests/*.sh
+      # nixfmt, statix, deadnix, shellcheck, actionlint and the secrets guard;
+      # the same script is the pre-push hook (.githooks/pre-push).
+      - name: lint
+        run: scripts/lint.sh
+      - name: check-secrets-encrypted tests
+        run: bash scripts/tests/check-secrets-encrypted-test.sh
       - name: flake-update-notify tests
         run: nix shell --inputs-from . nixpkgs#curl nixpkgs#jq nixpkgs#gawk -c bash scripts/tests/flake-update-notify-test.sh
       - name: server-upgrade tests
@@ -136,4 +138,38 @@ jobs:
         if: ${{ inputs.force-nvim || steps.filter.outputs.nvim == 'true' }}
       - name: nvim checks
         if: ${{ inputs.force-nvim || steps.filter.outputs.nvim == 'true' }}
-        run: nix build --no-link .#checks.x86_64-linux.nvim .#checks.x86_64-linux.nvim-specs
+        run: nix build --no-link .#checks.x86_64-linux.nvim .#checks.x86_64-linux.nvim-stable .#checks.x86_64-linux.nvim-specs
+
+  # server-upgrade is a writeShellApplication, so it is shellchecked at build
+  # time with the stable nixpkgs' shellcheck on the servers' pkgs; the lint job
+  # shellchecks with unstable. Building it here catches findings only stable has.
+  server-pkgs:
+    runs-on: ubuntu-latest
+    # paths-filter lists a pull request's files through the REST API.
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+      # The servers update lane forces the build; any other run filters on changed paths
+      # (on schedule/workflow_dispatch, paths-filter compares against the last commit).
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        if: ${{ !inputs.force-server-pkgs }}
+        with:
+          filters: |
+            server-pkgs:
+              - 'pkgs/default.nix'
+              - 'pkgs/server-upgrade/**'
+              - 'pkgs/claude-code/**'
+              - 'scripts/server-upgrade-*.sh'
+              - 'flake.lock'
+              - 'overlays/**'
+              - 'flake.nix'
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+        if: ${{ inputs.force-server-pkgs || steps.filter.outputs.server-pkgs == 'true' }}
+      - name: server packages
+        if: ${{ inputs.force-server-pkgs || steps.filter.outputs.server-pkgs == 'true' }}
+        run: nix build --no-link .#nixosConfigurations.taragarmr.pkgs.server-upgrade .#nixosConfigurations.taragarmr.pkgs.claude-code

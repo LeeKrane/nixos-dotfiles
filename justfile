@@ -73,6 +73,10 @@ lock:
 switch HOST:
     sudo nixos-rebuild switch --flake .#{{ HOST }}
 
+# Enables the pre-push lint hook (.githooks/pre-push) in this checkout.
+hooks:
+    git config core.hooksPath .githooks
+
 # Builds the tariognatha-vm QEMU/UEFI image in docker, llvmpipe only, proves wiring not real GPU or boot.
 vm:
     scripts/docker-check.sh vm

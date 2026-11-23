@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Enable with `just hooks`.
+exec "$(git rev-parse --show-toplevel)/scripts/lint.sh"
