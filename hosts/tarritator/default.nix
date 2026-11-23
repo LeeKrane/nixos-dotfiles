@@ -25,7 +25,6 @@
     lower = "02:59";
     upper = "04:00";
   };
-  krane.autoUpgrade.healthChecks = [ "false" ];
 
   # Never-booted SD image has no /etc yet, so the password cannot be set before first boot.
   # Empty initial password: console login works (login service allowNullPassword, nixpkgs
