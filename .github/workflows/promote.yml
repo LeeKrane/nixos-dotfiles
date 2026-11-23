@@ -26,14 +26,23 @@ jobs:
     permissions:
       contents: write
     steps:
-      # Full history: git only fast-forwards a branch whose current tip it has.
+      # Full history, so origin/main and origin/deploy are both known locally.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      # No --force: a rewritten main makes this push fail, and the job with it.
-      - name: Fast-forward deploy
+      # deploy follows main, including a force-pushed main: it is moved only to the commit
+      # that is main's head right now. An older run (a re-run, or one overtaken by a newer
+      # push) skips, so deploy never moves backwards; the newer push's own run promotes.
+      # The lease fails the push if deploy changed since it was read here.
+      - name: Move deploy to main's head
         env:
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          git merge-base --is-ancestor "$HEAD_SHA" origin/main
-          git push origin "${HEAD_SHA}:refs/heads/deploy"
+          git fetch --quiet origin main deploy || git fetch --quiet origin main
+          main_head="$(git rev-parse origin/main)"
+          if [ "$HEAD_SHA" != "$main_head" ]; then
+            echo "$HEAD_SHA is no longer main's head ($main_head); its own run promotes it."
+            exit 0
+          fi
+          old="$(git rev-parse --quiet --verify origin/deploy || true)"
+          git push --force-with-lease="refs/heads/deploy:$old" origin "${HEAD_SHA}:refs/heads/deploy"

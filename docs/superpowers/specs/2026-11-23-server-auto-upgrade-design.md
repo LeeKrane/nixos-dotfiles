@@ -87,9 +87,11 @@ called job asking for write access would void the caller. It:
 - triggers on `workflow_run` of `check` for `main` and runs only when that run succeeded,
   was a `push`, and came from this repository (never pull requests or update.yml's staging
   commit);
-- checks that the commit is an ancestor of `origin/main`;
-- runs `git push origin "${HEAD_SHA}:refs/heads/deploy"`, a fast-forward without
-  `--force`. If `main` was rewritten, the push fails and the job reports it;
+- promotes only the commit that is `main`'s head at that moment; an older run (a re-run, or
+  one overtaken by a newer push) skips, so `deploy` never moves backwards;
+- pushes with `--force-with-lease` against the `deploy` value it read, so `deploy` follows
+  a force-pushed `main` without manual help, and a concurrent change to `deploy` fails the
+  push;
 - is the only workflow with `contents: write`.
 
 ### 3. Revision stamp (`lib/mk-host.nix`)
