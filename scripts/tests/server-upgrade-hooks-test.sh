@@ -142,13 +142,7 @@ check 'condition: missing deploy branch skips the run' [ "$status" -eq 1 ]
 fresh
 printf 'NEWREV\n' >"$STATE/pending-check"
 run condition STUB_SHA=NEWER
-check 'condition: a pending check on the active system skips the run' [ "$status" -eq 1 ]
-
-fresh
-printf 'NEWREV\n' >"$STATE/pending-check"
-point profile newkern
-run condition STUB_SHA=NEWER
-check 'condition: a pending check with a not yet booted profile still runs' [ "$status" -eq 0 ]
+check 'condition: a leftover pending check on the active system does not skip the run' [ "$status" -eq 0 ]
 
 fresh
 run condition STUB_SHA=NEWER STUB_HEALTH_ACTIVE=1

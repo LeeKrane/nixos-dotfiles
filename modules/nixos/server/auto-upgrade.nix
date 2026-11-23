@@ -136,6 +136,9 @@ in
       nixos-upgrade = {
         inherit environment;
         onFailure = [ "server-upgrade-failed.service" ];
+        # A timer catch-up at boot waits for the health unit's start job; its `condition` then
+        # sees it active and skips.
+        after = [ "server-upgrade-health.service" ];
         serviceConfig = {
           StateDirectory = stateDirectory;
           ExecCondition = "${hooks} condition";
@@ -169,6 +172,8 @@ in
           Type = "simple";
           StateDirectory = stateDirectory;
           ExecStart = "${hooks} boot-health";
+          # A hanging HEALTH_CHECK must not block upgrades (condition skips while this is active).
+          RuntimeMaxSec = "20min";
         };
       };
 

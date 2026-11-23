@@ -141,10 +141,10 @@ cmd_condition() {
     fi
     # Never overlap the boot-time health check of a generation that is still being judged: `pre`
     # would overwrite the state its rollback needs and two switches could run at once.
-    if systemctl is-active --quiet server-upgrade-health \
-        || { [ -f "$STATE_DIR/pending-check" ] \
-            && [ "$(resolved "$CURRENT_SYSTEM")" = "$(resolved "$SYSTEM_PROFILE")" ]; }; then
-        echo "a boot health check is pending or running, skipping"
+    # (is-active is also true while "activating".) A leftover pending-check must not skip: it would
+    # block every later run forever.
+    if systemctl is-active --quiet server-upgrade-health; then
+        echo "a boot health check is running, skipping"
         exit 1
     fi
     mkdir -p "$STATE_DIR"
