@@ -173,7 +173,8 @@ in
           StateDirectory = stateDirectory;
           ExecStart = "${hooks} boot-health";
           # A hanging HEALTH_CHECK must not block upgrades (condition skips while this is active).
-          RuntimeMaxSec = "20min";
+          # Budget: settle 5m + check 15m + rollback/queue/reboot headroom.
+          RuntimeMaxSec = "30min";
         };
       };
 

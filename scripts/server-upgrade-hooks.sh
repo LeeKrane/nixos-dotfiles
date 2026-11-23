@@ -74,7 +74,7 @@ health() {
         return 1
     fi
     # A hung check is a failed check (the unit's RuntimeMaxSec is only the outer backstop).
-    if [ -n "$HEALTH_CHECK" ]; then timeout "$HEALTH_TIMEOUT" "$HEALTH_CHECK"; fi
+    if [ -n "$HEALTH_CHECK" ]; then timeout -k 30s "$HEALTH_TIMEOUT" "$HEALTH_CHECK"; fi
 }
 
 # Puts the previous running system back as the system profile and runs its own
