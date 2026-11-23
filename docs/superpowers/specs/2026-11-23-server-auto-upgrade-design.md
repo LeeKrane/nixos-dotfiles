@@ -36,7 +36,7 @@ gated `main` commit, with a health check, automatic rollback and a notification 
 |---|---|
 | Push or pull | Pull. Each server polls hourly. GitHub holds no SSH or WireGuard keys, and an offline server catches up when it comes back. |
 | Mechanism | Upstream `system.autoUpgrade`, plus small hooks. It already provides the timer, the stable per-host offset and the kernel-diff reboot window. |
-| Gate | `check.yml` moves a `deploy` branch to each `main` commit that passed. Servers track `deploy`, never `main`. |
+| Gate | `.github/workflows/promote.yml` (run after `check.yml` succeeds on `main`) moves a `deploy` branch to each `main` commit that passed. Servers track `deploy`, never `main`. |
 | Which commits | Every gated `main` commit, not only update-PR merges, so servers never drift from `main`. |
 | On failure | Roll back if activation happened, mark the SHA failed, notify. No hourly retries of a failed SHA. |
 | Reboots | Only inside a nightly one-hour window per host: tarronax 02–03, tarritator 03–04, taronychus 04–05, taragarmr 05–06. The Pis go first and the WireGuard hub last. |
@@ -79,17 +79,18 @@ the free `ubuntu-24.04-arm` runner.
 Cost: six more evaluations per weekly run (three Pis, before and after), about 5–10
 minutes.
 
-### 2. The `deploy` branch (`.github/workflows/check.yml`)
+### 2. The `deploy` branch (`.github/workflows/promote.yml`)
 
-A final job, `promote`:
+A separate workflow, because update.yml calls check.yml with read-only permissions and a
+called job asking for write access would void the caller. It:
 
-- runs only when `github.event_name == 'push'` and `github.ref == 'refs/heads/main'`, so
-  never on pull requests or on update.yml's `workflow_call` (which checks the staging
+- triggers on `workflow_run` of `check` for `main` and runs only when that run succeeded,
+  was a `push`, and came from this repository (never pull requests or update.yml's staging
   commit);
-- `needs` every gate job and runs only if all of them succeeded;
-- runs `git push origin "$GITHUB_SHA":refs/heads/deploy`, a fast-forward without
+- checks that the commit is an ancestor of `origin/main`;
+- runs `git push origin "${HEAD_SHA}:refs/heads/deploy"`, a fast-forward without
   `--force`. If `main` was rewritten, the push fails and the job reports it;
-- is the only job with `contents: write`.
+- is the only workflow with `contents: write`.
 
 ### 3. Revision stamp (`lib/mk-host.nix`)
 
@@ -238,14 +239,15 @@ during a rollback reboot only delays delivery.
 
 Every server already has a sops file (`secrets/<host>.yaml`) and uses it: WireGuard keys on
 all four (`modules/nixos/server/wireguard.nix`), plus CouchDB and restic on taragarmr. This
-design adds two secrets, each declared only when its section exists (`hasSection`), the same
+design adds four secrets, each declared only when its section exists (`hasSection`), the same
 way `modules/nixos/common/sops.nix` gates its declarations:
 
 | Secret | Files | Content |
 |---|---|---|
 | `server-upgrade/github-token` | the four server files | Fine-grained PAT, repository `LeeKrane/nixos-dotfiles` only, permission Issues: read and write. |
-| `server-upgrade/ntfy-publish-token` | the four server files | Token of ntfy user `upgrade-publisher` (write-only on `server-upgrades`), created on taragarmr after ntfy is deployed. |
-| `server-upgrade/ntfy-read-token` | the three desktop files (tariognatha, tarmantria, taractias) | Token of ntfy user `krane` (read-only on `server-upgrades`), created on taragarmr after ntfy is deployed. The phone's ntfy app uses the same user. |
+| `ntfy/publish-token` | the four server files | Token of ntfy user `upgrade-publisher` (write-only on `server-upgrades`), created together with the ntfy users. |
+| `ntfy/server-env` | taragarmr only | ntfy's `NTFY_AUTH_USERS`, `NTFY_AUTH_ACCESS` and `NTFY_AUTH_TOKENS` (bcrypt hashes and tokens), so ntfy provisions its users and ACL declaratively. |
+| `ntfy/read-token` | the three desktop files (tariognatha, tarmantria, taractias) | Token of ntfy user `krane` (read-only on `server-upgrades`), created together with the ntfy users. The phone's ntfy app uses the same user. |
 
 How decryption works (`.sops.yaml`):
 
@@ -331,16 +333,16 @@ CI verification:
 
 ## Rollout
 
-Order matters: the ntfy tokens exist only after ntfy runs on taragarmr, and the notifier
-tolerates a missing token section (it is gated on `hasSection`).
+Order matters: ntfy users and tokens are provisioned from `ntfy/server-env`, so all secrets
+are created before the code is merged, then each machine is switched once. The exact commands
+are in `secrets/README.md` ("Server upgrade secrets" and "Rollout checklist").
 
 1. Create the fine-grained PAT and add `server-upgrade/github-token` to the four server
    files (`sops secrets/<host>.yaml` on tariognatha or tarmantria).
-2. `just switch taragarmr` to bring up ntfy. On taragarmr, create the users
-   `upgrade-publisher` (write-only on `server-upgrades`) and `krane` (read-only), and
-   generate a token for each. Add the publisher token as `server-upgrade/ntfy-publish-token`
-   to the four server files, and the read token as `server-upgrade/ntfy-read-token` to the
-   three desktop files.
+2. Generate the ntfy users (`upgrade-publisher` write-only on `server-upgrades`, `krane`
+   read-only), their hashes and tokens, and add `ntfy/server-env` (taragarmr),
+   `ntfy/publish-token` (four servers) and `ntfy/read-token` (three desktops). Merge to
+   `main` and confirm `promote.yml` created `deploy`.
 3. Switch every server once (`just switch` on taragarmr, `nixos-rebuild --target-host` for
    the Pis), since auto-upgrade is not running yet, and switch the desktops for the
    subscriber. Check `systemctl list-timers nixos-upgrade.timer` on each server.

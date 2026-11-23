@@ -42,6 +42,10 @@ No host, and no single key, can decrypt or edit another host's file.
 | `wireguard/listen-port` | same template (`ListenPort`) | `root:0400` |
 | `rclone/config-seed` | `modules/home/desktop/proton-drive.nix` (seeds `~/.config/rclone/rclone.conf` if absent) | `krane:0400` |
 | `ani-cli/curl-auth` | `modules/home/desktop/ani-cli.nix` (curl config `user = "ani-cli:<password>"` for the history sync) | `krane:0400` |
+| `server-upgrade/github-token` | `modules/nixos/server/auto-upgrade.nix` (fine-grained PAT, repository `LeeKrane/nixos-dotfiles` only, Issues: read and write; the four server files) | `root:0400` |
+| `ntfy/publish-token` | same module (token of ntfy user `upgrade-publisher`, write-only on `server-upgrades`; the four server files) | `root:0400` |
+| `ntfy/server-env` | `hosts/taragarmr/ntfy.nix` (`NTFY_AUTH_USERS`, `NTFY_AUTH_ACCESS`, `NTFY_AUTH_TOKENS` for ntfy; taragarmr only) | `root:0400` |
+| `ntfy/read-token` | `modules/nixos/desktop/server-upgrade-notify.nix` (token of ntfy user `krane`, read-only; the three desktop files) | `krane:0400` |
 
 All six wireguard values live encrypted in `secrets/<host>.yaml`; none of
 them, including the address and peer identity, are cleartext anywhere in
@@ -81,6 +85,102 @@ the `&host_<name>` entries in `.sops.yaml`. taragarmr gets the key through
 into `/etc/ssh` on the flashed root partition before first boot. sshd only generates a host
 key when the file is missing, so a pre-placed key is kept. The login password is NOT in sops
 (not even as a hash): it is set on site at install, see the host header comments.
+
+### Server upgrade secrets
+
+The automatic upgrades (`modules/nixos/server/auto-upgrade.nix`) need four secrets. Each is
+declared only when its top-level section (`server-upgrade:` or `ntfy:`) exists in the host's
+file, and sops-nix then requires every leaf key the module declares, so add all of a host's
+keys before the code that declares them is built.
+
+| Host file | Keys to have |
+| --- | --- |
+| `taragarmr` | `server-upgrade/github-token`, `ntfy/publish-token`, `ntfy/server-env` |
+| `taronychus`, `tarritator`, `tarronax` | `server-upgrade/github-token`, `ntfy/publish-token` |
+| `tariognatha`, `tarmantria`, `taractias` | `ntfy/read-token` |
+
+`server-upgrade/github-token` is a fine-grained personal access token limited to the repository
+`LeeKrane/nixos-dotfiles` with Issues: read and write. It is already in the four server files.
+To replace a lost or leaked one, create a new token and run, on tariognatha or tarmantria:
+
+```sh
+for h in taragarmr taronychus tarritator tarronax; do
+  sops set secrets/$h.yaml '["server-upgrade"]["github-token"]' '"<new token>"'
+done
+```
+
+The three `ntfy/*` values are created together. On tariognatha or tarmantria (the admin keys
+there can edit every server file), open a shell with the tools:
+
+```sh
+nix shell nixpkgs#ntfy-sh nixpkgs#jq nixpkgs#sops
+```
+
+Inside it, generate the two tokens and the two password hashes. `ntfy user hash` asks for a
+password and prints a bcrypt hash. For `upgrade-publisher` type any random string and forget
+it, since only its token is used. For `krane` type a password you keep in the password manager,
+because the phone's ntfy app logs in as `krane` with it.
+
+```sh
+PUB=$(ntfy token generate)
+READ=$(ntfy token generate)
+echo "upgrade-publisher password (random, forget it):"; PUB_HASH=$(ntfy user hash)
+echo "krane password (keep it, the phone uses it):"; KRANE_HASH=$(ntfy user hash)
+ENVFILE=$(printf "NTFY_AUTH_USERS='upgrade-publisher:%s:user,krane:%s:user'\nNTFY_AUTH_ACCESS='upgrade-publisher:server-upgrades:write-only,krane:server-upgrades:read-only'\nNTFY_AUTH_TOKENS='upgrade-publisher:%s:publisher,krane:%s:reader'\n" "$PUB_HASH" "$KRANE_HASH" "$PUB" "$READ")
+
+sops set secrets/taragarmr.yaml '["ntfy"]["server-env"]' "$(jq -Rs . <<<"$ENVFILE")"
+for h in taragarmr taronychus tarritator tarronax; do
+  sops set secrets/$h.yaml '["ntfy"]["publish-token"]' "\"$PUB\""
+done
+echo "$READ"
+```
+
+Copy the printed read token, then `exit` the nix shell so the variables are gone. A desktop's
+file can only be edited on that desktop (see "Files"), so run this once on each of tariognatha,
+tarmantria and taractias:
+
+```sh
+sops set secrets/$(hostname).yaml '["ntfy"]["read-token"]' '"<the read token>"'
+```
+
+Commit the changed files. Nothing above writes a secret in clear text to the repo.
+
+The `server-upgrade` GitHub label is not created by `scripts/server-upgrade-report.sh`; create
+it once (the command is idempotent):
+
+```sh
+gh label create server-upgrade --repo LeeKrane/nixos-dotfiles --color D93F0B --description "Failed automatic server upgrade" --force
+```
+
+### Rollout checklist
+
+Do these in order, by hand.
+
+1. Add the secrets above to all seven files and commit them.
+2. Merge to `main`. `.github/workflows/promote.yml` runs after `check` passes on `main` and
+   creates or moves the `deploy` branch. Confirm: `git ls-remote origin refs/heads/deploy`
+   shows the `main` head SHA. Servers cannot upgrade until it exists.
+3. Switch each machine once, since auto-upgrade is not running yet. On taragarmr:
+   `just switch taragarmr`. For the other servers, from a desktop checkout:
+   `nixos-rebuild switch --flake .#<host> --target-host krane@<host> --sudo --ask-sudo-password`
+   with `<host>` one of `taronychus`, `tarritator`, `tarronax`. Then `just switch <desktop>` on
+   each of tariognatha, tarmantria and taractias for the notification subscriber. Check
+   `systemctl list-timers nixos-upgrade.timer` on each server and `systemctl status ntfy-sh`
+   on taragarmr.
+4. Subscribe the phone's ntfy app to topic `server-upgrades` on `http://192.168.82.1:2586`
+   (WireGuard must be on), logging in as `krane` with its password, with instant delivery
+   enabled. Test from a server: `curl -H "Authorization: Bearer <publish token>" -d test
+   http://192.168.82.1:2586/server-upgrades` must reach the phone and the desktops. The same
+   request with the read token must be refused (HTTP 403).
+5. Failure drill on tarronax. Temporarily set `krane.autoUpgrade.healthChecks = [ "false" ];`
+   in `hosts/tarronax/default.nix`, merge to `main`, wait for `deploy` to move, then run
+   `sudo systemctl start nixos-upgrade` on tarronax. Expect a rollback to the previous
+   generation, one ntfy push and exactly one GitHub issue with a `failed` comment. Revert the
+   line, merge, and start the service again: expect a recovery push, a `recovered` comment and
+   the issue closing.
+6. Optional kernel drill: the first upgrade that changes a Pi's kernel waits for its reboot
+   window and reboots once. Then `journalctl -u server-upgrade-health -b` on that host shows
+   the boot-time health check passing.
 
 ## How to create one
 
