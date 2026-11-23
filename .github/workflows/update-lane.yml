@@ -1,0 +1,395 @@
+name: update-lane
+
+# One lane of the weekly update (docs/superpowers/specs/2026-11-23-update-lanes-design.md),
+# called by update.yml once per selected lane: bump the lane's inputs on
+# ci/flake-update-<lane>, gate it with check.yml, report CVEs and local builds for the hosts
+# whose closure changed, then create or edit the lane's pull request. No concurrency group
+# here: update.yml's group already serialises runs, and a called workflow sharing the
+# caller's group deadlocks.
+on:
+  workflow_call:
+    inputs:
+      lane:
+        description: servers or desktops
+        type: string
+        required: true
+
+permissions: {}
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      # Set only by the final step, after the update commit has been pushed. A failure
+      # anywhere earlier fails the job and this output stays unset, so check/security/pr
+      # never run against a half-done push (or last week's staging branch).
+      changed: ${{ steps.push.outputs.changed }}
+      sha: ${{ steps.push.outputs.sha }}
+      # JSON list of the hosts whose toplevel drvPath this update changed.
+      hosts: ${{ steps.evals.outputs.hosts }}
+      roles: ${{ steps.meta.outputs.roles }}
+    env:
+      LANE: ${{ inputs.lane }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - name: Host roles and lane inputs
+        id: meta
+        run: |
+          # {host: role} for every host, the Pis included: drives the changed-host evals and
+          # the host-list collapsing in the PR body (scripts/lib/collapse-hosts.jq).
+          nix eval --json '.#lib.hostMeta' --apply 'builtins.mapAttrs (n: v: v.role)' > "$RUNNER_TEMP/roles.json"
+          echo "roles=$(command cat "$RUNNER_TEMP/roles.json")" >> "$GITHUB_OUTPUT"
+          nix eval --json --impure --expr \
+            'import ./scripts/update-lanes.nix (builtins.fromJSON (builtins.readFile ./flake.lock))' \
+            > "$RUNNER_TEMP/lanes.json"
+          echo "inputs=$(jq -r --arg l "$LANE" '.[$l] | join(" ")' "$RUNNER_TEMP/lanes.json")" >> "$GITHUB_OUTPUT"
+      - name: Save old flake.lock
+        run: cp flake.lock "$RUNNER_TEMP/flake.lock.old"
+      - name: Update lane inputs
+        env:
+          INPUTS: ${{ steps.meta.outputs.inputs }}
+        run: |
+          set -o pipefail
+          # shellcheck disable=SC2086 # INPUTS is a space-separated list of input names
+          nix flake update $INPUTS 2>&1 | tee "$RUNNER_TEMP/update.log"
+          # pkgs/claude-code is installed on servers too, so it rides the server lane.
+          if [ "$LANE" = servers ]; then
+            scripts/update-claude-code.sh 2>&1 | tee -a "$RUNNER_TEMP/update.log"
+          fi
+      - name: Check for changes
+        id: diff
+        run: |
+          if [ -z "$(git status --porcelain -- flake.lock pkgs/claude-code)" ]; then
+            echo "Nothing to update."
+            echo "haschanges=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "haschanges=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Save updated flake.lock and claude-code
+        if: steps.diff.outputs.haschanges == 'true'
+        run: |
+          cp flake.lock "$RUNNER_TEMP/flake.lock.new"
+          rm -rf "$RUNNER_TEMP/claude-code.new"
+          cp -r pkgs/claude-code "$RUNNER_TEMP/claude-code.new"
+      # Evaluating drvs and package versions is not free (it forces most of the
+      # nixosConfigurations closure), so a week with no change skips it entirely.
+      - name: Evaluate changed hosts and package versions
+        id: evals
+        if: steps.diff.outputs.haschanges == 'true'
+        env:
+          ROLES_JSON: ${{ steps.meta.outputs.roles }}
+        run: |
+          # shellcheck disable=SC2016 # ${h} is Nix antiquotation, not a shell variable
+          drvs='cfgs: let hosts = builtins.attrNames (builtins.fromJSON (builtins.getEnv "ROLES_JSON")); in builtins.listToAttrs (map (h: { name = h; value = cfgs.${h}.config.system.build.toplevel.drvPath; }) hosts)'
+          versions='cfgs: import ./scripts/update-versions.nix cfgs (builtins.fromJSON (builtins.getEnv "HOSTS_JSON"))'
+          nix eval --json --impure '.#nixosConfigurations' --apply "$drvs" > "$RUNNER_TEMP/drvs-after.json"
+          # The update commit hasn't happened yet, so HEAD still holds the pre-update
+          # content. If pkgs/claude-code is new (untracked at HEAD), restore fails on it with
+          # "pathspec did not match" instead of deleting it: the step fails fail-safe,
+          # before anything is committed or pushed.
+          git restore --source=HEAD --worktree -- flake.lock pkgs/claude-code
+          nix eval --json --impure '.#nixosConfigurations' --apply "$drvs" > "$RUNNER_TEMP/drvs-before.json"
+          HOSTS_JSON="$(jq -cn --slurpfile a "$RUNNER_TEMP/drvs-after.json" --slurpfile b "$RUNNER_TEMP/drvs-before.json" \
+            '$a[0] as $A | $b[0] as $B | [$A | keys[] | select($A[.] != $B[.])]')"
+          export HOSTS_JSON
+          echo "hosts=$HOSTS_JSON" >> "$GITHUB_OUTPUT"
+          nix eval --json --impure '.#nixosConfigurations' --apply "$versions" > "$RUNNER_TEMP/versions-before.json"
+          # Put the updated state back, so the versions-after eval and the commit see it.
+          rm -rf pkgs/claude-code
+          cp "$RUNNER_TEMP/flake.lock.new" flake.lock
+          cp -r "$RUNNER_TEMP/claude-code.new" pkgs/claude-code
+          nix eval --json --impure '.#nixosConfigurations' --apply "$versions" > "$RUNNER_TEMP/versions-after.json"
+      - name: Render summary
+        if: steps.diff.outputs.haschanges == 'true'
+        env:
+          HOST_ROLES: ${{ steps.meta.outputs.roles }}
+        run: |
+          scripts/update-summary.sh "$RUNNER_TEMP/flake.lock.old" flake.lock \
+            "$RUNNER_TEMP/versions-before.json" "$RUNNER_TEMP/versions-after.json" \
+            "$RUNNER_TEMP/update.log" > "$RUNNER_TEMP/summary.md"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: steps.diff.outputs.haschanges == 'true'
+        with:
+          # Both lanes share one workflow run, so every artifact name carries the lane.
+          name: update-summary-${{ inputs.lane }}
+          path: ${{ runner.temp }}/summary.md
+          retention-days: 7
+          overwrite: true
+      - name: Commit and push
+        id: push
+        if: steps.diff.outputs.haschanges == 'true'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add flake.lock pkgs/claude-code
+          if [ "$LANE" = servers ]; then
+            git commit -m 'Update server inputs and claude-code'
+          else
+            git commit -m 'Update desktop inputs'
+          fi
+          # Pushed to a staging branch, not ci/flake-update-<lane> directly: the pr job moves
+          # the lane branch to this exact commit only after it has built the PR body, so the
+          # branch's head and its PR's body change together instead of a window where the
+          # branch already points at a new commit but the open PR still shows last week's body.
+          git push --force origin "HEAD:refs/heads/ci/flake-update-$LANE-staging"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  check:
+    needs: update
+    if: needs.update.outputs.changed == 'true'
+    # A called workflow gets at most what its caller grants; check.yml's nvim job asks for
+    # pull-requests: read.
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/check.yml
+    with:
+      ref: ${{ needs.update.outputs.sha }}
+      force-nvim: true
+
+  # Report-only: a vulnix CVE diff and a local-build count per changed host, never gating
+  # the PR or its title. Skipped when the update changed no host's closure. The exact commit
+  # the update job pushed is main plus one commit, so its HEAD~1 is the pre-update base. This
+  # runs on a fresh runner, so the before/after .drv files from the update job's evals don't
+  # exist in its store (they're local build products, not fetched from a substituter) -- it
+  # has to instantiate both states itself, which is also why it still needs
+  # flake.lock/pkgs/claude-code checked out at HEAD~1 and HEAD in turn.
+  security:
+    needs: update
+    if: needs.update.outputs.changed == 'true' && needs.update.outputs.hosts != '[]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The exact SHA the update job pushed, not the staging branch name.
+          ref: ${{ needs.update.outputs.sha }}
+          fetch-depth: 2
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+        with:
+          # The Pis' kernels, firmware and images come from nixos-raspberrypi's cache (the same
+          # substituter and key as modules/nixos/common/nix-settings.nix); without it every Pi
+          # kernel would count as a local build.
+          extra_nix_config: |
+            extra-substituters = https://nixos-raspberrypi.cachix.org
+            extra-trusted-public-keys = nixos-raspberrypi.cachix.org-1:4iMO9LXa8BqhU+Rpg6LQKiGa2lsNh/j2oiYLNOQ5sPI=
+      - name: Evaluate toplevel derivations before and after
+        env:
+          HOSTS_JSON: ${{ needs.update.outputs.hosts }}
+        run: |
+          # shellcheck disable=SC2016 # ${h} is Nix antiquotation, not a shell variable
+          apply='cfgs: let hosts = builtins.fromJSON (builtins.getEnv "HOSTS_JSON"); in builtins.listToAttrs (map (h: { name = h; value = cfgs.${h}.config.system.build.toplevel.drvPath; }) hosts)'
+          # git restore --worktree is no-overlay: unlike `git checkout <ref> --
+          # <path>`, it deletes a path that exists in the worktree but not at
+          # <ref> (e.g. pkgs/claude-code, if this update added it).
+          git restore --source=HEAD~1 --worktree -- flake.lock pkgs/claude-code
+          nix eval --json --impure '.#nixosConfigurations' --apply "$apply" > "$RUNNER_TEMP/drvs-before.json"
+          git restore --source=HEAD --worktree -- flake.lock pkgs/claude-code
+          nix eval --json --impure '.#nixosConfigurations' --apply "$apply" > "$RUNNER_TEMP/drvs-after.json"
+      - name: Compute cache week
+        id: week
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+      - name: Cache vulnix's NVD database
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/vulnix
+          key: vulnix-nvd-${{ steps.week.outputs.week }}
+          restore-keys: |
+            vulnix-nvd-
+      - name: Scan before/after CVEs with vulnix
+        env:
+          HOSTS_JSON: ${{ needs.update.outputs.hosts }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/security"
+          scan() {
+            # vulnix exits 0 (no CVEs), 1 (CVEs found but all whitelisted), or
+            # 2 (active CVEs found); all three are a completed scan, not a
+            # scan failure, so only a different nonzero code is fatal.
+            # --inputs-from . pins vulnix itself to the flake's nixpkgs.
+            set +e
+            nix run --inputs-from . nixpkgs#vulnix -- --json "$1" > "$2"
+            rc=$?
+            set -e
+            [ "$rc" -eq 0 ] || [ "$rc" -eq 1 ] || [ "$rc" -eq 2 ] || { echo "vulnix exited $rc scanning $1" >&2; exit "$rc"; }
+          }
+          mapfile -t HOSTS < <(jq -r '.[]' <<<"$HOSTS_JSON")
+          for host in "${HOSTS[@]}"; do
+            scan "$(jq -r --arg h "$host" '.[$h]' "$RUNNER_TEMP/drvs-before.json")" \
+              "$RUNNER_TEMP/security/vulnix-before-$host.json"
+            scan "$(jq -r --arg h "$host" '.[$h]' "$RUNNER_TEMP/drvs-after.json")" \
+              "$RUNNER_TEMP/security/vulnix-after-$host.json"
+          done
+      - name: Dry-run build check before and after update
+        env:
+          HOSTS_JSON: ${{ needs.update.outputs.hosts }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/security"
+          mapfile -t HOSTS < <(jq -r '.[]' <<<"$HOSTS_JSON")
+          for host in "${HOSTS[@]}"; do
+            before_drv="$(jq -r --arg h "$host" '.[$h]' "$RUNNER_TEMP/drvs-before.json")"
+            after_drv="$(jq -r --arg h "$host" '.[$h]' "$RUNNER_TEMP/drvs-after.json")"
+            # Not `|| true`: a dry-run failure must be visible to the summary
+            # as "check failed" instead of silently counting as 0 builds.
+            if ! nix build --dry-run "${before_drv}^*" > "$RUNNER_TEMP/security/build-before-$host.log" 2>&1; then
+              echo "dry-run before failed for $host" >&2
+              : > "$RUNNER_TEMP/security/build-before-$host.failed"
+            fi
+            if ! nix build --dry-run "${after_drv}^*" > "$RUNNER_TEMP/security/build-after-$host.log" 2>&1; then
+              echo "dry-run after failed for $host" >&2
+              : > "$RUNNER_TEMP/security/build-after-$host.failed"
+            fi
+          done
+      - name: Render summary
+        env:
+          HOSTS_JSON: ${{ needs.update.outputs.hosts }}
+          HOST_ROLES: ${{ needs.update.outputs.roles }}
+        run: |
+          mapfile -t HOSTS < <(jq -r '.[]' <<<"$HOSTS_JSON")
+          scripts/security-summary.sh "$RUNNER_TEMP/security" "${HOSTS[@]}" \
+            > "$RUNNER_TEMP/security-summary.md"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: security-summary-${{ inputs.lane }}
+          path: ${{ runner.temp }}/security-summary.md
+          retention-days: 7
+          overwrite: true
+      # The dry-run logs are the only place a locally-built package's name
+      # still appears (scripts/security-summary.sh only counts them). This is
+      # the job's last step, so if: always() here guards against an earlier
+      # step failing (the dry-run check itself, say), not a later one:
+      # the logs still upload even when the job ends up failed overall.
+      # continue-on-error: true keeps an upload failure (no files matched,
+      # say) from being the thing that fails the job.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        continue-on-error: true
+        with:
+          name: local-builds-${{ inputs.lane }}
+          path: ${{ runner.temp }}/security/build-*.log
+          retention-days: 30
+          if-no-files-found: ignore
+          overwrite: true
+
+  pr:
+    needs: [update, check, security]
+    if: ${{ !cancelled() && needs.update.outputs.changed == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      # contents: write to move ci/flake-update-<lane> to the staging commit below.
+      contents: write
+      pull-requests: write
+    env:
+      LANE: ${{ inputs.lane }}
+    steps:
+      # Needed for scripts/cap-pr-body.sh, scripts/lib and to push the branch-move below.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: update-summary-${{ inputs.lane }}
+          path: ${{ runner.temp }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: needs.security.result == 'success'
+        with:
+          name: security-summary-${{ inputs.lane }}
+          path: ${{ runner.temp }}
+      - name: Build pull request body
+        id: build
+        env:
+          RESULT: ${{ needs.check.result }}
+          SECURITY_RESULT: ${{ needs.security.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          HOSTS: ${{ needs.update.outputs.hosts }}
+          ROLES: ${{ needs.update.outputs.roles }}
+        run: |
+          if [ "$LANE" = servers ]; then title='Update server inputs'; else title='Update desktop inputs'; fi
+          if [ "$RESULT" != success ]; then
+            title="[gate failing] $title"
+          fi
+          case "$RESULT" in
+            success) gate='✅ passed' ;;
+            failure) gate='❌ failing' ;;
+            *) gate="$RESULT" ;;
+          esac
+          # Desktop-lane bumps can reach servers (unstable.codegraph in modules/home/server).
+          servers_hit="$(jq -rn -L scripts/lib --argjson roles "$ROLES" --argjson hosts "$HOSTS" \
+            'include "collapse-hosts"; [$hosts[] | select($roles[.] == "server")] | collapse_hosts($roles)')"
+          body="$RUNNER_TEMP/body.md"
+          {
+            if [ "$LANE" = servers ]; then
+              echo '**Merging deploys to every server within about an hour (promote.yml moves deploy).**'
+              echo
+            elif [ -n "$servers_hit" ]; then
+              echo "**Also changes: $servers_hit (user profile).**"
+              echo
+            fi
+            echo "Gate: $gate ([run]($RUN_URL))"
+            echo
+            if [ "$HOSTS" = '[]' ]; then
+              echo 'No host closure changed.'
+              echo
+            fi
+            command cat "$RUNNER_TEMP/summary.md"
+            echo
+            if [ "$SECURITY_RESULT" = success ]; then
+              command cat "$RUNNER_TEMP/security-summary.md"
+              echo
+              echo "Full local-build logs: \`local-builds-$LANE\` artifact on [this run]($RUN_URL)."
+            elif [ "$SECURITY_RESULT" != skipped ]; then
+              echo "Security scan failed ([run]($RUN_URL))"
+            fi
+            echo
+            echo 'CI checks eval only. Before merging, on one machine, run:'
+            echo
+            if [ "$LANE" = servers ]; then host=taragarmr; else host='<host>'; fi
+            # Two fenced blocks, so GitHub gives each command its own copy button.
+            # shellcheck disable=SC2016 # literal backticks for Markdown
+            printf '```sh\n%s\n```\n\n```sh\n%s\n```\n' \
+              "git fetch origin ci/flake-update-$LANE && git switch -C ci/flake-update-$LANE FETCH_HEAD" \
+              "just switch $host"
+            echo
+            echo 'Checks do not appear on this pull request: it is opened with GITHUB_TOKEN, which triggers no workflows. Merging runs the gate on main.'
+          } > "$body"
+          echo "title=$title" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pr-body-full-${{ inputs.lane }}
+          path: ${{ runner.temp }}/body.md
+          retention-days: 7
+          overwrite: true
+      - name: Cap pull request body size
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: scripts/cap-pr-body.sh "$RUNNER_TEMP/body.md" "$RUN_URL" > "$RUNNER_TEMP/body-capped.md"
+      - name: Move the lane branch to the staging commit
+        env:
+          SHA: ${{ needs.update.outputs.sha }}
+        run: |
+          # The exact SHA the update job pushed, not whatever the staging branch happens to
+          # point at by the time this runs.
+          git fetch --depth=1 origin "$SHA"
+          git push --force origin "$SHA":"refs/heads/ci/flake-update-$LANE"
+      - name: Create or update the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: ${{ steps.build.outputs.title }}
+        run: |
+          # The repo is public: `--head ci/flake-update-<lane>` alone would also match a fork
+          # PR from a same-named branch, so restrict to PRs whose head lives in this repo
+          # before treating them as "the" prior update PR.
+          number=$(gh pr list --head "ci/flake-update-$LANE" --base main --state open \
+            --json number,isCrossRepository --jq '[.[] | select(.isCrossRepository | not)][0].number // empty')
+          if [ -n "$number" ]; then
+            gh pr edit "$number" --title "$TITLE" --body-file "$RUNNER_TEMP/body-capped.md"
+          else
+            gh pr create --head "ci/flake-update-$LANE" --base main --title "$TITLE" --body-file "$RUNNER_TEMP/body-capped.md"
+          fi
