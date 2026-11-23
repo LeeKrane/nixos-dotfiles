@@ -343,8 +343,8 @@ are in `secrets/README.md` ("Server upgrade secrets" and "Rollout checklist").
    read-only), their hashes and tokens, and add `ntfy/server-env` (taragarmr),
    `ntfy/publish-token` (four servers) and `ntfy/read-token` (three desktops). Merge to
    `main` and confirm `promote.yml` created `deploy`.
-3. Switch every server once (`just switch` on taragarmr, `nixos-rebuild --target-host` for
-   the Pis), since auto-upgrade is not running yet, and switch the desktops for the
+3. Switch every server once (`nixos-rebuild --target-host` from tariognatha or tarmantria,
+   which have the binfmt emulation the Pis need; the servers have no `just`), since auto-upgrade is not running yet, and switch the desktops for the
    subscriber. Check `systemctl list-timers nixos-upgrade.timer` on each server.
 4. Subscribe the phone's ntfy app to `server-upgrades` through the WireGuard address.
 5. Failure drill on tarronax: temporarily set its `healthChecks` to `[ "false" ]`, switch, run

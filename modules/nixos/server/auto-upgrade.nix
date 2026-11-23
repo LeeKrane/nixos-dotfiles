@@ -1,5 +1,5 @@
 # Automatic upgrades of every role = "server" host to the latest gated `main` commit: the
-# `deploy` branch that .github/workflows/check.yml moves after its gate passes. Upstream
+# `deploy` branch that .github/workflows/promote.yml moves after its gate passes. Upstream
 # system.autoUpgrade supplies the timer and the reboot window; the hooks (pkgs/server-upgrade,
 # scripts/server-upgrade-hooks.sh) skip runs that have nothing to do, health check the new
 # system, roll back and queue failure messages for ntfy and GitHub. See
