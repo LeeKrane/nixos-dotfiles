@@ -18,7 +18,10 @@ concurrency:
 
 jobs:
   promote:
-    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -31,4 +34,6 @@ jobs:
       - name: Fast-forward deploy
         env:
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
-        run: git push origin "${HEAD_SHA}:refs/heads/deploy"
+        run: |
+          git merge-base --is-ancestor "$HEAD_SHA" origin/main
+          git push origin "${HEAD_SHA}:refs/heads/deploy"
