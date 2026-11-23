@@ -45,6 +45,10 @@ jobs:
         run: nix shell --inputs-from . nixpkgs#shellcheck -c shellcheck -x -S style install.sh scripts/*.sh scripts/tests/*.sh
       - name: flake-update-notify tests
         run: nix shell --inputs-from . nixpkgs#curl nixpkgs#jq nixpkgs#gawk -c bash scripts/tests/flake-update-notify-test.sh
+      - name: server-upgrade tests
+        run: |
+          nix shell --inputs-from . nixpkgs#curl nixpkgs#jq nixpkgs#gawk -c bash scripts/tests/server-upgrade-report-test.sh
+          nix shell --inputs-from . nixpkgs#curl nixpkgs#jq nixpkgs#gawk -c bash scripts/tests/server-upgrade-hooks-test.sh
 
   # Same ref as the eval jobs: under workflow_call (update.yml calls this with
   # ref: needs.update.outputs.sha, the exact pushed commit), github.ref is the

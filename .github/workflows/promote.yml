@@ -1,0 +1,34 @@
+name: promote
+
+# Moves the `deploy` branch (what every server upgrades to, see
+# modules/nixos/server/auto-upgrade.nix) to a main commit whose check run passed.
+# Separate from check.yml because update.yml calls that with read-only
+# permissions, and a called job asking for write access would void the caller.
+on:
+  workflow_run:
+    workflows: [check]
+    types: [completed]
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: promote
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # Full history: git only fast-forwards a branch whose current tip it has.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      # No --force: a rewritten main makes this push fail, and the job with it.
+      - name: Fast-forward deploy
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: git push origin "${HEAD_SHA}:refs/heads/deploy"
