@@ -38,7 +38,7 @@ exit "${STUB_BUSCTL_EXIT:-0}"
 EOF
 chmod +x "$WORK/bin/notify-send" "$WORK/bin/xdg-open" "$WORK/bin/systemd-run" "$WORK/bin/busctl"
 
-STATE_FILE="$WORK/state/flake-update-notify/last-seen"
+STATE_FILE="$WORK/state/flake-update-notify/last-seen-ci-flake-update"
 failures=0
 
 # pr_json SHA TITLE BODY [NUMBER=3]: one-element pulls array, written to
@@ -355,6 +355,24 @@ check 'notify-send fails slow: stderr warning' grep -qF 'notify-send failed afte
 # missing env
 run REPO=
 check 'missing REPO: non-zero' [ "$status" -ne 0 ]
+
+# lanes: LABEL names the lane in the summary; each branch keeps its own dedupe state
+rm -rf "$WORK/state"
+pr_json lane1 'Update server inputs' "$VERSIONS_BODY" 12
+run LABEL='Server update' BRANCH=ci/flake-update-servers
+check 'lane: summary uses LABEL' notify_has 'Server update ready (#12)'
+check 'lane: state per branch' [ -f "$WORK/state/flake-update-notify/last-seen-ci-flake-update-servers" ]
+# The identical PR (same sha, number, title, body) on another branch: a shared state file
+# would dedupe it.
+run LABEL='Desktop update' BRANCH=ci/flake-update-desktops
+check 'lane: other branch not deduped by first' notified
+pr_json lane2 'Update desktop inputs' "$VERSIONS_BODY" 13
+run LABEL='Desktop update' BRANCH=ci/flake-update-desktops
+check 'lane: desktop summary' notify_has 'Desktop update ready (#13)'
+pr_json lane1 '[gate failing] Update server inputs' "$VERSIONS_BODY" 14
+rm -f "$WORK/state/flake-update-notify/last-seen-ci-flake-update-servers"
+run LABEL='Server update' BRANCH=ci/flake-update-servers
+check 'lane: gate failing summary' notify_has 'Server update ready (#14) (gate failing)'
 
 echo
 if [ "$failures" -eq 0 ]; then echo 'all passed'; else echo "$failures failed"; exit 1; fi

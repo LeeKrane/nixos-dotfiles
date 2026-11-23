@@ -4,6 +4,8 @@
 # flake-update-notify user timer (modules/home/desktop/flake-update-notify.nix).
 #   REPO                   owner/name                                   required
 #   BRANCH                 head branch of the pull request              required
+#   LABEL                  notification summary prefix, e.g.            optional
+#                          "Server update" (default "Flake update")
 #   PULLS_URL              overrides the API URL, for tests             optional
 #   NOTIFY_FAIL_THRESHOLD  overrides the notify-send fail-fast          optional
 #                          threshold below (seconds), for tests
@@ -14,7 +16,9 @@ set -euo pipefail
 
 url="${PULLS_URL:-https://api.github.com/repos/$REPO/pulls?head=${REPO%%/*}:$BRANCH&state=open}"
 state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/flake-update-notify"
-state_file="$state_dir/last-seen"
+# One state file per branch: each update lane (ci/flake-update-servers, -desktops) dedupes alone.
+state_file="$state_dir/last-seen-$(printf '%s' "$BRANCH" | tr -c 'A-Za-z0-9._-' -)"
+label="${LABEL:-Flake update}"
 
 # Prints the data rows of the Markdown table under the heading $1, without
 # its header and separator rows.
@@ -86,11 +90,11 @@ if ! busctl --user call org.freedesktop.Notifications /org/freedesktop/Notificat
     exit 1
 fi
 
-summary="Flake update ready (#$number)"
+summary="$label ready (#$number)"
 urgency=normal
 case "$title" in
     '[gate failing]'*)
-        summary="Flake update ready (#$number) (gate failing)"
+        summary="$label ready (#$number) (gate failing)"
         urgency=critical
         ;;
 esac
