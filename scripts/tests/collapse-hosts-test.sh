@@ -35,6 +35,21 @@ without="$(bash "$SCRIPTS/update-summary.sh" "$WORK/lock.json" "$WORK/lock.json"
 check 'update-summary: collapsed row' grep -qF '| p | 1 | 2 | servers |' <<<"$with"
 check 'update-summary: no HOST_ROLES keeps join' grep -qF '| p | 1 | 2 | taragarmr, taronychus, tarritator, tarronax |' <<<"$without"
 
+# With HOST_ROLES the Hosts column is always shown, even when every host changed the same way.
+jq -n '{taragarmr:{p:"1"},taronychus:{p:"1"},tarritator:{p:"1"},tarronax:{p:"1"}}' >"$WORK/srv-before.json"
+jq -n '{taragarmr:{p:"2"},taronychus:{p:"2"},tarritator:{p:"2"},tarronax:{p:"2"}}' >"$WORK/srv-after.json"
+uniform="$(HOST_ROLES="$ROLES" bash "$SCRIPTS/update-summary.sh" "$WORK/lock.json" "$WORK/lock.json" "$WORK/srv-before.json" "$WORK/srv-after.json" 2>&1 || true)"
+check 'update-summary: uniform servers row shows hosts' grep -qF '| p | 1 | 2 | servers |' <<<"$uniform"
+check 'update-summary: uniform servers has Hosts header' grep -qF '| Package | Before | After | Hosts |' <<<"$uniform"
+jq '. + {taractias:{p:"1"},tariognatha:{p:"1"},tarmantria:{p:"1"}}' "$WORK/srv-before.json" >"$WORK/all-before.json"
+jq '. + {taractias:{p:"2"},tariognatha:{p:"2"},tarmantria:{p:"2"}}' "$WORK/srv-after.json" >"$WORK/all-after.json"
+everywhere="$(HOST_ROLES="$ROLES" bash "$SCRIPTS/update-summary.sh" "$WORK/lock.json" "$WORK/lock.json" "$WORK/all-before.json" "$WORK/all-after.json" 2>&1 || true)"
+check 'update-summary: change on every host shows all' grep -qF '| p | 1 | 2 | all |' <<<"$everywhere"
+plain="$(bash "$SCRIPTS/update-summary.sh" "$WORK/lock.json" "$WORK/lock.json" "$WORK/srv-before.json" "$WORK/srv-after.json" 2>&1 || true)"
+check 'update-summary: no HOST_ROLES uniform keeps 3 columns' grep -qF '| p | 1 | 2 |' <<<"$plain"
+# shellcheck disable=SC2016 # eval expands it, on purpose
+check 'update-summary: no HOST_ROLES uniform has no Hosts header' eval '! grep -qF "| Hosts |" <<<"$plain"'
+
 # security-summary.sh: a CVE new on all four scanned servers is "servers" with HOST_ROLES
 # (collapsed against the whole flake) and "all" without it (every scanned host).
 mkdir -p "$WORK/sec"

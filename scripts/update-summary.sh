@@ -134,7 +134,9 @@ include "collapse-hosts";
     ),
   }
 ] as $packages |
-{ needsHosts: ($packages | any(.groups | length > 1)), packages: $packages }
+# With HOST_ROLES (CI, one update lane), the Hosts column is always shown: a lane's table covers
+# only the hosts it changed, so "all", "servers", "desktops" or single hosts must stay visible.
+{ needsHosts: ($roles != null or ($packages | any(.groups | length > 1))), packages: $packages }
 JQ
 
 diff_json="$(jq -n --slurpfile old "$OLD_LOCK" --slurpfile new "$NEW_LOCK" -f "$WORKDIR/lock-diff.jq")"
