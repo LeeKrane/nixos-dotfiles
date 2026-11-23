@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Body of the ani-cli wrapper built in modules/home/desktop/ani-cli.nix: syncs ani-cli's
 # watch history (ani-hsts) through the `ani-cli` database on couch.krane.dev, then runs
 # the real ani-cli. The Nix side sets ANI_CLI_REAL (the real binary) and ANI_SYNC_AUTH

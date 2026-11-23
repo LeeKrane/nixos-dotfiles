@@ -9,13 +9,12 @@
 }:
 let
   # The Android SDK license is accepted for this package only, not in the flake's nixpkgs config.
-  sdk =
-    (androidenv.override { licenseAccepted = true; }).composeAndroidPackages {
-      platformVersions = [ "35" ];
-      buildToolsVersions = [ "35.0.0" ];
-      includeEmulator = false;
-      includeSystemImages = false;
-    };
+  sdk = (androidenv.override { licenseAccepted = true; }).composeAndroidPackages {
+    platformVersions = [ "35" ];
+    buildToolsVersions = [ "35.0.0" ];
+    includeEmulator = false;
+    includeSystemImages = false;
+  };
   root = "${sdk.androidsdk}/libexec/android-sdk";
   bt = "${root}/build-tools/35.0.0";
 
