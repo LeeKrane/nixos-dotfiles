@@ -40,8 +40,17 @@
 
   services.udisks2.enable = true;
 
-  # brightnessctl's udev rules live only here, for normal-user backlight access.
-  services.udev.packages = [ pkgs.brightnessctl ];
+  services.udev.packages = [
+    # brightnessctl's udev rules live only here, for normal-user backlight access.
+    pkgs.brightnessctl
+    # MonsGeek keyboard (VID 342d, wired and 2.4G dongle): give the active session
+    # access to its hidraw nodes so VIA (usevia.app) can open them over WebHID.
+    # Own file numbered below 73: 73-seat-late.rules applies the uaccess tag, so
+    # extraRules (99-local.rules) would set it too late.
+    (pkgs.writeTextDir "lib/udev/rules.d/70-monsgeek.rules" ''
+      SUBSYSTEM=="hidraw", ATTRS{idVendor}=="342d", TAG+="uaccess"
+    '')
+  ];
 
   environment.systemPackages = [ pkgs.lm_sensors ];
 }
