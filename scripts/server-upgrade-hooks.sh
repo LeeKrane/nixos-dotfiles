@@ -139,11 +139,21 @@ cmd_condition() {
         echo "already on $sha, nothing to do"
         exit 1
     fi
+    # Never overlap the boot-time health check of a generation that is still being judged: `pre`
+    # would overwrite the state its rollback needs and two switches could run at once.
+    if systemctl is-active --quiet server-upgrade-health \
+        || { [ -f "$STATE_DIR/pending-check" ] \
+            && [ "$(resolved "$CURRENT_SYSTEM")" = "$(resolved "$SYSTEM_PROFILE")" ]; }; then
+        echo "a boot health check is pending or running, skipping"
+        exit 1
+    fi
     mkdir -p "$STATE_DIR"
     printf '%s\n' "$sha" >"$STATE_DIR/target-sha"
 }
 
 cmd_pre() {
+    # First: if anything below fails, `failed` must not roll back to a stale earlier run's state.
+    rm -f "$STATE_DIR/pre-switch" "$STATE_DIR/pre-profile"
     mkdir -p "$OUTBOX"
     resolved "$CURRENT_SYSTEM" >"$STATE_DIR/pre-switch"
     resolved "$SYSTEM_PROFILE" >"$STATE_DIR/pre-profile"

@@ -26,6 +26,7 @@ printf '%s\n' "$*" >>"$LOG_DIR/systemctl"
 if [ "$1" = --failed ]; then
     for u in ${STUB_FAILED_UNITS:-}; do printf '%s loaded failed failed x\n' "$u"; done
 fi
+if [ "$1" = is-active ]; then [ -n "${STUB_HEALTH_ACTIVE:-}" ]; exit; fi
 [ -z "${STUB_SYSTEMCTL_FAIL:-}" ] || [ "$1" != --failed ] || exit 1
 exit 0
 EOF
@@ -87,7 +88,7 @@ fresh() {
     point current old
     point booted old
     point profile old
-    unset STUB_SHA STUB_GIT_FAIL STUB_FAILED_UNITS STUB_CURL_EXIT STUB_REPORT_EXIT STUB_HEALTH_EXIT STUB_SYSTEMCTL_FAIL STUB_NIXENV_EXIT || true
+    unset STUB_SHA STUB_GIT_FAIL STUB_FAILED_UNITS STUB_CURL_EXIT STUB_REPORT_EXIT STUB_HEALTH_EXIT STUB_SYSTEMCTL_FAIL STUB_NIXENV_EXIT STUB_HEALTH_ACTIVE || true
 }
 run() { # run SUBCOMMAND [ENV=VAL...]: sets $status
     local sub=$1
@@ -138,7 +139,37 @@ check 'condition: ls-remote failure skips the run' [ "$status" -eq 1 ]
 run condition
 check 'condition: missing deploy branch skips the run' [ "$status" -eq 1 ]
 
+fresh
+printf 'NEWREV\n' >"$STATE/pending-check"
+run condition STUB_SHA=NEWER
+check 'condition: a pending check on the active system skips the run' [ "$status" -eq 1 ]
+
+fresh
+printf 'NEWREV\n' >"$STATE/pending-check"
+point profile newkern
+run condition STUB_SHA=NEWER
+check 'condition: a pending check with a not yet booted profile still runs' [ "$status" -eq 0 ]
+
+fresh
+run condition STUB_SHA=NEWER STUB_HEALTH_ACTIVE=1
+check 'condition: a running boot health check skips the run' [ "$status" -eq 1 ]
+
 # --- pre / post ----------------------------------------------------------------------------
+fresh
+printf 'NEWREV\n' >"$STATE/target-sha"
+printf '%s\n' "$WORK/store/old" >"$STATE/pre-switch"
+printf '%s\n' "$WORK/store/old" >"$STATE/pre-profile"
+point current newsame
+point profile newsame
+touch "$STATE/outbox"
+run pre
+check 'pre: failing early fails the hook' [ "$status" -ne 0 ]
+check 'pre: stale pre-switch removed first' [ ! -e "$STATE/pre-switch" ]
+rm -f "$STATE/outbox"
+run failed
+check 'failed: no pre-switch means no rollback' eval '! logged nix-env --set'
+check 'failed: and reported as not rolled back' [ "$(only_message .rolled_back)" = no ]
+
 fresh
 run pre STUB_FAILED_UNITS="old.service"
 check 'pre: records the running system' state_is pre-switch "$(readlink -f "$WORK/store/old")"
