@@ -100,7 +100,7 @@ run() { # run SUBCOMMAND [ENV=VAL...]: sets $status
 }
 logged() { grep -qF -- "$2" "$LOG/$1" 2>/dev/null; } # logged FILE TEXT
 state_is() { [ "$(command cat "$STATE/$1" 2>/dev/null)" = "$2" ]; }
-outbox_count() { find "$STATE/outbox" -name '*.json' 2>/dev/null | wc -l; }
+outbox_count() { find "$STATE/outbox" -maxdepth 1 -name '*.json' 2>/dev/null | wc -l; }
 only_message() { jq -r "$1" "$STATE"/outbox/*.json; }
 
 # --- condition -----------------------------------------------------------------------------
@@ -350,7 +350,8 @@ run pre
 run failed
 printf '{"kind":' >"$STATE/outbox/0-corrupt.json"
 run deliver "${DELIVER[@]}"
-check 'deliver: a corrupt file is left in place, exit non-zero' [ "$(outbox_count)" -eq 1 ] && [ "$status" -ne 0 ]
+check 'deliver: a corrupt file is moved to bad/' [ -e "$STATE/outbox/bad/0-corrupt.json" ]
+check 'deliver: a corrupt file does not keep deliver failing' [ "$status" -eq 0 ]
 check 'deliver: the valid message was still delivered' logged report 'failed tarronax NEWREV'
 
 # a host without tokens treats both channels as done

@@ -110,7 +110,7 @@ queue() {
         --arg rolled "$rolled" --arg title "$title" --arg priority "$priority" --arg body "$body" \
         '{kind: $kind, host: $host, sha: $sha, stage: $stage, rolled_back: $rolled,
           title: $title, priority: $priority, body: $body, ntfy_done: false, github_done: false}' \
-        >"$tmp"
+        >"$tmp" || { rm -f "$tmp"; return 1; }
     mv "$tmp" "$OUTBOX/$(date +%s%N)-$kind.json"
     systemctl start --no-block server-upgrade-notify.service || true
 }
@@ -249,8 +249,10 @@ cmd_deliver() {
     shopt -s nullglob
     for f in "$OUTBOX"/*.json; do
         if ! jq -e . "$f" >/dev/null 2>&1; then
-            echo "skipping corrupt outbox file $f" >&2
-            undelivered=1
+            # Not retryable: park it so deliver does not fail (and get restarted) forever.
+            echo "moving corrupt outbox file $f to bad/" >&2
+            mkdir -p "$OUTBOX/bad"
+            mv "$f" "$OUTBOX/bad/"
             continue
         fi
         if [ "$(jq -r .ntfy_done "$f")" != true ] && send_ntfy "$f"; then mark_done "$f" ntfy_done; fi
