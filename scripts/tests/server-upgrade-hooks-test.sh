@@ -416,7 +416,9 @@ printf 'NEWREV\n' >"$STATE/target-sha"
 run pre
 run failed STUB_JOURNAL_HUGE=1
 check 'failed: body stays under 4096 bytes' [ "$(only_message .body | wc -c)" -lt 4096 ]
+# shellcheck disable=SC2016 # evaluated later by check
 check 'failed: body keeps the Stage line' eval '[[ "$(only_message .body)" == *"Stage: "* ]]'
+# shellcheck disable=SC2016 # evaluated later by check
 check 'failed: body keeps the Rolled back line' eval '[[ "$(only_message .body)" == *"Rolled back: "* ]]'
 
 echo
