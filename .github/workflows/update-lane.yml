@@ -4,7 +4,7 @@ name: update-lane
 # called by update.yml once per selected lane: bump the lane's inputs on
 # ci/flake-update-<lane>, gate it with check.yml, report CVEs and local builds for the hosts
 # whose closure changed, then create or edit the lane's pull request. No concurrency group
-# here: update.yml's group already serialises runs, and a called workflow sharing the
+# here: update.yml's calling job holds the per-lane group, and a called workflow sharing the
 # caller's group deadlocks.
 on:
   workflow_call:
@@ -50,19 +50,21 @@ jobs:
           # Two steps, so a jq failure fails the step instead of passing an empty list on.
           inputs="$(jq -r --arg l "$LANE" '.[$l] | join(" ")' "$RUNNER_TEMP/lanes.json")"
           echo "inputs=$inputs" >> "$GITHUB_OUTPUT"
+          # The lane's strings (claude_code, title, commit, switch_host): one table for all jobs.
+          scripts/update-lane-meta.sh "$LANE" >> "$GITHUB_OUTPUT"
       - name: Save old flake.lock
         run: cp flake.lock "$RUNNER_TEMP/flake.lock.old"
       - name: Update lane inputs
         env:
           INPUTS: ${{ steps.meta.outputs.inputs }}
+          CLAUDE_CODE: ${{ steps.meta.outputs.claude_code }}
         run: |
           set -o pipefail
           # A bare `nix flake update` would bump every input, the other lane's included.
           [ -n "$INPUTS" ] || { echo "lane $LANE has no inputs" >&2; exit 1; }
           # shellcheck disable=SC2086 # INPUTS is a space-separated list of input names
           nix flake update $INPUTS 2>&1 | tee "$RUNNER_TEMP/update.log"
-          # pkgs/claude-code is installed on servers too, so it rides the server lane.
-          if [ "$LANE" = servers ]; then
+          if [ "$CLAUDE_CODE" = true ]; then
             scripts/update-claude-code.sh 2>&1 | tee -a "$RUNNER_TEMP/update.log"
           fi
       - name: Check for changes
@@ -88,26 +90,27 @@ jobs:
         env:
           ROLES_JSON: ${{ steps.meta.outputs.roles }}
         run: |
-          # shellcheck disable=SC2016 # ${h} is Nix antiquotation, not a shell variable
-          drvs='cfgs: let hosts = builtins.attrNames (builtins.fromJSON (builtins.getEnv "ROLES_JSON")); in builtins.listToAttrs (map (h: { name = h; value = cfgs.${h}.config.system.build.toplevel.drvPath; }) hosts)'
-          versions='cfgs: import ./scripts/update-versions.nix cfgs (builtins.fromJSON (builtins.getEnv "HOSTS_JSON"))'
-          nix eval --json --impure '.#nixosConfigurations' --apply "$drvs" > "$RUNNER_TEMP/drvs-after.json"
+          # One eval per state: every host's toplevel drvPath plus its package versions.
+          apply='cfgs: let hosts = builtins.attrNames (builtins.fromJSON (builtins.getEnv "ROLES_JSON")); in { drvs = import ./scripts/host-drvs.nix cfgs hosts; versions = import ./scripts/update-versions.nix cfgs hosts; }'
+          nix eval --json --impure '.#nixosConfigurations' --apply "$apply" > "$RUNNER_TEMP/eval-after.json"
           # The update commit hasn't happened yet, so HEAD still holds the pre-update
           # content. If pkgs/claude-code is new (untracked at HEAD), restore fails on it with
           # "pathspec did not match" instead of deleting it: the step fails fail-safe,
           # before anything is committed or pushed.
           git restore --source=HEAD --worktree -- flake.lock pkgs/claude-code
-          nix eval --json --impure '.#nixosConfigurations' --apply "$drvs" > "$RUNNER_TEMP/drvs-before.json"
-          HOSTS_JSON="$(jq -cn --slurpfile a "$RUNNER_TEMP/drvs-after.json" --slurpfile b "$RUNNER_TEMP/drvs-before.json" \
-            '$a[0] as $A | $b[0] as $B | [$A | keys[] | select($A[.] != $B[.])]')"
-          export HOSTS_JSON
-          echo "hosts=$HOSTS_JSON" >> "$GITHUB_OUTPUT"
-          nix eval --json --impure '.#nixosConfigurations' --apply "$versions" > "$RUNNER_TEMP/versions-before.json"
-          # Put the updated state back, so the versions-after eval and the commit see it.
+          nix eval --json --impure '.#nixosConfigurations' --apply "$apply" > "$RUNNER_TEMP/eval-before.json"
+          # Put the updated state back, so the commit captures it.
           rm -rf pkgs/claude-code
           cp "$RUNNER_TEMP/flake.lock.new" flake.lock
           cp -r "$RUNNER_TEMP/claude-code.new" pkgs/claude-code
-          nix eval --json --impure '.#nixosConfigurations' --apply "$versions" > "$RUNNER_TEMP/versions-after.json"
+          hosts="$(jq -cn --slurpfile a "$RUNNER_TEMP/eval-after.json" --slurpfile b "$RUNNER_TEMP/eval-before.json" \
+            '$a[0].drvs as $A | $b[0].drvs as $B | [$A | keys[] | select($A[.] != $B[.])]')"
+          echo "hosts=$hosts" >> "$GITHUB_OUTPUT"
+          # The version table covers the changed hosts only.
+          for state in before after; do
+            jq --argjson hosts "$hosts" '.versions | with_entries(select(.key as $k | $hosts | index($k)))' \
+              "$RUNNER_TEMP/eval-$state.json" > "$RUNNER_TEMP/versions-$state.json"
+          done
       - name: Render summary
         if: steps.diff.outputs.haschanges == 'true'
         env:
@@ -127,15 +130,13 @@ jobs:
       - name: Commit and push
         id: push
         if: steps.diff.outputs.haschanges == 'true'
+        env:
+          COMMIT: ${{ steps.meta.outputs.commit }}
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add flake.lock pkgs/claude-code
-          if [ "$LANE" = servers ]; then
-            git commit -m 'Update server inputs and claude-code'
-          else
-            git commit -m 'Update desktop inputs'
-          fi
+          git commit -m "$COMMIT"
           # Pushed to a staging branch, not ci/flake-update-<lane> directly: the pr job moves
           # the lane branch to this exact commit only after it has built the PR body, so the
           # branch's head and its PR's body change together instead of a window where the
@@ -188,8 +189,7 @@ jobs:
         env:
           HOSTS_JSON: ${{ needs.update.outputs.hosts }}
         run: |
-          # shellcheck disable=SC2016 # ${h} is Nix antiquotation, not a shell variable
-          apply='cfgs: let hosts = builtins.fromJSON (builtins.getEnv "HOSTS_JSON"); in builtins.listToAttrs (map (h: { name = h; value = cfgs.${h}.config.system.build.toplevel.drvPath; }) hosts)'
+          apply='cfgs: import ./scripts/host-drvs.nix cfgs (builtins.fromJSON (builtins.getEnv "HOSTS_JSON"))'
           # git restore --worktree is no-overlay: unlike `git checkout <ref> --
           # <path>`, it deletes a path that exists in the worktree but not at
           # <ref> (e.g. pkgs/claude-code, if this update added it).
@@ -313,55 +313,10 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           HOSTS: ${{ needs.update.outputs.hosts }}
           ROLES: ${{ needs.update.outputs.roles }}
+          SUMMARY: ${{ runner.temp }}/summary.md
+          SECURITY_SUMMARY: ${{ runner.temp }}/security-summary.md
         run: |
-          if [ "$LANE" = servers ]; then title='Update server inputs'; else title='Update desktop inputs'; fi
-          if [ "$RESULT" != success ]; then
-            title="[gate failing] $title"
-          fi
-          case "$RESULT" in
-            success) gate='✅ passed' ;;
-            failure) gate='❌ failing' ;;
-            *) gate="$RESULT" ;;
-          esac
-          # Desktop-lane bumps can reach servers (unstable.codegraph in modules/home/server).
-          servers_hit="$(jq -rn -L scripts/lib --argjson roles "$ROLES" --argjson hosts "$HOSTS" \
-            'include "collapse-hosts"; [$hosts[] | select($roles[.] == "server")] | collapse_hosts($roles)')"
-          body="$RUNNER_TEMP/body.md"
-          {
-            if [ "$LANE" = servers ]; then
-              echo '**Merging deploys to every server within about an hour (promote.yml moves deploy).**'
-              echo
-            elif [ -n "$servers_hit" ]; then
-              echo "**Also changes: $servers_hit (user profile).**"
-              echo
-            fi
-            echo "Gate: $gate ([run]($RUN_URL))"
-            echo
-            if [ "$HOSTS" = '[]' ]; then
-              echo 'No host closure changed.'
-              echo
-            fi
-            command cat "$RUNNER_TEMP/summary.md"
-            echo
-            if [ "$SECURITY_RESULT" = success ]; then
-              command cat "$RUNNER_TEMP/security-summary.md"
-              echo
-              echo "Full local-build logs: \`local-builds-$LANE\` artifact on [this run]($RUN_URL)."
-            elif [ "$SECURITY_RESULT" != skipped ]; then
-              echo "Security scan failed ([run]($RUN_URL))"
-            fi
-            echo
-            echo 'CI checks eval only. Before merging, on one machine, run:'
-            echo
-            if [ "$LANE" = servers ]; then host=taragarmr; else host='<host>'; fi
-            # Two fenced blocks, so GitHub gives each command its own copy button.
-            # shellcheck disable=SC2016 # literal backticks for Markdown
-            printf '```sh\n%s\n```\n\n```sh\n%s\n```\n' \
-              "git fetch origin ci/flake-update-$LANE && git switch -C ci/flake-update-$LANE FETCH_HEAD" \
-              "just switch $host"
-            echo
-            echo 'Checks do not appear on this pull request: it is opened with GITHUB_TOKEN, which triggers no workflows. Merging runs the gate on main.'
-          } > "$body"
+          title="$(scripts/update-pr-body.sh "$RUNNER_TEMP/body.md")"
           echo "title=$title" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

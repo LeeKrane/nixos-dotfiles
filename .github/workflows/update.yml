@@ -21,11 +21,9 @@ on:
       - flake.lock
       - 'pkgs/claude-code/**'
 
-# A manual run or conflict refresh queues behind a running one instead of racing it on the
-# lane branches.
-concurrency:
-  group: update
-  cancel-in-progress: false
+# No workflow-level concurrency group: GitHub keeps one pending run per group, so a conflict
+# refresh queued behind a running update would silently cancel a pending scheduled run. The
+# lane job below takes a group per lane instead.
 
 permissions: {}
 
@@ -58,6 +56,12 @@ jobs:
       fail-fast: false
       matrix:
         lane: ${{ fromJSON(needs.select.outputs.lanes) }}
+    # One group per lane: a second run for a lane queues behind the running one instead of
+    # racing it on that lane's branches. If a third arrives, it replaces the pending one,
+    # which loses nothing: both regenerate the same lane from the latest main.
+    concurrency:
+      group: update-lane-${{ matrix.lane }}
+      cancel-in-progress: false
     # The most any job in update-lane.yml needs; each of its jobs narrows this down.
     permissions:
       contents: write
