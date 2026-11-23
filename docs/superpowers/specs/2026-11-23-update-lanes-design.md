@@ -63,7 +63,9 @@ exercises the rollback path. This is accepted.
   `disko` and `nix-index-database`. Servers are the stricter audience, so anything that can
   reach them rides the server PR. Only this lane runs `scripts/update-claude-code.sh`,
   because `pkgs/claude-code` is installed on servers too.
-- **desktops**: every other root input of `flake.lock`, computed rather than listed. Today
+- **desktops**: every other updatable root input of `flake.lock`, computed rather than
+  listed. Root inputs that only `follows` another input (`nixpkgs-stable`) are in neither
+  lane: they cannot be updated on their own and move with the input they follow. Today
   that is `nixpkgs`, `home-manager`, `nixvim`, `dots-hyprland`, `illogical-flake`,
   `quickshell`, `zen-browser` and `nixos-hardware`. A new input lands here by default. If
   it actually affects the servers, the changed-host report shows the servers in the desktop
@@ -95,10 +97,14 @@ conflict" below covers them.
 
 ## Workflow
 
-`update.yml` keeps its jobs (`update`, `check`, `security`, `pr`) and adds a `select` job
-in front. `update`, `check`, `security` and `pr` become matrix jobs over the lanes that
-`select` outputs. `check` calls `check.yml` once per lane with that lane's pushed SHA, and
-the full eval matrix stays unchanged.
+Today's jobs (`update`, `check`, `security`, `pr`) move to a reusable workflow,
+`.github/workflows/update-lane.yml`, which takes a `lane` input. `update.yml` keeps the
+triggers and the concurrency group. It runs a `select` job, then one matrix job over the
+selected lanes that calls `update-lane.yml` per lane. Matrix legs of a plain job cannot pass
+per-leg outputs (the pushed SHA, the changed hosts) to later jobs reliably, but a called
+workflow keeps each lane's job outputs to itself. `check` calls `check.yml` once per lane with
+that lane's pushed SHA, and the full eval matrix stays unchanged. Artifact names carry the
+lane (`update-summary-servers`, ...), because both lanes share one workflow run.
 
 ### Triggers and lane selection
 
@@ -197,11 +203,15 @@ workflow passes from `lib.hostMeta`.
 
 ## Desktop notifier
 
-`modules/home/desktop/flake-update-notify.nix` replaces `BRANCH=ci/flake-update` with
-`BRANCHES="ci/flake-update-servers ci/flake-update-desktops"`. The script
-(`pkgs/flake-update-notify`) loops over the branches and keeps one state entry per
-branch, so the "once per pushed head commit" behaviour holds per lane. The notification
-reads "Server update PR open" or "Desktop update PR open", and clicking it opens that PR.
+`modules/home/desktop/flake-update-notify.nix` defines one service and timer per lane
+(`flake-update-notify-servers`, `flake-update-notify-desktops`) instead of the single
+`flake-update-notify` unit. Each unit sets `BRANCH=ci/flake-update-<lane>` and a `LABEL`
+(`Server update` or `Desktop update`). One unit per lane keeps the script's retry and
+"never show a popup twice" logic per lane, unchanged. The script
+(`scripts/flake-update-notify.sh`) keys its state file by branch, so two lanes never share
+dedupe state. The notification summary reads "<LABEL> ready (#N)", for example "Server
+update ready (#12)", and clicking it opens that PR. Without `LABEL`, the summary stays
+"Flake update ready (#N)".
 
 ## Migration
 
