@@ -15,12 +15,16 @@ let
 
   subscribe = pkgs.writeShellScript "server-upgrade-subscribe" ''
     NTFY_TOKEN="$(< ${osConfig.sops.secrets.${tokenSecret}.path})"
+    if [ -z "$NTFY_TOKEN" ]; then
+      echo "server-upgrade-notify: ${tokenSecret} is empty or unreadable" >&2
+      exit 1
+    fi
     export NTFY_TOKEN
     # ntfy runs the command through sh with the message in NTFY_* variables; priority 4 and up
-    # (high, urgent) is a failure.
+    # (high, urgent) is a failure. The token stays out of the notify-send child.
     exec ${lib.getExe pkgs.ntfy-sh} subscribe ${ntfy.url}/${ntfy.topic} \
       '[ "$NTFY_PRIORITY" -ge 4 ] && urgency=critical || urgency=normal
-       ${lib.getExe pkgs.libnotify} -a Servers -u "$urgency" "$NTFY_TITLE" "$NTFY_MESSAGE"'
+       ${lib.getExe' pkgs.coreutils "env"} -u NTFY_TOKEN ${lib.getExe pkgs.libnotify} -a Servers -u "$urgency" -- "''${NTFY_TITLE:-Server upgrade}" "$NTFY_MESSAGE"'
   '';
 in
 {

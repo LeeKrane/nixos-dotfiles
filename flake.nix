@@ -582,9 +582,32 @@
                         modules = [ { sops.secrets."ntfy/read-token" = { }; } ];
                       }).config;
                   in
-                  c.home-manager.users.${c.krane.user.name}.systemd.user.services ? server-upgrade-notify
+                  lib.hasPrefix "/nix/store" (
+                    toString
+                      c.home-manager.users.${c.krane.user.name}.systemd.user.services.server-upgrade-notify.Service.ExecStart
+                  )
                 ) desktopHosts;
                 what = "a desktop has no server-upgrade-notify user service once it has the ntfy/read-token secret";
+              }
+              {
+                # The converse: a desktop whose secrets file has no `ntfy` section (as evaluated,
+                # without the stub) defines neither the secret nor the unit.
+                ok = lib.all (
+                  n:
+                  let
+                    c = self.nixosConfigurations.${n}.config;
+                  in
+                  (import ./lib/host-secrets.nix {
+                    inherit lib;
+                    hostName = n;
+                  }).hasSection
+                    "ntfy"
+                  || (
+                    !(c.sops.secrets ? "ntfy/read-token")
+                    && !(c.home-manager.users.${c.krane.user.name}.systemd.user.services ? server-upgrade-notify)
+                  )
+                ) desktopHosts;
+                what = "a desktop without an ntfy secrets section defines the ntfy/read-token secret or the server-upgrade-notify unit";
               }
             ];
             failed = map (e: e.what) (builtins.filter (e: !e.ok) (expectations ++ upgradeExpectations));
