@@ -52,6 +52,7 @@ exit "${STUB_REPORT_EXIT:-0}"
 EOF
 command cat >"$WORK/health" <<'EOF'
 #!/usr/bin/env bash
+sleep "${STUB_HEALTH_SLEEP:-0}"
 exit "${STUB_HEALTH_EXIT:-0}"
 EOF
 chmod +x "$WORK"/bin/* "$WORK/health"
@@ -88,7 +89,7 @@ fresh() {
     point current old
     point booted old
     point profile old
-    unset STUB_SHA STUB_GIT_FAIL STUB_FAILED_UNITS STUB_CURL_EXIT STUB_REPORT_EXIT STUB_HEALTH_EXIT STUB_SYSTEMCTL_FAIL STUB_NIXENV_EXIT STUB_HEALTH_ACTIVE || true
+    unset STUB_SHA STUB_GIT_FAIL STUB_FAILED_UNITS STUB_CURL_EXIT STUB_REPORT_EXIT STUB_HEALTH_EXIT STUB_SYSTEMCTL_FAIL STUB_NIXENV_EXIT STUB_HEALTH_ACTIVE STUB_HEALTH_SLEEP HEALTH_TIMEOUT || true
 }
 run() { # run SUBCOMMAND [ENV=VAL...]: sets $status
     local sub=$1
@@ -308,6 +309,17 @@ check 'boot-health: marks the sha failed' state_is failed-sha NEWREV
 check 'boot-health: remembers the rollback' [ -e "$STATE/rolled-back" ]
 check 'boot-health: stage' [ "$(only_message .stage)" = boot-health ]
 check 'boot-health: keeps the pending check for the rolled-back boot' [ -e "$STATE/pending-check" ]
+
+fresh
+printf 'NEWREV\n' >"$STATE/pending-check"
+run pre
+run boot-health STUB_HEALTH_SLEEP=30 HEALTH_TIMEOUT=1
+check 'boot-health: a hung health check takes the failure path' logged systemctl reboot
+check 'boot-health: a hung health check queues a failure' [ "$(only_message .stage)" = boot-health ]
+fresh
+printf 'NEWREV\n' >"$STATE/pending-check"
+run pre
+run boot-health STUB_HEALTH_EXIT=1
 # second boot, rolled-back system still unhealthy: no further reboot
 rm -f "$LOG/systemctl" "$STATE/outbox"/*.json
 run boot-health STUB_HEALTH_EXIT=1

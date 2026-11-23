@@ -38,6 +38,7 @@ NTFY_TOKEN_FILE="${NTFY_TOKEN_FILE:-}"
 GITHUB_TOKEN_FILE="${GITHUB_TOKEN_FILE:-}"
 REPORT_CMD="${REPORT_CMD:-server-upgrade-report}"
 BOOT_SETTLE_TIMEOUT="${BOOT_SETTLE_TIMEOUT:-300}"
+HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-15m}"
 OUTBOX="$STATE_DIR/outbox"
 export GITHUB_TOKEN_FILE
 
@@ -72,7 +73,8 @@ health() {
         echo "$new" >&2
         return 1
     fi
-    if [ -n "$HEALTH_CHECK" ]; then "$HEALTH_CHECK"; fi
+    # A hung check is a failed check (the unit's RuntimeMaxSec is only the outer backstop).
+    if [ -n "$HEALTH_CHECK" ]; then timeout "$HEALTH_TIMEOUT" "$HEALTH_CHECK"; fi
 }
 
 # Puts the previous running system back as the system profile and runs its own
