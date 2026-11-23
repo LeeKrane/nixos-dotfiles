@@ -60,8 +60,13 @@ reboot_pending() {
 # Healthy: no unit failed since the run started (a unit that was already failing before it
 # does not block upgrades), and the host's own HEALTH_CHECK passes.
 health() {
-    local new
-    new="$(comm -13 <(read_state failed-before) <(failed_units))"
+    local now new
+    # Fail closed: a failing `systemctl --failed` is a health failure, not an empty list.
+    now="$(failed_units)" || {
+        echo "health check failed, could not list the failed units" >&2
+        return 1
+    }
+    new="$(comm -13 <(read_state failed-before) <(printf '%s\n' "$now"))"
     if [ -n "$new" ]; then
         echo "health check failed, units failed since the upgrade started:" >&2
         echo "$new" >&2
@@ -78,14 +83,15 @@ rollback() {
     local pre
     pre="$(read_state pre-switch)"
     [ -n "$pre" ] || return 1
-    nix-env -p "$SYSTEM_PROFILE" --set "$pre"
-    "$pre/bin/switch-to-configuration" "$1"
+    # Callers run this as an `if` condition, where set -e is off: every step must fail it itself.
+    nix-env -p "$SYSTEM_PROFILE" --set "$pre" || return 1
+    "$pre/bin/switch-to-configuration" "$1" || return 1
 }
 
 # queue KIND SHA STAGE ROLLED_BACK: one outbox message (KIND: failed or recovered), then a
 # best-effort kick of the delivery unit.
 queue() {
-    local kind="$1" sha="$2" stage="$3" rolled="$4" sha7 title priority body
+    local kind="$1" sha="$2" stage="$3" rolled="$4" sha7 title priority body tmp
     sha7="${sha:0:7}"
     if [ "$kind" = failed ]; then
         title="$HOST_NAME upgrade failed ($sha7)"
@@ -99,12 +105,13 @@ queue() {
         body="Healthy again on $sha7."
     fi
     mkdir -p "$OUTBOX"
+    tmp="$(mktemp -p "$OUTBOX" .tmp.XXXXXX)"
     jq -nc --arg kind "$kind" --arg host "$HOST_NAME" --arg sha "$sha" --arg stage "$stage" \
         --arg rolled "$rolled" --arg title "$title" --arg priority "$priority" --arg body "$body" \
         '{kind: $kind, host: $host, sha: $sha, stage: $stage, rolled_back: $rolled,
           title: $title, priority: $priority, body: $body, ntfy_done: false, github_done: false}' \
-        >"$OUTBOX/.tmp"
-    mv "$OUTBOX/.tmp" "$OUTBOX/$(date +%s%N)-$kind.json"
+        >"$tmp"
+    mv "$tmp" "$OUTBOX/$(date +%s%N)-$kind.json"
     systemctl start --no-block server-upgrade-notify.service || true
 }
 
@@ -241,6 +248,11 @@ cmd_deliver() {
     local f undelivered=0
     shopt -s nullglob
     for f in "$OUTBOX"/*.json; do
+        if ! jq -e . "$f" >/dev/null 2>&1; then
+            echo "skipping corrupt outbox file $f" >&2
+            undelivered=1
+            continue
+        fi
         if [ "$(jq -r .ntfy_done "$f")" != true ] && send_ntfy "$f"; then mark_done "$f" ntfy_done; fi
         if [ "$(jq -r .github_done "$f")" != true ] && send_github "$f"; then mark_done "$f" github_done; fi
         if [ "$(jq -r '.ntfy_done and .github_done' "$f")" = true ]; then

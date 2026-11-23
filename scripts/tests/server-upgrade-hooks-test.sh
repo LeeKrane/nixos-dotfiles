@@ -26,11 +26,13 @@ printf '%s\n' "$*" >>"$LOG_DIR/systemctl"
 if [ "$1" = --failed ]; then
     for u in ${STUB_FAILED_UNITS:-}; do printf '%s loaded failed failed x\n' "$u"; done
 fi
+[ -z "${STUB_SYSTEMCTL_FAIL:-}" ] || [ "$1" != --failed ] || exit 1
 exit 0
 EOF
 command cat >"$WORK/bin/nix-env" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$LOG_DIR/nix-env"
+exit "${STUB_NIXENV_EXIT:-0}"
 EOF
 command cat >"$WORK/bin/journalctl" <<'EOF'
 #!/usr/bin/env bash
@@ -85,7 +87,7 @@ fresh() {
     point current old
     point booted old
     point profile old
-    unset STUB_SHA STUB_GIT_FAIL STUB_FAILED_UNITS STUB_CURL_EXIT STUB_REPORT_EXIT STUB_HEALTH_EXIT || true
+    unset STUB_SHA STUB_GIT_FAIL STUB_FAILED_UNITS STUB_CURL_EXIT STUB_REPORT_EXIT STUB_HEALTH_EXIT STUB_SYSTEMCTL_FAIL STUB_NIXENV_EXIT || true
 }
 run() { # run SUBCOMMAND [ENV=VAL...]: sets $status
     local sub=$1
@@ -227,6 +229,30 @@ run failed
 check 'failed: a moved profile alone is rolled back too' logged nix-env '--set'
 check 'failed: a rollback drops the pending check' [ ! -e "$STATE/pending-check" ]
 
+fresh
+printf 'NEWREV\n' >"$STATE/target-sha"
+run pre
+point current newsame
+point profile newsame
+run failed STUB_NIXENV_EXIT=1
+check 'failed: a failing profile reset is reported as not rolled back' [ "$(only_message .rolled_back)" = 'no, the rollback failed' ]
+check 'failed: and switch-to-configuration is not run' eval '! logged switch old'
+
+fresh
+printf 'NEWREV\n' >"$STATE/target-sha"
+run pre
+point current newsame
+point profile newsame
+run post STUB_SYSTEMCTL_FAIL=1
+check 'post: a failing systemctl --failed fails the upgrade' [ "$status" -ne 0 ]
+
+fresh
+printf 'NEWREV\n' >"$STATE/target-sha"
+run pre
+run failed
+run failed
+check 'queue: two messages both survive' [ "$(outbox_count)" -eq 2 ]
+
 # --- boot-health ---------------------------------------------------------------------------
 fresh
 run boot-health
@@ -316,6 +342,16 @@ check 'deliver: report exit 44 keeps the message' [ "$(outbox_count)" -eq 1 ]
 check 'deliver: report exit 44 exits non-zero' [ "$status" -ne 0 ]
 run deliver STUB_REPORT_EXIT=22 "${DELIVER[@]}"
 check 'deliver: report exit 22 keeps the message' [ "$(outbox_count)" -eq 1 ]
+
+# a corrupt file does not block the others
+fresh
+printf 'NEWREV\n' >"$STATE/target-sha"
+run pre
+run failed
+printf '{"kind":' >"$STATE/outbox/0-corrupt.json"
+run deliver "${DELIVER[@]}"
+check 'deliver: a corrupt file is left in place, exit non-zero' [ "$(outbox_count)" -eq 1 ] && [ "$status" -ne 0 ]
+check 'deliver: the valid message was still delivered' logged report 'failed tarronax NEWREV'
 
 # a host without tokens treats both channels as done
 fresh
