@@ -20,7 +20,7 @@ while [ "$#" -gt 0 ]; do
     case "$1" in
         -X) method="$2"; shift 2 ;;
         -d) data="$2"; shift 2 ;;
-        -H | --max-time) shift 2 ;;
+        -H | --max-time | -w) shift 2 ;;
         -*) shift ;;
         *) url="$1"; shift ;;
     esac
@@ -33,6 +33,8 @@ echo "$n" >"$FIX/$key.count"
 file="$FIX/$key.$n.json"
 [ -f "$file" ] || file="$FIX/$key.json"
 if [ -f "$file" ]; then command cat "$file"; else echo '{}'; fi
+# like curl -w '\n%{http_code}': 200 unless $key.code says otherwise
+printf '\n%s' "$(command cat "$FIX/$key.code" 2>/dev/null || echo 200)"
 EOF
 chmod +x "$WORK/bin/curl"
 
@@ -48,6 +50,12 @@ fx() {
     local key
     key="$(printf '%s_%s' "$1" "$2" | tr -c 'A-Za-z0-9' _)"
     printf '%s' "$3" >"$WORK/fix/$key${4:+.$4}.json"
+}
+# fxcode METHOD PATH CODE: HTTP status the endpoint answers with (default 200).
+fxcode() {
+    local key
+    key="$(printf '%s_%s' "$1" "$2" | tr -c 'A-Za-z0-9' _)"
+    printf '%s' "$3" >"$WORK/fix/$key.code"
 }
 LIST="/repos/a/b/issues?labels=server-upgrade&state=open&per_page=100"
 SHA=aaaaaaa1111111111111111111111111111111aa
@@ -126,6 +134,18 @@ check 'late older failure: exit 0' [ "$status" -eq 0 ]
 check 'late older failure: ancestry checked' requested "GET /repos/a/b/compare/aaaaaaa...$OLD_SHA"
 check 'late older failure: newer issue stays open' eval '! requested "PATCH /repos/a/b/issues/4"'
 check 'late older failure: no supersede comment' eval '! requested "Superseded"'
+
+# compare answers 404 (unknown/unrelated SHA): that issue is left alone, the rest of the flow completes
+reset
+fx GET "$LIST" "[$(issue 3 "$OLD_T")]" 1
+fx GET "$LIST" "[$(issue 3 "$OLD_T"),$(issue 4 "$T")]" 2
+fx POST /repos/a/b/issues '{"number":4}'
+fx GET "/repos/a/b/compare/1111111...$SHA" '{"message":"Not Found"}'
+fxcode GET "/repos/a/b/compare/1111111...$SHA" 404
+run failed tarronax build no
+check 'compare 404: exit 0' [ "$status" -eq 0 ]
+check 'compare 404: report still posted' requested 'POST /repos/a/b/issues/4/comments'
+check 'compare 404: old issue untouched' eval '! requested "/issues/3"'
 
 # recovery with no open issue: nothing is written
 reset

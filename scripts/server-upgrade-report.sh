@@ -28,13 +28,19 @@ title="Server upgrade failed: ${sha:0:7}"
 api() {
     local method="$1" path="$2"
     shift 2
-    local body=()
+    local body=() out code
     if [ "$#" -gt 0 ]; then body=(-d "$1"); fi
-    curl -fsS --max-time 30 -X "$method" \
+    out="$(curl -sS --max-time 30 -X "$method" -w '\n%{http_code}' \
         -H @<(printf 'Authorization: Bearer %s\n' "$token") \
         -H 'Accept: application/vnd.github+json' \
         -H 'X-GitHub-Api-Version: 2022-11-28' \
-        "${body[@]}" "$API_URL/repos/$REPO$path"
+        "${body[@]}" "$API_URL/repos/$REPO$path")" || return
+    code="${out##*$'\n'}"
+    case "$code" in
+        2??) printf '%s\n' "${out%$'\n'*}" ;;
+        404 | 422) return 44 ;; # unknown ref or unrelated SHAs, see on_failed
+        *) return 22 ;;
+    esac
 }
 
 # Open server-upgrade issues (the issues endpoint also lists pull requests).
@@ -98,9 +104,13 @@ on_failed() {
     fi
     # Close issues of older cycles: only those whose SHA is an ancestor of this one, so a late
     # failure report for an older SHA never closes the issue of a newer one.
-    local old old_sha
+    local old old_sha rc cmp
     while read -r old old_sha; do
-        if [ "$(api GET "/compare/$old_sha...$sha" | jq -r .status)" = ahead ]; then
+        rc=0
+        cmp="$(api GET "/compare/$old_sha...$sha")" || rc=$?
+        # 404/422: SHAs unknown or unrelated, so not an ancestor; any other error aborts.
+        if [ "$rc" -ne 0 ] && [ "$rc" -ne 44 ]; then exit "$rc"; fi
+        if [ "$rc" -eq 0 ] && [ "$(jq -r .status <<<"$cmp")" = ahead ]; then
             comment "$old" "Superseded by #$n."
             close_issue "$old"
         fi
