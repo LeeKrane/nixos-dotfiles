@@ -20,13 +20,14 @@
 #   nixos-rebuild switch --flake .#taragarmr --target-host krane@taragarmr --sudo --ask-sudo-password
 #
 # Secrets (secrets/taragarmr.yaml): wireguard/{wg0,wg1}-private-key, couchdb/env,
-# restic/repo-password. A missing section switches that feature off.
+# restic/repo-password, server-upgrade/github-token, ntfy/{publish-token,server-env}. A missing section switches that feature off.
 { ... }:
 {
   imports = [
     ./hardware-configuration.nix
     ./disko.nix
     ./caddy.nix
+    ./ntfy.nix
     ./couchdb.nix
     ./spt.nix
     ./services.nix

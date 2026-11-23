@@ -548,6 +548,26 @@
                 what = "taragarmr's reboot window is not the last, or a window ends before it starts";
               }
               {
+                ok = lib.all (
+                  n: self.nixosConfigurations.${n}.config.services.ntfy-sh.enable == (n == "taragarmr")
+                ) hosts;
+                what = "services.ntfy-sh is not enabled on taragarmr alone";
+              }
+              {
+                ok =
+                  let
+                    tg = self.nixosConfigurations.taragarmr.config;
+                    ntfy = tg.services.ntfy-sh.settings;
+                  in
+                  ntfy.listen-http == "192.168.82.1:2586"
+                  && ntfy.auth-default-access == "deny-all"
+                  && builtins.elem "wg-quick-wg0.service" tg.systemd.services.ntfy-sh.after
+                  # wg0 is a trusted interface (all ports open there), so 2586 stays closed elsewhere.
+                  && builtins.elem "wg0" tg.networking.firewall.trustedInterfaces
+                  && !builtins.elem 2586 tg.networking.firewall.allowedTCPPorts;
+                what = "ntfy does not listen on taragarmr's WireGuard address alone with deny-all as the default, ordered after wg0 and closed on other interfaces";
+              }
+              {
                 ok = lib.all (n: !self.nixosConfigurations.${n}.config.system.autoUpgrade.enable) desktopHosts;
                 what = "a desktop has system.autoUpgrade enabled";
               }
