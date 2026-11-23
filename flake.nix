@@ -535,16 +535,16 @@
               {
                 ok =
                   lib.sort (a: b: a < b) (map (w: w.lower) (builtins.attrValues windows)) == [
-                    "02:00"
-                    "03:00"
-                    "04:00"
-                    "05:00"
+                    "01:59"
+                    "02:59"
+                    "03:59"
+                    "04:59"
                   ];
-                what = "the servers' reboot windows are not four distinct hours 02:00 to 06:00";
+                what = "the servers' reboot windows are not four distinct hours 02:00 to 06:00 (lower bounds one minute early)";
               }
               {
                 ok =
-                  windows.taragarmr.lower == "05:00" && lib.all (w: w.upper > w.lower) (builtins.attrValues windows);
+                  windows.taragarmr.lower == "04:59" && lib.all (w: w.upper > w.lower) (builtins.attrValues windows);
                 what = "taragarmr's reboot window is not the last, or a window ends before it starts";
               }
               {

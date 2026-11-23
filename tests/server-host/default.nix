@@ -13,7 +13,7 @@
   };
 
   krane.autoUpgrade.rebootWindow = {
-    lower = "02:00";
+    lower = "01:59";
     upper = "03:00";
   };
 

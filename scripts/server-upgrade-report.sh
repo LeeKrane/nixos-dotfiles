@@ -85,7 +85,11 @@ on_failed() {
     issues="$(open_issues)"
     n="$(issue_for_sha <<<"$issues")"
     if [ -n "$n" ]; then
-        comment "$n" "$(report_body failed)"
+        # A retried delivery must not repeat the comment this host already posted.
+        if ! latest_markers "$n" | jq -e --arg h "$host" --arg s "$sha" \
+            'any(.[]; .host == $h and .sha == $s and .status == "failed")' >/dev/null; then
+            comment "$n" "$(report_body failed)"
+        fi
     else
         created="$(api POST /issues "$(jq -nc --arg t "$title" --arg l "$LABEL" \
             --arg b "The automatic upgrade of the servers to \`$sha\` failed. Each host reports in a comment below." \
@@ -108,8 +112,12 @@ on_failed() {
     while read -r old old_sha; do
         rc=0
         cmp="$(api GET "/compare/$old_sha...$sha")" || rc=$?
-        # 404/422: SHAs unknown or unrelated, so not an ancestor; any other error aborts.
-        if [ "$rc" -ne 0 ] && [ "$rc" -ne 44 ]; then exit "$rc"; fi
+        # Any compare error (unrelated SHAs, API or network trouble) leaves that issue open: the
+        # report is already posted, and failing here would make deliver repost it forever.
+        if [ "$rc" -ne 0 ]; then
+            echo "compare $old_sha...$sha failed (rc $rc), leaving #$old open" >&2
+            continue
+        fi
         if [ "$rc" -eq 0 ] && [ "$(jq -r .status <<<"$cmp")" = ahead ]; then
             comment "$old" "Superseded by #$n."
             close_issue "$old"

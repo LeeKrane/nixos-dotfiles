@@ -22,7 +22,7 @@
   # Reboots after a kernel-changing upgrade only inside this hour, one host per hour (the
   # Pis first, the WireGuard hub last).
   krane.autoUpgrade.rebootWindow = {
-    lower = "03:00";
+    lower = "02:59";
     upper = "04:00";
   };
 

@@ -29,7 +29,7 @@ Findings from the pinned nixpkgs-stable source (`/nix/store/7sa2x9c9566lfxkaxs36
 ## Global Constraints
 
 - Repo `LeeKrane/nixos-dotfiles`; flake URI `github:LeeKrane/nixos-dotfiles/deploy#<host>`; branch `deploy`; GitHub label and issue title `Server upgrade failed: <sha7>`, label `server-upgrade`.
-- Reboot windows: tarronax 02:00-03:00, tarritator 03:00-04:00, taronychus 04:00-05:00, taragarmr 05:00-06:00. The option `krane.autoUpgrade.rebootWindow` has no default.
+- Reboot windows: tarronax 01:59-03:00, tarritator 02:59-04:00, taronychus 03:59-05:00, taragarmr 04:59-06:00 (lower bounds one minute early because the upstream comparison is a strict `>`). The option `krane.autoUpgrade.rebootWindow` has no default.
 - `system.autoUpgrade`: `dates = "hourly"`, `randomizedDelaySec = "10min"`, `fixedRandomDelay = true`, `persistent = true`, `allowReboot = true`.
 - State in `/var/lib/server-upgrade/` (`StateDirectory = "server-upgrade"`). ntfy topic `server-upgrades`, listening only on `192.168.82.1:2586` (taragarmr's wg0 address), `auth-default-access = "deny-all"`. ntfy users `upgrade-publisher` (write-only on the topic) and `krane` (read-only).
 - Secrets: `server-upgrade/github-token`, `ntfy/publish-token`, `ntfy/read-token`, `ntfy/server-env`, each declared only when its top-level section exists in the host's secrets file (`lib/host-secrets.nix`).

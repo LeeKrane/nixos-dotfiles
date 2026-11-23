@@ -82,7 +82,8 @@ in
         Window in which the host may reboot after an upgrade that changes the kernel, initrd
         or kernel modules. No default: a server without one fails evaluation, so two hosts
         cannot silently reboot at the same time. A one-hour window contains exactly one
-        hourly run.
+        hourly run. The comparison with the lower bound is strict, so set it one minute early
+        (01:59 for a window starting at 02:00).
       '';
     };
     healthChecks = lib.mkOption {

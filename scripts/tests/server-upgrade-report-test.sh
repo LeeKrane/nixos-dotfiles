@@ -147,6 +147,26 @@ check 'compare 404: exit 0' [ "$status" -eq 0 ]
 check 'compare 404: report still posted' requested 'POST /repos/a/b/issues/4/comments'
 check 'compare 404: old issue untouched' eval '! requested "/issues/3"'
 
+# compare answers 500: non-fatal, the report is posted once and the old issue stays open
+reset
+fx GET "$LIST" "[$(issue 3 "$OLD_T")]" 1
+fx GET "$LIST" "[$(issue 3 "$OLD_T"),$(issue 4 "$T")]" 2
+fx POST /repos/a/b/issues '{"number":4}'
+fx GET "/repos/a/b/compare/1111111...$SHA" '{}'
+fxcode GET "/repos/a/b/compare/1111111...$SHA" 500
+run failed tarronax build no
+check 'compare 500: exit 0' [ "$status" -eq 0 ]
+check 'compare 500: comment posted once' [ "$(grep -c 'POST /repos/a/b/issues/4/comments' "$WORK/log/requests")" -eq 1 ]
+check 'compare 500: old issue left open' eval '! requested "/issues/3"'
+
+# a repeated failed call for the same host and SHA does not comment again
+reset
+fx GET "$LIST" "[$(issue 5 "$T")]"
+fx GET "/repos/a/b/issues/5/comments?per_page=100" "[$(marker tarronax failed)]"
+run failed tarronax build no
+check 'repeat failed: exit 0' [ "$status" -eq 0 ]
+check 'repeat failed: no second comment' eval '! wrote'
+
 # recovery with no open issue: nothing is written
 reset
 fx GET "$LIST" '[]'

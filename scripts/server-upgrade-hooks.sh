@@ -100,7 +100,7 @@ queue() {
         priority=high
         # No -b: after a boot-health rollback the upgrade's own log is in the previous boot.
         body="$(printf 'Stage: %s\nRolled back: %s\n\n' "$stage" "$rolled"
-            journalctl -u nixos-upgrade -u server-upgrade-health -n 30 --no-pager 2>/dev/null || true)"
+            journalctl -u nixos-upgrade -u server-upgrade-health -n 15 --no-pager 2>/dev/null | tail -c 3000 || true)"
     else
         title="$HOST_NAME recovered on $sha7"
         priority=low
@@ -257,7 +257,7 @@ send_github() {
 # Any non-zero exit of a channel (network, 5xx, the report command's 44) keeps the message
 # queued; it is removed only once both channels took it.
 cmd_deliver() {
-    local f undelivered=0
+    local f undelivered=0 github_down=0
     shopt -s nullglob
     for f in "$OUTBOX"/*.json; do
         if ! jq -e . "$f" >/dev/null 2>&1; then
@@ -268,7 +268,11 @@ cmd_deliver() {
             continue
         fi
         if [ "$(jq -r .ntfy_done "$f")" != true ] && send_ntfy "$f"; then mark_done "$f" ntfy_done; fi
-        if [ "$(jq -r .github_done "$f")" != true ] && send_github "$f"; then mark_done "$f" github_done; fi
+        # After one GitHub failure skip the channel for the rest of the pass, so a later
+        # `recovered` never reaches GitHub before an earlier `failed` of the same host.
+        if [ "$(jq -r .github_done "$f")" != true ] && [ "$github_down" -eq 0 ]; then
+            if send_github "$f"; then mark_done "$f" github_done; else github_down=1; fi
+        fi
         if [ "$(jq -r '.ntfy_done and .github_done' "$f")" = true ]; then
             rm -f "$f"
         else

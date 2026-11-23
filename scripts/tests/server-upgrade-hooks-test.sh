@@ -37,6 +37,7 @@ exit "${STUB_NIXENV_EXIT:-0}"
 EOF
 command cat >"$WORK/bin/journalctl" <<'EOF'
 #!/usr/bin/env bash
+if [ -n "${STUB_JOURNAL_HUGE:-}" ]; then head -c 20000 /dev/zero | tr '\0' x; echo; fi
 echo "journal line"
 EOF
 # curl stub (ntfy): records the url and body, fails with $STUB_CURL_EXIT.
@@ -398,6 +399,25 @@ run pre
 run failed
 run deliver
 check 'deliver: unconfigured channels do not hold messages back' [ "$(outbox_count)" -eq 0 ]
+
+# once GitHub fails in a pass, later files skip GitHub so a recovered never overtakes its failed
+fresh
+printf 'NEWREV\n' >"$STATE/target-sha"
+run pre
+run failed
+run failed
+run deliver STUB_REPORT_EXIT=1 "${DELIVER[@]}"
+check 'deliver: github failure skips the reporter for later files' [ "$(wc -l <"$LOG/report")" -eq 1 ]
+check 'deliver: both files stay queued' [ "$(outbox_count)" -eq 2 ]
+
+# a huge journal must not push the ntfy body over 4 KB (it would become an attachment)
+fresh
+printf 'NEWREV\n' >"$STATE/target-sha"
+run pre
+run failed STUB_JOURNAL_HUGE=1
+check 'failed: body stays under 4096 bytes' [ "$(only_message .body | wc -c)" -lt 4096 ]
+check 'failed: body keeps the Stage line' eval '[[ "$(only_message .body)" == *"Stage: "* ]]'
+check 'failed: body keeps the Rolled back line' eval '[[ "$(only_message .body)" == *"Rolled back: "* ]]'
 
 echo
 if [ "$failures" -eq 0 ]; then echo 'all passed'; else echo "$failures failed"; exit 1; fi

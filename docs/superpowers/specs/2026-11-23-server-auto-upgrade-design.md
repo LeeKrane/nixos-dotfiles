@@ -118,9 +118,10 @@ system.autoUpgrade = {
 Options:
 
 - `krane.autoUpgrade.rebootWindow` (`{ lower; upper; }`, no default, so a server without one
-  fails evaluation). Set in each host's `default.nix`: tarronax `02:00`–`03:00`,
-  tarritator `03:00`–`04:00`, taronychus `04:00`–`05:00`, taragarmr `05:00`–`06:00`. A
-  one-hour window always contains exactly one hourly run.
+  fails evaluation). Set in each host's `default.nix`: tarronax `01:59`–`03:00`,
+  tarritator `02:59`–`04:00`, taronychus `03:59`–`05:00`, taragarmr `04:59`–`06:00`. NixOS
+  compares the time with a strict `>` on the lower bound, so each lower bound is one minute early
+  to let a run at exactly `HH:00` match. A one-hour window always contains exactly one hourly run.
 - `krane.autoUpgrade.healthChecks` (list of shell commands, each must exit 0). Default: no
   failed units (`systemctl --failed --no-legend` prints nothing). The Pis add a ping of the
   hub's WireGuard address from `lib/wireguard.nix`. taragarmr adds a `curl` of its Caddy
