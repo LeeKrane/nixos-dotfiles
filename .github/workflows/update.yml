@@ -33,9 +33,10 @@ jobs:
       - name: Compute host list
         id: hosts
         run: |
-          # scripts/hosts.nix is the one shared place for this list; check.yml's
-          # eval matrix and the security job below use the same file.
-          nix eval --json --impure '.#lib.hostMeta' --apply 'import ./scripts/hosts.nix' > "$RUNNER_TEMP/hosts.json"
+          # Every host, the Pis included: the version table and the security job report
+          # on all of them. (scripts/hosts.nix, the x86_64-only list, still drives check.yml's
+          # eval matrix: the x86 runners cannot build the Pis.)
+          nix eval --json '.#lib.hostMeta' --apply builtins.attrNames > "$RUNNER_TEMP/hosts.json"
           echo "hosts=$(command cat "$RUNNER_TEMP/hosts.json")" >> "$GITHUB_OUTPUT"
       - name: Save old flake.lock
         run: cp flake.lock "$RUNNER_TEMP/flake.lock.old"
@@ -65,11 +66,15 @@ jobs:
           cp -r pkgs/claude-code "$RUNNER_TEMP/claude-code.new"
       - name: Package versions after update
         if: steps.diff.outputs.haschanges == 'true'
+        env:
+          HOSTS_JSON: ${{ steps.hosts.outputs.hosts }}
         run: |
           nix eval --json --impure '.#nixosConfigurations' \
-            --apply 'import ./scripts/update-versions.nix' > "$RUNNER_TEMP/versions-after.json"
+            --apply 'cfgs: import ./scripts/update-versions.nix cfgs (builtins.fromJSON (builtins.getEnv "HOSTS_JSON"))' > "$RUNNER_TEMP/versions-after.json"
       - name: Package versions before update
         if: steps.diff.outputs.haschanges == 'true'
+        env:
+          HOSTS_JSON: ${{ steps.hosts.outputs.hosts }}
         run: |
           # The update commit hasn't happened yet, so HEAD still holds the
           # pre-update content. If pkgs/claude-code is new (untracked at
@@ -78,7 +83,7 @@ jobs:
           # committed or pushed.
           git restore --source=HEAD --worktree -- flake.lock pkgs/claude-code
           nix eval --json --impure '.#nixosConfigurations' \
-            --apply 'import ./scripts/update-versions.nix' > "$RUNNER_TEMP/versions-before.json"
+            --apply 'cfgs: import ./scripts/update-versions.nix cfgs (builtins.fromJSON (builtins.getEnv "HOSTS_JSON"))' > "$RUNNER_TEMP/versions-before.json"
           # Put the updated state back so the commit below captures it.
           rm -rf pkgs/claude-code
           cp "$RUNNER_TEMP/flake.lock.new" flake.lock
@@ -149,10 +154,19 @@ jobs:
           ref: ${{ needs.update.outputs.sha }}
           fetch-depth: 2
       - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+        with:
+          # The Pis' kernels, firmware and images come from nixos-raspberrypi's cache (the same
+          # substituter and key as modules/nixos/common/nix-settings.nix); without it every Pi
+          # kernel would count as a local build.
+          extra_nix_config: |
+            extra-substituters = https://nixos-raspberrypi.cachix.org
+            extra-trusted-public-keys = nixos-raspberrypi.cachix.org-1:4iMO9LXa8BqhU+Rpg6LQKiGa2lsNh/j2oiYLNOQ5sPI=
       - name: Evaluate toplevel derivations before and after
+        env:
+          HOSTS_JSON: ${{ needs.update.outputs.hosts }}
         run: |
           # shellcheck disable=SC2016 # ${h} is Nix antiquotation, not a shell variable
-          apply='cfgs: let hosts = import ./scripts/hosts.nix (builtins.getFlake (toString ./.)).lib.hostMeta; in builtins.listToAttrs (map (h: { name = h; value = cfgs.${h}.config.system.build.toplevel.drvPath; }) hosts)'
+          apply='cfgs: let hosts = builtins.fromJSON (builtins.getEnv "HOSTS_JSON"); in builtins.listToAttrs (map (h: { name = h; value = cfgs.${h}.config.system.build.toplevel.drvPath; }) hosts)'
           # git restore --worktree is no-overlay: unlike `git checkout <ref> --
           # <path>`, it deletes a path that exists in the worktree but not at
           # <ref> (e.g. pkgs/claude-code, if this update added it).
