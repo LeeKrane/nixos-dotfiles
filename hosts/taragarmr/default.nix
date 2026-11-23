@@ -4,14 +4,14 @@
 # to an external USB drive at /mnt/backup (backup-drive.nix). LAN address 192.168.178.23 (DHCP
 # lease pinned in the Fritzbox).
 #
-# First install (replaces the Fedora/Nobara host; back up per ~/server-migration first):
+# First install (replaces the Fedora/Nobara host; back up its data first):
 #   nix run github:nix-community/nixos-anywhere -- --flake .#taragarmr \
 #     --generate-hardware-config nixos-generate-config ./hosts/taragarmr/hardware-configuration.nix \
 #     --target-host root@<installer-ip>
 # disko partitions the NVMe per ./disko.nix. The sops age key derives from this host's SSH
-# host key, pre-generated in ~/server-migration/host-keys/taragarmr/etc/ssh/ (its age recipient
-# is &host_taragarmr in .sops.yaml); inject it with
-#   nixos-anywhere ... --extra-files ~/server-migration/host-keys/taragarmr
+# host key, pre-generated and stored encrypted in the password manager (its age recipient
+# is &host_taragarmr in .sops.yaml); restore it to <dir>/etc/ssh/ and inject it with
+#   nixos-anywhere ... --extra-files <dir>
 # so secrets/taragarmr.yaml decrypts on first boot. Do not run scripts/bootstrap-sops.sh.
 # krane's password is not in the repo or sops; set it on site: add `--phases kexec,disko,install` (skips the reboot phase) to the
 # nixos-anywhere call above (same command, same --extra-files), then

@@ -251,7 +251,7 @@ How decryption works (`.sops.yaml`):
 
 - Each server decrypts with an age key derived from its own
   `/etc/ssh/ssh_host_ed25519_key` (`sops.age.sshKeyPaths`). Those host keys were generated
-  before install and are kept in `~/server-migration/host-keys/<host>/etc/ssh/`.
+  before install and are stored encrypted in the password manager.
 - Every server file is also encrypted to the admin keys of tariognatha and tarmantria, each
   in `~/.config/sops/age/keys.txt` on that desktop.
 - Desktop files are encrypted to that desktop's own admin key and host key.
@@ -261,8 +261,8 @@ What to back up so the secrets survive a redeploy:
 1. The admin age keys, `~/.config/sops/age/keys.txt` on tariognatha and tarmantria. They
    are the root of trust: either one can decrypt every server file and re-key it with
    `sops updatekeys`. Losing both means every server secret has to be recreated.
-2. Each server's SSH host key pair, `~/server-migration/host-keys/<host>/etc/ssh/`
-   (`ssh_host_ed25519_key` and `.pub`). This is a convenience: a redeploy injects it again
+2. Each server's SSH host key pair (`ssh_host_ed25519_key` and `.pub`), stored encrypted in
+   the password manager. This is a convenience: a redeploy injects it again
    (`nixos-anywhere --extra-files` for taragarmr, copied onto the SD image for the Pis), so
    the host's age recipient is unchanged and its file decrypts on first boot. Losing it
    means generating a new key, replacing that host's recipient in `.sops.yaml`, and running

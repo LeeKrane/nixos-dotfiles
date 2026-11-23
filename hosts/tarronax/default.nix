@@ -4,7 +4,7 @@
 # Image: nix build .#image-tarronax, then `zstd -d` and dd it to the SD card (or the Pi
 # imager's "use custom"). The image is built from this config, so the first boot already has
 # the account and ssh keys. The sops age key derives from this host's pre-generated SSH host key
-# (~/server-migration/host-keys/tarronax/etc/ssh/, recipient &host_tarronax in .sops.yaml):
+# (stored encrypted in the password manager, recipient &host_tarronax in .sops.yaml):
 # before first boot, copy ssh_host_ed25519_key (root:root 0600) and .pub (0644) from there
 # into /etc/ssh on the flashed card's root partition; sshd keeps an existing key. Do not run
 # scripts/bootstrap-sops.sh. Secrets: wireguard/wg0-private-key;

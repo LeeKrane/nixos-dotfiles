@@ -3,7 +3,7 @@
 #
 # Image: nix build .#image-tarritator, then `zstd -d` and dd it to the SD card. The sops age
 # key derives from this host's pre-generated SSH host key
-# (~/server-migration/host-keys/tarritator/etc/ssh/, recipient &host_tarritator in .sops.yaml):
+# (stored encrypted in the password manager, recipient &host_tarritator in .sops.yaml):
 # before first boot, copy ssh_host_ed25519_key (root:root 0600) and .pub (0644) from there into
 # /etc/ssh on the flashed card's root partition; sshd keeps an existing key. Do not run
 # scripts/bootstrap-sops.sh. Secrets: wireguard/wg0-private-key; without that section wg0
