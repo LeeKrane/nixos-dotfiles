@@ -51,6 +51,8 @@ jobs:
           nix shell --inputs-from . nixpkgs#curl nixpkgs#jq nixpkgs#gawk -c bash scripts/tests/server-upgrade-hooks-test.sh
       - name: update-lanes tests
         run: nix shell --inputs-from . nixpkgs#jq -c bash scripts/tests/update-lanes-test.sh
+      - name: collapse-hosts tests
+        run: nix shell --inputs-from . nixpkgs#jq nixpkgs#gawk -c bash scripts/tests/collapse-hosts-test.sh
 
   # Same ref as the eval jobs: under workflow_call (update.yml calls this with
   # ref: needs.update.outputs.sha, the exact pushed commit), github.ref is the

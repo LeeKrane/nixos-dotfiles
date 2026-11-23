@@ -19,7 +19,9 @@
 #                                           builds)
 #              build-after-<host>.failed   same, post-update drv
 #   HOST...  one or more host names, in display order
+#   HOST_ROLES  optional env, {host: role} JSON for every flake host: collapses host lists
 set -euo pipefail
+LIB="$(dirname "$(readlink -f "$0")")/lib"
 
 WORKDIR="${1:?usage: security-summary.sh WORKDIR HOST...}"
 shift
@@ -72,6 +74,7 @@ done
 # Keyed on (host, cve, package), not version: a version bump that leaves the
 # same CVE unfixed on the same package must show as neither new nor fixed.
 cat >"$WORK/diff.jq" <<'JQ'
+include "collapse-hosts";
 def tkey: [.cve, .package];
 
 ($before[0]) as $before |
@@ -97,8 +100,9 @@ def tkey: [.cve, .package];
 # today) and rows for the "fixed" side come from $before (the version that
 # carried the CVE before the update), so .version is already the right side
 # per caller; group it into one deduplicated, comma-joined string in case it
-# somehow differs across the hosts a group spans. A group spanning every
-# scanned host shows "all" instead of listing them.
+# somehow differs across the hosts a group spans. With HOST_ROLES set, the
+# hosts are collapsed against the whole flake (scripts/lib/collapse-hosts.jq).
+# Without it, a group spanning every scanned host shows "all".
 def grouped($flat):
   $flat
   | group_by([.cve, .package])
@@ -108,13 +112,15 @@ def grouped($flat):
       package: .[0].package,
       versions: (map(.version) | map(select(. != "")) | unique | join(", ")),
       hosts: (map(.host) | unique
-        | if length == $nhosts then "all" else join(", ") end),
+        | if $roles != null then collapse_hosts($roles)
+          elif length == $nhosts then "all" else join(", ") end),
     })
   | sort_by(-.cvss);
 { new: grouped($newFlat), fixed: grouped($fixedFlat) }
 JQ
 
 diff_json="$(jq -n --slurpfile before "$before_flat" --slurpfile after "$after_flat" \
+  -L "$LIB" --argjson roles "${HOST_ROLES:-null}" \
   --argjson nhosts "${#HOSTS[@]}" -f "$WORK/diff.jq")"
 
 new_count="$(jq '.new | length' <<<"$diff_json")"

@@ -15,7 +15,10 @@
 #                           or neither, the package table is skipped otherwise
 #   RAW_LOG                 optional, raw `nix flake update` output, quoted
 #                           verbatim in the <details> block
+#   HOST_ROLES              optional env, {host: role} JSON for every flake host:
+#                           collapses host lists (scripts/lib/collapse-hosts.jq)
 set -euo pipefail
+LIB="$(dirname "$(readlink -f "$0")")/lib"
 
 OLD_LOCK="${1:?usage: update-summary.sh OLD_LOCK NEW_LOCK [VERSIONS_BEFORE VERSIONS_AFTER] [RAW_LOG]}"
 NEW_LOCK="${2:?usage: update-summary.sh OLD_LOCK NEW_LOCK [VERSIONS_BEFORE VERSIONS_AFTER] [RAW_LOG]}"
@@ -104,6 +107,7 @@ JQ
 # before grouping, so a package with no surviving host is left out
 # entirely.
 cat >"$WORKDIR/version-diff.jq" <<'JQ'
+include "collapse-hosts";
 ($before[0]) as $before |
 ($after[0]) as $after |
 ($before | keys) as $hosts |
@@ -125,7 +129,8 @@ cat >"$WORKDIR/version-diff.jq" <<'JQ'
     groups: (
       $changes
       | group_by([.before, .after])
-      | map({ before: .[0].before, after: .[0].after, hosts: (map(.host) | join(", ")) })
+      | map({ before: .[0].before, after: .[0].after,
+              hosts: (map(.host) | if $roles == null then join(", ") else collapse_hosts($roles) end) })
     ),
   }
 ] as $packages |
@@ -139,7 +144,8 @@ trans_rows="$(jq -r '.trans[]' <<<"$diff_json")"
 
 # --- Package versions -------------------------------------------------------
 if [ -n "$VERSIONS_BEFORE" ] && [ -n "$VERSIONS_AFTER" ]; then
-  version_diff="$(jq -n \
+  version_diff="$(jq -n -L "$LIB" \
+    --argjson roles "${HOST_ROLES:-null}" \
     --slurpfile before "$VERSIONS_BEFORE" \
     --slurpfile after "$VERSIONS_AFTER" -f "$WORKDIR/version-diff.jq")"
   needs_hosts="$(jq -r '.needsHosts' <<<"$version_diff")"
