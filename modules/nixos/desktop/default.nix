@@ -17,5 +17,6 @@
     ./recording.nix
     ./flatpak.nix
     ./appimage.nix
+    ./server-upgrade-notify.nix
   ];
 }

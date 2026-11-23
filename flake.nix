@@ -571,6 +571,21 @@
                 ok = lib.all (n: !self.nixosConfigurations.${n}.config.system.autoUpgrade.enable) desktopHosts;
                 what = "a desktop has system.autoUpgrade enabled";
               }
+              {
+                # The subscriber is only defined once the host has the ntfy/read-token secret,
+                # so give each desktop one for this evaluation.
+                ok = lib.all (
+                  n:
+                  let
+                    c =
+                      (self.nixosConfigurations.${n}.extendModules {
+                        modules = [ { sops.secrets."ntfy/read-token" = { }; } ];
+                      }).config;
+                  in
+                  c.home-manager.users.${c.krane.user.name}.systemd.user.services ? server-upgrade-notify
+                ) desktopHosts;
+                what = "a desktop has no server-upgrade-notify user service once it has the ntfy/read-token secret";
+              }
             ];
             failed = map (e: e.what) (builtins.filter (e: !e.ok) (expectations ++ upgradeExpectations));
           in

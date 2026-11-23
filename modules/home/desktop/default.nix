@@ -21,6 +21,7 @@
     ./drawing.nix
     ./teamclaude.nix
     ./flake-update-notify.nix
+    ./server-upgrade-notify.nix
     ./steam.nix
     ./ani-cli.nix
   ];
