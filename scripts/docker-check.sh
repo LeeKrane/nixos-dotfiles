@@ -95,6 +95,9 @@ case "$mode" in
         # shellcheck disable=SC2016 # expands inside the container's sh, not here
         run_in_container '
             set -eu
+            # As in CI: building lua-syntax realizes the applyPatches sources
+            # lib/mk-host.nix imports (IFD), which --no-build cannot build.
+            nix build --no-link .#checks.x86_64-linux.lua-syntax
             nix flake check --no-build --show-trace
             for h in '"${HOSTS[*]}"'; do
                 nix build .#nixosConfigurations.$h.config.system.build.toplevel --dry-run
