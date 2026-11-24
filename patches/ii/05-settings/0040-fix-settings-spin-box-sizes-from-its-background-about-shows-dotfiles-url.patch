@@ -1,0 +1,78 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Fri, 2 Oct 2026 15:00:00 +0200
+Subject: [PATCH] fix(settings): spin box sizes from its background; About
+ shows the dotfiles git URL
+
+---
+ .../ii/modules/common/widgets/StyledSpinBox.qml |  5 +++--
+ .../quickshell/ii/modules/settings/About.qml    | 17 ++++++++++++++++-
+ 2 files changed, 19 insertions(+), 3 deletions(-)
+
+diff --git a/dots/.config/quickshell/ii/modules/common/widgets/StyledSpinBox.qml b/dots/.config/quickshell/ii/modules/common/widgets/StyledSpinBox.qml
+index d2eadf6..d91a02e 100644
+--- a/dots/.config/quickshell/ii/modules/common/widgets/StyledSpinBox.qml
++++ b/dots/.config/quickshell/ii/modules/common/widgets/StyledSpinBox.qml
+@@ -19,6 +19,9 @@ SpinBox {
+     background: Rectangle {
+         color: Appearance.colors.colLayer2
+         radius: root.radius
++        // Basic SpinBox sizes itself from this (indicators are padding): 40 px of text + both buttons.
++        implicitWidth: 40 + 2 * root.baseHeight
++        implicitHeight: root.baseHeight
+     }
+
+     // The TextInput is the contentItem itself, so Qt's own commit path applies a
+@@ -26,8 +29,6 @@ SpinBox {
+     // an imperative `root.value = ...`, which would break any `value:` binding a
+     // user of this control (ConfigSpinBox alias) sets.
+     contentItem: StyledTextInput {
+-        implicitHeight: root.baseHeight
+-        implicitWidth: Math.max(contentWidth, 40)
+         horizontalAlignment: TextInput.AlignHCenter
+         verticalAlignment: TextInput.AlignVCenter
+         text: root.value // displayText would make the numbers weird like 1,000 instead of 1000
+diff --git a/dots/.config/quickshell/ii/modules/settings/About.qml b/dots/.config/quickshell/ii/modules/settings/About.qml
+index 631af21..5284d76 100644
+--- a/dots/.config/quickshell/ii/modules/settings/About.qml
++++ b/dots/.config/quickshell/ii/modules/settings/About.qml
+@@ -33,6 +33,19 @@ ContentPage {
+         }
+     }
+
++    // The dotfiles web URL, from the git origin (ssh scp-style, ssh:// and https forms).
++    property string dotfilesUrl: ""
++    Process {
++        running: dotfilesDir !== ""
++        command: ["git", "-C", dotfilesDir, "remote", "get-url", "origin"]
++        stdout: StdioCollector {
++            onStreamFinished: {
++                const m = text.trim().match(/^(?:https?:\/\/|ssh:\/\/|git:\/\/)?(?:[^@/]+@)?([^/:]+)(?::\d+)?[:/](.+?)(?:\.git)?\/?$/);
++                dotfilesUrl = m ? `https://${m[1]}/${m[2]}` : "";
++            }
++        }
++    }
++
+     Component.onCompleted: {
+         SystemInfo.refresh()
+     }
+@@ -183,13 +196,15 @@ ContentPage {
+                 label: "dots-hyprland"
+                 iconShape: MaterialShape.Shape.Cookie9Sided
+                 value: (kraneBuildInfo.rev ?? "unknown").slice(0, 12) + ` + ${kraneBuildInfo.patches ?? "?"} patches`
++                clickAction: () => Qt.openUrlExternally("https://github.com/end-4/dots-hyprland")
+                 Layout.fillWidth: true
+             }
+             AboutCard {
+                 icon: "folder_code"
+                 label: "Dotfiles"
+                 iconShape: MaterialShape.Shape.Sunny
+-                value: dotfilesDir || "Loading..."
++                value: dotfilesUrl || dotfilesDir || "Loading..."
++                clickAction: dotfilesUrl ? () => Qt.openUrlExternally(dotfilesUrl) : null
+                 Layout.fillWidth: true
+             }
+
+--
+2.56.0
+
