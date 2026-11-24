@@ -22,7 +22,8 @@ step deadnix nixsh nixpkgs#deadnix -c deadnix --fail --exclude hosts/*/hardware-
 step shellcheck nixsh nixpkgs#shellcheck -c shellcheck -x -S style install.sh scripts/*.sh scripts/tests/*.sh scripts/ii-agents/*.sh
 # With shellcheck on PATH, actionlint also checks every inline `run:` block.
 step actionlint nixsh nixpkgs#actionlint nixpkgs#shellcheck -c actionlint
-step "secrets encrypted" bash scripts/check-secrets-encrypted.sh
+# gawk from the flake: the docker lint container has no awk.
+step "secrets encrypted" nixsh nixpkgs#gawk -c bash scripts/check-secrets-encrypted.sh
 
 if [ "${#failed[@]}" -gt 0 ]; then
     echo "lint failed: ${failed[*]}" >&2
