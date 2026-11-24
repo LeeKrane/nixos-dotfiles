@@ -47,6 +47,9 @@ in
           echo "kraneIiConfigMigrate: $src/config.json and $dst/config.json differ." >&2
           echo "Keep one by hand (move the other away), then switch again. Nothing was changed." >&2
           exit 1
+        else
+          # Keep local presets/ and actions/ too (no-clobber), not only in .hm-bak.
+          $DRY_RUN_CMD ${pkgs.coreutils}/bin/cp -an "$src/." "$dst/"
         fi
       elif [ ! -d "$dst" ]; then
         # The VM check target has no checkout. Create the directory anyway: a dangling link would

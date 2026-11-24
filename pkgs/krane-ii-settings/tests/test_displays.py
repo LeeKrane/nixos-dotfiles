@@ -80,6 +80,13 @@ class TestMonitors(Base):
         self.assertEqual(self.repo_data(), {})
         self.assertIn(("stop_timer",), self.runtime.calls)
 
+    def test_boot_check_reads_connected_after_lock_waits(self):
+        self.repo.write_text('{"monitors": {"DP-2": {"bootConfirmed": false, "cm": "hdr"}}}\n')
+        self.runtime.lock_states = ["true", "false"]
+        self.runtime.connected_outputs = lambda: (
+            {"DP-2"} if not self.runtime.lock_states else set())
+        self.assertIn("DP-2", self.s.boot_check(wait_seconds=5, poll=0))
+
     def test_boot_check_skips_disconnected_output(self):
         # I1: an output Hyprland does not currently report connected stays
         # bootConfirmed=false and is never added to the pending file.

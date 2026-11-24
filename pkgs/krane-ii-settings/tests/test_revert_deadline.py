@@ -1,44 +1,39 @@
-"""get() reports the real revert timer's deadline so the GUI countdown matches it.
+"""get() reports the revert deadline stored when the timer was started, so the GUI countdown matches it.
 Run from pkgs/krane-ii-settings: python3 -m unittest discover -s tests -v
 """
 
 import json
 import subprocess
+import time
 import unittest
 from unittest import mock
 
 from test_commands import Base, k
 
 
-def _result(stdout="", returncode=0):
-    return subprocess.CompletedProcess([], returncode, stdout=stdout, stderr="")
-
-
 class TestRevertDeadline(Base):
-    def test_get_reports_deadline_while_timer_active(self):
-        self.runtime.timer = True
-        self.runtime.deadline = 1_800_000_015.5
-        self.assertEqual(json.loads(self.s.get())["revertDeadline"], 1_800_000_015.5)
+    def test_try_stores_deadline_and_get_reports_it(self):
+        self.runtime.live_monitors = {"DP-2": {"mode": "1x1@60", "position": "0x0", "scale": 1.0}}
+        before = time.time()
+        self.s.try_monitor("DP-2", [("cm", "hdr")])
+        deadline = json.loads(self.s.get())["revertDeadline"]
+        self.assertGreaterEqual(deadline, before + k.REVERT_SECONDS)
+        self.assertLessEqual(deadline, time.time() + k.REVERT_SECONDS)
+
+    def test_boot_check_stores_deadline(self):
+        self.repo.write_text('{"monitors": {"DP-2": {"bootConfirmed": false, "cm": "hdr"}}}\n')
+        self.s.boot_check(wait_seconds=0, poll=0)
+        self.assertGreater(json.loads(self.s.get())["revertDeadline"], time.time())
 
     def test_get_reports_null_when_timer_inactive(self):
-        self.runtime.deadline = 1_800_000_015.5
+        k.write_pending({"kind": "try", "deadline": time.time() + 10})
         self.assertIsNone(json.loads(self.s.get())["revertDeadline"])
 
-    def test_runtime_parses_systemctl_microseconds(self):
-        with mock.patch.object(k.subprocess, "run", return_value=_result("1800000015500000\n")) as run:
-            self.assertEqual(k.Runtime(self.manifest).revert_deadline(), 1_800_000_015.5)
-        self.assertIn("NextElapseUSecRealtime", run.call_args[0][0])
-
-    def test_runtime_none_on_failure_unset_or_timeout(self):
-        rt = k.Runtime(self.manifest)
-        for res in (_result("", 1), _result("0\n"), _result("n/a\n"), _result("")):
-            with mock.patch.object(k.subprocess, "run", return_value=res):
-                self.assertIsNone(rt.revert_deadline())
-
+    def test_revert_timer_active_false_on_timeout(self):
         def hang(*a, **kw):
             raise subprocess.TimeoutExpired(a[0], kw.get("timeout"))
         with mock.patch.object(k.subprocess, "run", hang):
-            self.assertIsNone(rt.revert_deadline())
+            self.assertFalse(k.Runtime(self.manifest).revert_timer_active())
 
 
 if __name__ == "__main__":
