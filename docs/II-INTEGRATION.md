@@ -88,7 +88,7 @@ any `nix flake update` that moves `illogical-flake`.
 | `custom/rules.lua` | owned | Upstream ships it empty. |
 | `custom/env.lua` | appended | Truncated with `cat >` every switch. Our block must land after. |
 | `custom/general.lua` | appended | The soymou module appends its `hl.plugin` block. Our block must land after. |
-| `custom/krane_gui.lua` | owned | Rendered from `hosts/<host>/ii-settings.json` by `modules/home/ii-settings.nix`; rewritten live by the settings window. Required last by `monitors.lua`. |
+| `custom/krane_gui.lua` | owned | Rendered from `hosts/<host>/ii-settings.json` by `modules/home/desktop/ii-settings.nix`; rewritten live by the settings window. Required last by `monitors.lua`. |
 
 Recording binds (`custom/keybinds.lua`) come from `modules/home/desktop/recording.nix`,
 which also unbinds ii's upstream wf-recorder binds
@@ -241,7 +241,7 @@ file is skipped rather than failing activation:
   points each call at the `gsettings-desktop-schemas` directory directly.
 
 Idle timeouts are no longer a sed: `kraneIiIdle` (in
-`modules/home/ii-settings.nix`) runs ii's `hypridleconfigurator.py` with the
+`modules/home/desktop/ii-settings.nix`) runs ii's `hypridleconfigurator.py` with the
 values from `krane.hypr.idle`, `idleTimeouts = false` (all zeros) or the
 settings window. See "Settings persistence".
 
@@ -560,7 +560,7 @@ manifest) is the only writer of `ii-settings.json`:
   `git checkout`. The settings window offers the same as "Apply now" when it
   sees the file change; nothing is applied on its own.
 - `activate`: run at every home-manager activation (`home.activation.kraneIiActivate`
-  in `modules/home/ii-settings.nix`), not just at login. home-manager re-runs
+  in `modules/home/desktop/ii-settings.nix`), not just at login. home-manager re-runs
   activation at every boot from the last `nixos-rebuild switch`'s build-time
   render, so without this step any GUI change made since that switch would be
   lost on reboot; `activate` re-renders the live file and the idle config from
@@ -610,7 +610,7 @@ alongside each `hl.monitor({...})` call, keyed by output name, holding the
 full rendered rule it just sent to Hyprland — `output`, `mode`, `position`
 and `scale` included, alongside every GUI-owned field. The `monitors.lua`
 trailer requires `custom/krane_gui.lua` last, then calls `krane_after_gui()`
-if the host defined one (`modules/home/hypr-config.nix`'s `monitorsFile`).
+if the host defined one (`modules/home/desktop/hypr-config.nix`'s `monitorsFile`).
 A host that needs its `extraMonitorsLua` to survive hotplug sets
 `krane_after_gui` to a function that merges `KRANE_GUI_MONITORS[output]`
 into each rule it re-sends before calling `hl.monitor`, skipping `output`,

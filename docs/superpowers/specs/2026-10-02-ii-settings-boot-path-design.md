@@ -11,7 +11,7 @@ Covers the pre-merge issues raised against the boot/activation path in
 and `hypridle.conf` from the repo file at every home-manager activation, so a
 GUI change made since the last `nixos-rebuild switch` survives a reboot
 (`pkgs/krane-ii-settings/krane_ii_settings.py:809-839`, wired in
-`modules/home/ii-settings.nix:241-243`). That activation entry still ends in
+`modules/home/desktop/ii-settings.nix:241-243`). That activation entry still ends in
 `|| true`, written on the assumption that `activate()` itself never raises.
 
 **D1**: `activate()` enters `with locked():` before any `try`
@@ -30,7 +30,7 @@ is lost at reboot, and the boot-check dialog (`krane.hypr.execOnce`) ends up
 asking the user to keep or revert display settings that were never actually
 re-applied live.
 
-A second, related ordering gap: `modules/home/illogical-impulse.nix:176`
+A second, related ordering gap: `modules/home/desktop/illogical-impulse.nix:176`
 defines `kraneIiHyprReload = lib.hm.dag.entryAfter [ "kraneIiOverrides"
 "kraneIiPatches" ]`, without `kraneIiActivate`. Nothing orders the Hyprland
 config reload after the GUI re-render, so a reload triggered by that step can
@@ -129,7 +129,7 @@ starts; the repo-relative lock file removes it at negligible cost.
 
 ### `kraneIiHyprReload` ordered after `kraneIiActivate`
 
-`modules/home/illogical-impulse.nix:176`:
+`modules/home/desktop/illogical-impulse.nix:176`:
 
 ```nix
 kraneIiHyprReload = lib.hm.dag.entryAfter [ "kraneIiOverrides" "kraneIiPatches" "kraneIiActivate" ];
@@ -231,7 +231,7 @@ reboot-without-switch check this spec exists to make pass).
 
 One dotfiles commit: `pkgs/krane-ii-settings/krane_ii_settings.py` and its
 tests, `pkgs/krane-ii-settings/default.nix` (new `PIDOF` substitution),
-`modules/home/illogical-impulse.nix` (the `entryAfter` addition),
+`modules/home/desktop/illogical-impulse.nix` (the `entryAfter` addition),
 `hosts/{tariognatha,tarmantria,taractias}/illogical-impulse/.gitignore` and
 `templates/host/illogical-impulse/.gitignore` (the new ignore line),
 `docs/VERIFY.md`, `docs/II-INTEGRATION.md`. No clone-side change — this
