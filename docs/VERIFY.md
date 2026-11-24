@@ -143,3 +143,4 @@ are the one thing docker verification cannot prove. On taractias,
 - Keyboard layout (and on tariognatha idle) is disabled with "Set in Nix".
 - Displays: a change reverts after 15 s unless kept; a kept change asks again after the next reboot.
 - `systemctl --user is-active krane-ii-settings-revert.timer` is `inactive` when no change is pending.
+- Reboot without an intervening switch: the live `krane_gui.lua` still matches a `set`/`reset` made before the reboot.

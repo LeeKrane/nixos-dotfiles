@@ -100,6 +100,9 @@ class FakeRuntime:
     def lock_state(self):
         return self.lock_states.pop(0) if self.lock_states else "false"
 
+    def pidof_hyprlock(self):
+        return False
+
     def open_settings(self):
         self.calls.append(("open_settings",))
 
@@ -144,7 +147,7 @@ class TestSetReset(Base):
         self.s.set("hyprland", "general:gaps_in", [("general:gaps_in", "12")])
         self.s.reset("hyprland", "general:gaps_in", [])
         self.assertEqual(self.repo_data(), {})
-        self.assertEqual(pathlib.Path(self.manifest["liveFile"]).read_text(), k.HEADER)
+        self.assertEqual(pathlib.Path(self.manifest["liveFile"]).read_text(), self.s.render({}))
 
     def test_bool_from_cli(self):
         self.s.set("hyprland", "decoration:blur:enabled", [("decoration:blur:enabled", "0")])

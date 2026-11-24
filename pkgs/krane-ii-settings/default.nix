@@ -19,6 +19,7 @@ let
         "@systemdRun@"
         "@systemctl@"
         "@pkill@"
+        "@pidof@"
         "@setsid@"
         "@hypridle@"
         "@schema@"
@@ -28,6 +29,7 @@ let
         (lib.getExe' systemd "systemd-run")
         (lib.getExe' systemd "systemctl")
         (lib.getExe' procps "pkill")
+        (lib.getExe' procps "pidof")
         (lib.getExe' util-linux "setsid")
         (lib.getExe' hypridle "hypridle")
         "${./schema.json}"

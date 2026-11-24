@@ -188,7 +188,7 @@ in
   # home-manager-<user>.service (logs as hm-activate-<user>) does not get HYPRLAND_INSTANCE_SIGNATURE,
   # so fall back to scanning the runtime dir. `-S` is also true for a socket a crashed instance left
   # behind, so the reload itself is the liveness test: try each candidate, stop at the first that answers.
-  home.activation.kraneIiHyprReload = lib.hm.dag.entryAfter [ "kraneIiOverrides" "kraneIiPatches" ] ''
+  home.activation.kraneIiHyprReload = lib.hm.dag.entryAfter [ "kraneIiOverrides" "kraneIiPatches" "kraneIiActivate" ] ''
     runtime="''${XDG_RUNTIME_DIR:-/run/user/$(${pkgs.coreutils}/bin/id -u)}"
     reloadSig() {
       [ -S "$1/.socket.sock" ] || return 1

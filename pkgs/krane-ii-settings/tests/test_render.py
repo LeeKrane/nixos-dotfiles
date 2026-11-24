@@ -26,7 +26,7 @@ class RenderBase(unittest.TestCase):
 
 class TestRender(RenderBase):
     def test_empty_is_header_only(self):
-        self.assertEqual(k.render({}, self.manifest, SCHEMA), k.HEADER)
+        self.assertEqual(k.render({}, self.manifest, SCHEMA), k.HEADER + "\nKRANE_GUI_MONITORS = {}\n\n")
         self.assertEqual(k.render({}, self.manifest, SCHEMA), (GOLDEN / "empty.lua").read_text())
 
     def test_all_keys_golden(self):
@@ -64,9 +64,10 @@ class TestRender(RenderBase):
         self.assertIn('hl.monitor(KRANE_GUI_MONITORS["DP-2"])', out)
         self.assertNotIn("hl.monitor({", out)
 
-    def test_krane_gui_monitors_absent_without_monitors(self):
+    def test_krane_gui_monitors_defined_without_monitors(self):
         out = k.render({"hyprland": {"decoration:rounding": 12}}, self.manifest, SCHEMA)
-        self.assertNotIn("KRANE_GUI_MONITORS", out)
+        self.assertIn("KRANE_GUI_MONITORS = {}", out)
+        self.assertNotIn("KRANE_GUI_MONITORS[", out)
 
     def test_check_value_rejects_nan(self):
         with self.assertRaisesRegex(k.SettingsError, "not a finite number"):

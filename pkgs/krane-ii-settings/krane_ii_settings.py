@@ -29,6 +29,7 @@ HYPRCTL = "@hyprctl@"
 SYSTEMD_RUN = "@systemdRun@"
 SYSTEMCTL = "@systemctl@"
 PKILL = "@pkill@"
+PIDOF = "@pidof@"
 SETSID = "@setsid@"
 HYPRIDLE = "@hypridle@"
 SCHEMA_FILE = "@schema@"
@@ -249,14 +250,13 @@ def render(data, manifest, schema):
     if preset:
         out.append(f'\nrequire("hyprland.animationPresets.{preset}")\n')
     monitors = data.get("monitors", {})
-    if monitors:
-        out.append("\nKRANE_GUI_MONITORS = {}\n\n")
-        baselines = manifest.get("monitorBaselines", {})
-        for output in sorted(monitors):
-            rule = dict(baselines.get(output, {}))
-            rule.update({k: v for k, v in monitors[output].items() if k != "bootConfirmed"})
-            rule["output"] = output
-            out.append(monitor_lua(output, rule))
+    out.append("\nKRANE_GUI_MONITORS = {}\n\n")
+    baselines = manifest.get("monitorBaselines", {})
+    for output in sorted(monitors):
+        rule = dict(baselines.get(output, {}))
+        rule.update({k: v for k, v in monitors[output].items() if k != "bootConfirmed"})
+        rule["output"] = output
+        out.append(monitor_lua(output, rule))
     return "".join(out)
 
 
@@ -324,10 +324,24 @@ def clear_pending():
 
 
 @contextlib.contextmanager
-def locked():
-    with open(os.path.join(runtime_dir(), "krane-ii-settings.lock"), "w") as f:
+def locked(manifest):
+    # Before login the runtime dir may not exist yet: lock next to the repo file.
+    rt = runtime_dir()
+    if os.path.isdir(rt):
+        path = os.path.join(rt, "krane-ii-settings.lock")
+    else:
+        path = os.path.join(os.path.dirname(manifest["repoFile"]), ".ii-settings.lock")
+    with open(path, "w") as f:
         fcntl.flock(f, fcntl.LOCK_EX)
         yield
+
+
+def run(cmd, timeout=10, **kwargs):
+    """subprocess.run with a bounded wait; a timeout is a SettingsError."""
+    try:
+        return subprocess.run(cmd, timeout=timeout, **kwargs)
+    except subprocess.TimeoutExpired:
+        raise SettingsError(f"{os.path.basename(cmd[0])} timed out after {timeout}s")
 
 
 # Side effects outside the repo file. Tests pass a fake with the same methods.
@@ -349,7 +363,10 @@ def hyprctl(args):
     """Run hyprctl against the first instance that answers. None if none does."""
     for sig in hyprland_signatures():
         env = dict(os.environ, HYPRLAND_INSTANCE_SIGNATURE=sig)
-        result = subprocess.run([HYPRCTL, *args], env=env, capture_output=True, text=True)
+        try:
+            result = run([HYPRCTL, *args], env=env, capture_output=True, text=True)
+        except SettingsError:
+            continue
         if result.returncode == 0:
             return result.stdout
     return None
@@ -416,7 +433,7 @@ class Runtime:
                 before = f.read()
         except FileNotFoundError:
             before = None
-        subprocess.run(
+        run(
             [sys.executable, script, "--file", conf,
              "--lock", str(values["lock"]),
              "--screen-off", str(values["screenOff"]),
@@ -431,14 +448,14 @@ class Runtime:
 
     def apply_idle(self, values):
         if self.write_idle_conf(values):
-            subprocess.run([PKILL, "-x", "hypridle"], capture_output=True)
+            run([PKILL, "-x", "hypridle"], capture_output=True)
             hyprctl(["dispatch", 'hl.dsp.exec_cmd("hypridle")'])
 
     def start_revert_timer(self, command):
         units = [f"{REVERT_UNIT}.timer", f"{REVERT_UNIT}.service"]
-        subprocess.run([SYSTEMCTL, "--user", "stop", *units], capture_output=True)
-        subprocess.run([SYSTEMCTL, "--user", "reset-failed", *units], capture_output=True)
-        subprocess.run(
+        run([SYSTEMCTL, "--user", "stop", *units], capture_output=True)
+        run([SYSTEMCTL, "--user", "reset-failed", *units], capture_output=True)
+        run(
             [SYSTEMD_RUN, "--user", f"--unit={REVERT_UNIT}", "--collect",
              f"--on-active={REVERT_SECONDS}s", "--timer-property=AccuracySec=100ms",
              f"--setenv=KRANE_II_SETTINGS_MANIFEST={self.manifest['path']}",
@@ -447,26 +464,36 @@ class Runtime:
 
     def stop_revert_timer(self):
         # Only the timer: the service may be the process calling this.
-        subprocess.run([SYSTEMCTL, "--user", "stop", f"{REVERT_UNIT}.timer"], capture_output=True)
+        run([SYSTEMCTL, "--user", "stop", f"{REVERT_UNIT}.timer"], capture_output=True)
 
     def revert_timer_active(self):
-        result = subprocess.run(
+        result = run(
             [SYSTEMCTL, "--user", "is-active", "--quiet", f"{REVERT_UNIT}.timer"])
         return result.returncode == 0
 
     def lock_state(self):
         """"true"/"false" from ii's lock IPC, or None while it is not up."""
-        result = subprocess.run(
-            [self.manifest["qsBin"], "-c", "ii", "ipc", "call", "lock", "isLocked"],
-            capture_output=True, text=True)
+        try:
+            result = run(
+                [self.manifest["qsBin"], "-c", "ii", "ipc", "call", "lock", "isLocked"],
+                timeout=5, capture_output=True, text=True)
+        except SettingsError:
+            return None
         text = result.stdout.strip()
         return text if result.returncode == 0 and text in ("true", "false") else None
 
+    def pidof_hyprlock(self):
+        """Whether a hyprlock process runs (the lock-on-start fallback)."""
+        try:
+            return run([PIDOF, "hyprlock"], capture_output=True).returncode == 0
+        except SettingsError:
+            return False
+
     def open_settings(self):
         env = dict(os.environ, II_SETTINGS_PAGE="HyprlandConfig")
-        subprocess.run([SETSID, "-f", self.manifest["qsBin"], "-p", self.manifest["settingsQml"]],
-                       env=env, stdin=subprocess.DEVNULL,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        run([SETSID, "-f", self.manifest["qsBin"], "-p", self.manifest["settingsQml"]],
+            env=env, stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 # Edits
@@ -644,7 +671,7 @@ class Settings:
 
     def set(self, section, key, pairs):
         check_owner(section, key, [f for f, _ in pairs], self.manifest)
-        with locked():
+        with locked(self.manifest):
             data, text = read_repo(self.repo)
             validate_data(data, self.schema)
             new = edit_set(data, section, key, pairs, self.schema)
@@ -655,14 +682,14 @@ class Settings:
 
     def reset(self, section, key, fields):
         check_owner(section, key, fields, self.manifest)
-        with locked():
+        with locked(self.manifest):
             data, text = read_repo(self.repo)
             validate_data(data, self.schema)
             new = edit_reset(data, section, key, fields, self.manifest)
             return self.commit(text, new, full_reload=section == "monitor")
 
     def apply(self):
-        with locked():
+        with locked(self.manifest):
             pending = read_pending()
             try:
                 data, _ = read_repo(self.repo)
@@ -688,7 +715,7 @@ class Settings:
 
     def try_monitor(self, output, pairs):
         check_owner("monitor", output, [f for f, _ in pairs], self.manifest)
-        with locked():
+        with locked(self.manifest):
             data, _ = read_repo(self.repo)
             proposed = edit_set(data, "monitor", output, pairs, self.schema)
             proposed = complete_rule(proposed, output, self.manifest, self.runtime)
@@ -703,7 +730,7 @@ class Settings:
             # Timer first: if it cannot be started, nothing has been applied yet.
             try:
                 self.runtime.start_revert_timer(["apply"])
-            except (OSError, subprocess.CalledProcessError) as e:
+            except (OSError, subprocess.CalledProcessError, SettingsError) as e:
                 clear_pending()
                 raise SettingsError(f"cannot start the revert timer, nothing applied: {e}")
             self.runtime.write_live(live)
@@ -711,7 +738,7 @@ class Settings:
             return f"trying {output}; reverting in {REVERT_SECONDS}s unless confirmed"
 
     def confirm(self):
-        with locked():
+        with locked(self.manifest):
             pending = read_pending()
             if pending is None:
                 raise SettingsError("nothing to confirm")
@@ -746,7 +773,7 @@ class Settings:
             return "confirmed"
 
     def revert_unconfirmed(self):
-        with locked():
+        with locked(self.manifest):
             # Only the outputs the pending boot check listed, not every
             # bootConfirmed=false entry (I1): an output absent at boot was
             # never added to pending, so it keeps bootConfirmed=false and
@@ -792,15 +819,19 @@ class Settings:
         # that lock (up to wait_seconds), then for the unlock, so the dialog
         # and its timer start only once the user can see and answer them.
         deadline = time.monotonic() + wait_seconds
-        while time.monotonic() < deadline and self.runtime.lock_state() != "true":
+        # The fallback hyprlock (ii's IPC never came up) counts as locked too.
+
+        def is_locked():
+            return self.runtime.lock_state() == "true" or self.runtime.pidof_hyprlock()
+        while time.monotonic() < deadline and not is_locked():
             time.sleep(poll)
-        while self.runtime.lock_state() == "true":
+        while is_locked():
             time.sleep(poll)
-        with locked():
+        with locked(self.manifest):
             write_pending({"kind": "boot", "outputs": unconfirmed})
             try:
                 self.runtime.start_revert_timer(["revert-unconfirmed"])
-            except (OSError, subprocess.CalledProcessError) as e:
+            except (OSError, subprocess.CalledProcessError, SettingsError) as e:
                 clear_pending()
                 raise SettingsError(f"cannot start the revert timer: {e}")
         self.runtime.open_settings()
@@ -816,7 +847,7 @@ class Settings:
         build-time render in place. Never touches hyprctl, reload, the
         revert timer or the pending file — this runs long before Hyprland
         or the GUI are up."""
-        with locked():
+        with locked(self.manifest):
             try:
                 data, _ = read_repo(self.repo)
                 validate_data(data, self.schema)
@@ -830,7 +861,7 @@ class Settings:
             try:
                 self.runtime.write_live(live)
                 self.runtime.write_idle_conf(idle)
-            except (OSError, subprocess.CalledProcessError) as e:
+            except (OSError, subprocess.CalledProcessError, SettingsError) as e:
                 print(f"krane-ii-settings: activate: {e}; leaving the "
                       "build-time render in place", file=sys.stderr)
                 return "activation skipped"

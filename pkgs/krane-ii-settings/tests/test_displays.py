@@ -16,7 +16,7 @@ class TestMonitors(Base):
         self.assertIn('cm = "hdr"', pathlib.Path(self.manifest["liveFile"]).read_text())
         self.assertIn(("start_timer", ("apply",)), self.runtime.calls)
         self.s.apply()
-        self.assertEqual(pathlib.Path(self.manifest["liveFile"]).read_text(), k.HEADER)
+        self.assertEqual(pathlib.Path(self.manifest["liveFile"]).read_text(), self.s.render({}))
         self.assertIn(("reload", True), self.runtime.calls)
         self.assertIsNone(k.read_pending())
 

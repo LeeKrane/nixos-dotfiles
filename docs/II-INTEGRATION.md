@@ -568,7 +568,9 @@ manifest) is the only writer of `ii-settings.json`:
   never restarts hypridle and never touches the pending file or the revert
   timer, because it runs before Hyprland is up. It must never fail activation:
   a missing, unparseable or ownership-rejected repo file just prints a
-  warning and leaves the existing build-time render in place.
+  warning and leaves the existing build-time render in place. Before login
+  `$XDG_RUNTIME_DIR` may not exist yet; the lock then falls back to
+  `hosts/<host>/.ii-settings.lock` (git-ignored).
 - `try monitor …` / `confirm`: a display change is live at once, and a
   transient systemd timer (`krane-ii-settings-revert`, 15 s) reverts it
   unless Keep is pressed. The previous live file is kept aside so the revert
