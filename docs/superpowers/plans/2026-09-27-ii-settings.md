@@ -115,15 +115,15 @@ These were not settled by the spec or the resolved decisions. Each is the smalle
 
 | Path | Responsibility |
 |---|---|
-| `modules/home/ii-config-dir.nix` (new) | `krane.dotfilesDir`, the `~/.config/illogical-impulse` symlink, the `kraneIiConfigMigrate` entry |
+| `modules/home/desktop/ii-config-dir.nix` (new) | `krane.dotfilesDir`, the `~/.config/illogical-impulse` symlink, the `kraneIiConfigMigrate` entry |
 | `hosts/<host>/illogical-impulse/.gitignore` (new, every host) | makes the per-host config dir exist in git, ignores `*.tmp` and `ai/` |
 | `templates/host/illogical-impulse/.gitignore`, `templates/host/ii-settings.json` (new) | the same two per-host files for hosts scaffolded by `install.sh --new-host` |
 | `install.sh`, `scripts/check-new-host.sh`, `docs/INSTALL.md` | render and check the two new template files |
 | `pkgs/krane-ii-settings/` (new) | the writer: `krane_ii_settings.py`, `schema.json`, `default.nix`, `tests/` |
 | `hosts/<host>/ii-settings.json` (new, every host) | GUI-owned sparse deltas, committed as `{}` |
-| `modules/home/ii-settings.nix` (new) | manifest, host wrapper, build-time render into `custom/krane_gui.lua`, ownership assertions, idle activation, boot-check exec |
-| `modules/home/hypr-config.nix` | `monitors.lua` trailer, `_rendered` no longer read-only, `krane.hypr.idle`, new monitor fields |
-| `modules/home/illogical-impulse.nix` | `custom/krane_gui.lua` is owned; the hypridle sed entry goes |
+| `modules/home/desktop/ii-settings.nix` (new) | manifest, host wrapper, build-time render into `custom/krane_gui.lua`, ownership assertions, idle activation, boot-check exec |
+| `modules/home/desktop/hypr-config.nix` | `monitors.lua` trailer, `_rendered` no longer read-only, `krane.hypr.idle`, new monitor fields |
+| `modules/home/desktop/illogical-impulse.nix` | `custom/krane_gui.lua` is owned; the hypridle sed entry goes |
 | `lib/mk-host.nix` | `postPatch` writes `krane-build.json` for the About page |
 | `flake.nix`, `pkgs/default.nix` | checks `ii-settings-writer` and `ii-settings-render`; package output |
 | `patches/ii/05-settings/*.patch` (generated) | the ii side, one patch per hot file and per page |
@@ -332,14 +332,14 @@ No commit.
 `~/.config/illogical-impulse` becomes a symlink to `hosts/<host>/illogical-impulse`, with a migration entry that copies an existing real directory into the repo first.
 
 **Files:**
-- Create: `modules/home/ii-config-dir.nix`
+- Create: `modules/home/desktop/ii-config-dir.nix`
 - Create: `hosts/<host>/illogical-impulse/.gitignore` for every host under `hosts/` (today `tariognatha`, `tarmantria`, `taractias`)
 - Create: `templates/host/illogical-impulse/.gitignore`
-- Modify: `modules/home/default.nix` (imports list), `install.sh` (`render_host_templates`, `--self-test-check-scaffold`), `scripts/check-new-host.sh`, `docs/INSTALL.md`
+- Modify: `modules/home/desktop/default.nix` (imports list), `install.sh` (`render_host_templates`, `--self-test-check-scaffold`), `scripts/check-new-host.sh`, `docs/INSTALL.md`
 - Create (tool, not committed): `~/src/ii-tools/migtest.sh`
 
 **Interfaces:**
-- Produces: option `krane.dotfilesDir` (str, default `"${config.home.homeDirectory}/.dotfiles"`), used by `modules/home/ii-settings.nix` (Task 15). Activation entry `kraneIiConfigMigrate` (before `writeBoundary`).
+- Produces: option `krane.dotfilesDir` (str, default `"${config.home.homeDirectory}/.dotfiles"`), used by `modules/home/desktop/ii-settings.nix` (Task 15). Activation entry `kraneIiConfigMigrate` (before `writeBoundary`).
 
 - [ ] **Step 1: Show the link does not exist yet (failing check)**
 
@@ -350,7 +350,7 @@ for h in tariognatha tarmantria taractias; do nix eval --json .#nixosConfigurati
 
 Expected: `false` for every host.
 
-- [ ] **Step 2: Write `modules/home/ii-config-dir.nix`**
+- [ ] **Step 2: Write `modules/home/desktop/ii-config-dir.nix`**
 
 ```nix
 # ~/.config/illogical-impulse (ii's config.json, actions/ and presets/) lives in this repo, one
@@ -434,14 +434,14 @@ for h in $(command ls hosts); do
 done
 ```
 
-In `modules/home/default.nix`, add the import right after `./illogical-impulse.nix`:
+In `modules/home/desktop/default.nix`, add the import right after `./illogical-impulse.nix`:
 
 ```nix
     ./illogical-impulse.nix
     ./ii-config-dir.nix
 ```
 
-Then `git add modules/home/ii-config-dir.nix modules/home/default.nix hosts/*/illogical-impulse/.gitignore`.
+Then `git add modules/home/desktop/ii-config-dir.nix modules/home/desktop/default.nix hosts/*/illogical-impulse/.gitignore`.
 
 - [ ] **Step 4: Check the link and the entry order (passing check)**
 
@@ -1331,7 +1331,7 @@ Run the export command.
 
 **Files:**
 - Delete (clone, if unused): any Task 5 widget no page references
-- Commit (dotfiles): `patches/ii/05-settings/`, `lib/mk-host.nix`, `modules/home/ii-config-dir.nix`, `modules/home/default.nix`, `hosts/*/illogical-impulse/.gitignore`, `templates/host/illogical-impulse/.gitignore`, `install.sh`, `scripts/check-new-host.sh`, `docs/INSTALL.md`
+- Commit (dotfiles): `patches/ii/05-settings/`, `lib/mk-host.nix`, `modules/home/desktop/ii-config-dir.nix`, `modules/home/desktop/default.nix`, `hosts/*/illogical-impulse/.gitignore`, `templates/host/illogical-impulse/.gitignore`, `install.sh`, `scripts/check-new-host.sh`, `docs/INSTALL.md`
 
 - [ ] **Step 1: Drop ported widgets nothing uses**
 
@@ -1401,7 +1401,7 @@ Record pass, fail or not run for each:
 
 ```bash
 cd ~/.dotfiles
-git add patches/ii/05-settings lib/mk-host.nix modules/home/ii-config-dir.nix modules/home/default.nix hosts/*/illogical-impulse/.gitignore templates/host/illogical-impulse/.gitignore install.sh scripts/check-new-host.sh docs/INSTALL.md
+git add patches/ii/05-settings lib/mk-host.nix modules/home/desktop/ii-config-dir.nix modules/home/desktop/default.nix hosts/*/illogical-impulse/.gitignore templates/host/illogical-impulse/.gitignore install.sh scripts/check-new-host.sh docs/INSTALL.md
 git status --short
 git commit -m "Port the end4-pC settings pages into ii and keep ii's config directory in the repo"
 ```
@@ -1774,7 +1774,7 @@ hosts/<host>/ii-settings.json holds sparse deltas that the GUI owns. Nix
 renders it into ~/.config/hypr/custom/krane_gui.lua at switch time with
 `render`. At runtime the GUI changes it with `set` and `reset`, which write
 the repo file, re-render the live file and reload Hyprland. The manifest,
-generated by modules/home/ii-settings.nix, names the keys Nix owns and
+generated by modules/home/desktop/ii-settings.nix, names the keys Nix owns and
 carries the monitor and idle baselines. See docs/II-INTEGRATION.md,
 "Settings persistence".
 
@@ -2793,7 +2793,7 @@ Expected: an error that the attribute `ii-settings-writer` is missing.
 
 ```nix
 # krane-ii-settings: the only writer of hosts/<host>/ii-settings.json, used by the ii settings
-# GUI's persistent controls and by modules/home/ii-settings.nix to render krane_gui.lua at
+# GUI's persistent controls and by modules/home/desktop/ii-settings.nix to render krane_gui.lua at
 # build time. Standard library only; tool paths are baked in here.
 # See docs/II-INTEGRATION.md "Settings persistence".
 {
@@ -2943,8 +2943,8 @@ git commit -m "Add the krane-ii-settings writer, its schema and tests, and an em
 ### Task 15: Render GUI settings at build time (commit B2)
 
 **Files:**
-- Create: `modules/home/ii-settings.nix`
-- Modify: `modules/home/default.nix` (import), `modules/home/hypr-config.nix` (`monitorsFile`, `_rendered`), `modules/home/illogical-impulse.nix` (`ownedFiles`), `flake.nix` (`checks`)
+- Create: `modules/home/desktop/ii-settings.nix`
+- Modify: `modules/home/desktop/default.nix` (import), `modules/home/desktop/hypr-config.nix` (`monitorsFile`, `_rendered`), `modules/home/desktop/illogical-impulse.nix` (`ownedFiles`), `flake.nix` (`checks`)
 
 **Interfaces:**
 - Consumes: `krane.dotfilesDir` (Task 2), `pkgs/krane-ii-settings` (Task 14), `krane.hypr.{settings, monitors, idleTimeouts}`.
@@ -2959,7 +2959,7 @@ for h in tariognatha tarmantria taractias; do nix eval --json .#nixosConfigurati
 
 Expected: `false` for every host.
 
-- [ ] **Step 2: Write `modules/home/ii-settings.nix`**
+- [ ] **Step 2: Write `modules/home/desktop/ii-settings.nix`**
 
 ```nix
 # Hyprland settings saved from the ii settings window. The GUI writes them, through
@@ -3188,9 +3188,9 @@ in
 
 - [ ] **Step 3: Wire it in**
 
-1. `modules/home/default.nix`: add `./ii-settings.nix` right after `./ii-config-dir.nix`.
-2. `modules/home/illogical-impulse.nix`: add `"custom/krane_gui.lua"` as the last entry of `ownedFiles`.
-3. `modules/home/hypr-config.nix`: replace
+1. `modules/home/desktop/default.nix`: add `./ii-settings.nix` right after `./ii-config-dir.nix`.
+2. `modules/home/desktop/illogical-impulse.nix`: add `"custom/krane_gui.lua"` as the last entry of `ownedFiles`.
+3. `modules/home/desktop/hypr-config.nix`: replace
 
    ```nix
      monitorsFile =
@@ -3203,7 +3203,7 @@ in
    with the same block plus the trailer after the `extraMonitorsLua` line (keep that line: tarmantria's `scale_internal` hotplug hook lives there):
 
    ```nix
-     # The trailer loads the settings saved from the ii settings window (modules/home/ii-settings.nix)
+     # The trailer loads the settings saved from the ii settings window (modules/home/desktop/ii-settings.nix)
      # last, after every krane.hypr.* file and extraMonitorsLua, and before ii's transient shellOverrides.
      monitorsFile =
        header "monitors.lua"
@@ -3218,13 +3218,13 @@ in
        '';
    ```
 
-4. `modules/home/hypr-config.nix`, option `_rendered`: delete the line `readOnly = true;` (ii-settings.nix now adds an entry), and change its description to:
+4. `modules/home/desktop/hypr-config.nix`, option `_rendered`: delete the line `readOnly = true;` (ii-settings.nix now adds an entry), and change its description to:
 
    ```nix
       description = ''
         Rendered Lua files, keyed by their path relative to ~/.config/hypr.
-        Set here and by modules/home/ii-settings.nix (custom/krane_gui.lua).
-        Consumed by modules/home/illogical-impulse.nix (installation) and by
+        Set here and by modules/home/desktop/ii-settings.nix (custom/krane_gui.lua).
+        Consumed by modules/home/desktop/illogical-impulse.nix (installation) and by
         the flake's `lua-syntax` check (`luac -p`).
       '';
    ```
@@ -3254,7 +3254,7 @@ in
    ```
 
 ```bash
-cd ~/.dotfiles && git add modules/home/ii-settings.nix modules/home/default.nix modules/home/hypr-config.nix modules/home/illogical-impulse.nix flake.nix
+cd ~/.dotfiles && git add modules/home/desktop/ii-settings.nix modules/home/desktop/default.nix modules/home/desktop/hypr-config.nix modules/home/desktop/illogical-impulse.nix flake.nix
 ```
 
 - [ ] **Step 4: `{}` renders the header only; `monitors.lua` loads it (passing check)**
@@ -3340,7 +3340,7 @@ Expected: the last `ok   <profile>/<form-factor>  /nix/store/...drv` line line a
 
 **Files:**
 - Create (clone): `$II/scripts/hyprland/hypridleconfigurator.py`
-- Modify: `modules/home/hypr-config.nix` (`idleTimeouts`, new `idle`), `modules/home/ii-settings.nix` (idle mapping, activation, assertion), `modules/home/illogical-impulse.nix` (drop the hypridle `iiPatches` entry)
+- Modify: `modules/home/desktop/hypr-config.nix` (`idleTimeouts`, new `idle`), `modules/home/desktop/ii-settings.nix` (idle mapping, activation, assertion), `modules/home/desktop/illogical-impulse.nix` (drop the hypridle `iiPatches` entry)
 
 **Interfaces:**
 - Produces: option `krane.hypr.idle` (`nullOr { lock, screenOff, suspend : ints.between 0 86400 }`, default `null`); activation entry `kraneIiIdle` (after `copyIllogicalImpulseConfigs`, only when there are values to write).
@@ -3391,7 +3391,7 @@ Run the export command.
 
 - [ ] **Step 4: The Nix side**
 
-1. `modules/home/hypr-config.nix`: replace the `idleTimeouts` option's description with
+1. `modules/home/desktop/hypr-config.nix`: replace the `idleTimeouts` option's description with
 
    ```nix
       description = ''
@@ -3426,14 +3426,14 @@ Run the export command.
         hypridle timeouts. null (the default) leaves them to the ii settings window
         (hosts/<host>/ii-settings.json) or ii's own 300/600/900. Setting this makes idle
         Nix-owned: the settings window shows it disabled. Written into
-        ~/.config/hypr/hypridle.conf at activation by modules/home/ii-settings.nix.
+        ~/.config/hypr/hypridle.conf at activation by modules/home/desktop/ii-settings.nix.
       '';
     };
    ```
 
-2. `modules/home/illogical-impulse.nix`: delete the `++ lib.optional (!config.krane.hypr.idleTimeouts) { ... };` element (the hypridle sed, with its comment) so `iiPatches` ends with `];`.
+2. `modules/home/desktop/illogical-impulse.nix`: delete the `++ lib.optional (!config.krane.hypr.idleTimeouts) { ... };` element (the hypridle sed, with its comment) so `iiPatches` ends with `];`.
 
-3. `modules/home/ii-settings.nix`: replace the `nixIdle` binding and its comment with
+3. `modules/home/desktop/ii-settings.nix`: replace the `nixIdle` binding and its comment with
 
    ```nix
   # krane.hypr.idle, or idleTimeouts = false as shorthand for all zeros. null: not set by Nix.
@@ -3500,7 +3500,7 @@ Run the export command.
    ```
 
 ```bash
-cd ~/.dotfiles && git add modules/home/hypr-config.nix modules/home/ii-settings.nix modules/home/illogical-impulse.nix
+cd ~/.dotfiles && git add modules/home/desktop/hypr-config.nix modules/home/desktop/ii-settings.nix modules/home/desktop/illogical-impulse.nix
 ```
 
 - [ ] **Step 5: Check what activation will run**
@@ -3539,7 +3539,7 @@ Expected: `timeout = 60` and `timeout = 600`, `0`, `RESTARTED`, and a diff with 
 
 ```bash
 cd ~/.dotfiles
-git add patches/ii/05-settings modules/home/hypr-config.nix modules/home/ii-settings.nix modules/home/illogical-impulse.nix
+git add patches/ii/05-settings modules/home/desktop/hypr-config.nix modules/home/desktop/ii-settings.nix modules/home/desktop/illogical-impulse.nix
 git commit -m "Set hypridle timeouts from krane.hypr.idle or the ii settings window instead of a sed"
 ```
 
@@ -4468,10 +4468,10 @@ git commit -m "Add the ii Hyprland settings page, persisted through krane-ii-set
 ### Task 21: Color management fields in the monitor submodule (commit C1)
 
 **Files:**
-- Modify: `modules/home/hypr-config.nix` (`monitorType`, `monitorLua`)
+- Modify: `modules/home/desktop/hypr-config.nix` (`monitorType`, `monitorLua`)
 
 **Interfaces:**
-- Produces: `krane.hypr.monitors.*.{cm, sdrbrightness, sdrsaturation, sdr_min_luminance, sdr_max_luminance, min_luminance, max_luminance, max_avg_luminance}`, all `nullOr`, default `null`, omitted from `hl.monitor` when null. `modules/home/ii-settings.nix` already treats non-null ones as Nix-owned (its `optionalMonitorFields`).
+- Produces: `krane.hypr.monitors.*.{cm, sdrbrightness, sdrsaturation, sdr_min_luminance, sdr_max_luminance, min_luminance, max_luminance, max_avg_luminance}`, all `nullOr`, default `null`, omitted from `hl.monitor` when null. `modules/home/desktop/ii-settings.nix` already treats non-null ones as Nix-owned (its `optionalMonitorFields`).
 
 - [ ] **Step 1: Check each field name against Hyprland 0.56.2's Lua monitor parser**
 
@@ -4614,7 +4614,7 @@ with
     + ")\n";
 ```
 
-Run `nix fmt modules/home/hypr-config.nix` (the formatter re-indents the list you wrapped), then `git add modules/home/hypr-config.nix`.
+Run `nix fmt modules/home/desktop/hypr-config.nix` (the formatter re-indents the list you wrapped), then `git add modules/home/desktop/hypr-config.nix`.
 
 - [ ] **Step 4: Render, ownership and overlap (passing checks)**
 
@@ -4942,7 +4942,7 @@ No commit (commit C2 is in Task 24).
 **Files (clone, under `$II`):**
 - Create: `scripts/hyprland/monitor_caps.py`, `modules/common/widgets/MonitorCanvas.qml`, `modules/common/widgets/MonitorRect.qml`, `modules/common/models/hyprland/MonitorConfigOption.qml`
 - Modify: `modules/common/panels/lock/LockScreen.qml`, `services/KraneSettings.qml`, `modules/settings/HyprlandConfig.qml`
-- Modify (dotfiles): `modules/home/ii-settings.nix` (boot-check exec)
+- Modify (dotfiles): `modules/home/desktop/ii-settings.nix` (boot-check exec)
 
 **Interfaces:**
 - Consumes: CLI from Task 22; `KraneSettings.isMonitorFieldLocked`.
@@ -5157,7 +5157,7 @@ Expected: `exit 0`, no new errors. Commit `KraneSettings.qml` and `HyprlandConfi
 
 - [ ] **Step 6: Run the boot check at login**
 
-In `modules/home/ii-settings.nix`, in `config`, after `home.packages = [ wrapped ];`:
+In `modules/home/desktop/ii-settings.nix`, in `config`, after `home.packages = [ wrapped ];`:
 
 ```nix
 
@@ -5167,7 +5167,7 @@ In `modules/home/ii-settings.nix`, in `config`, after `home.packages = [ wrapped
 ```
 
 ```bash
-cd ~/.dotfiles && git add modules/home/ii-settings.nix
+cd ~/.dotfiles && git add modules/home/desktop/ii-settings.nix
 host=${host:-$(hostname)}
 gen=$(nix build --no-link --print-out-paths .#nixosConfigurations.$host.config.home-manager.users.krane.krane.hypr._rendered.'"custom/execs.lua"')
 grep -c 'krane-ii-settings boot-check' "$gen"
@@ -5222,7 +5222,7 @@ With a GUI monitor entry present: `rm ~/.config/hypr/custom/krane_gui.lua && hyp
 
 ```bash
 cd ~/.dotfiles
-git add patches/ii/05-settings pkgs/krane-ii-settings modules/home/ii-settings.nix
+git add patches/ii/05-settings pkgs/krane-ii-settings modules/home/desktop/ii-settings.nix
 git commit -m "Add display settings with confirm-or-revert and a first-boot check to the ii settings window"
 ```
 
@@ -5243,7 +5243,7 @@ In `docs/II-INTEGRATION.md`:
    `hosts/<host>/illogical-impulse/` (see "Settings persistence"). The copy
    step's `mkdir -p` and its `config.json` seed check follow the link.
    ```
-2. In "Owned vs appended", add a row: `` | `custom/krane_gui.lua` | owned | Rendered from `hosts/<host>/ii-settings.json` by `modules/home/ii-settings.nix`; rewritten live by the settings window. Required last by `monitors.lua`. | ``
+2. In "Owned vs appended", add a row: `` | `custom/krane_gui.lua` | owned | Rendered from `hosts/<host>/ii-settings.json` by `modules/home/desktop/ii-settings.nix`; rewritten live by the settings window. Required last by `monitors.lua`. | ``
 3. In "How ii sources Lua", replace the paragraph that begins `There is no custom/monitors.lua.` with:
    ```markdown
    - There is no `custom/monitors.lua`. Monitor rules go in the top-level
@@ -5255,7 +5255,7 @@ In `docs/II-INTEGRATION.md`:
    ```
 4. In "Patched files", in the `Config.qml` `launchOnStartup` bullet, replace ``` `config.json` stays ii-owned after that, the GUI can still flip it back off.``` with `After that the value lives in this host's config.json in the repo, and the settings window can still turn it off.`
 5. The subsection that sub-project 4 added still calls `config.json` ii's own state. In `### Agents tab` (under `## Claude Code`), replace ``To turn the tab off, add `"sidebar": {"agents": {"enable": false}}` to `~/.config/illogical-impulse/config.json` (ii-owned, not written by Nix).`` (wrapped over two lines) with ``To turn the tab off, use Settings, Interface, "Agents tab", or add `"sidebar": {"agents": {"enable": false}}` to `~/.config/illogical-impulse/config.json` (this host's file in the repo, see "Settings persistence"; not written by Nix).`` The `jq` command in the Translator subsection keeps working: `mv` replaces the file inside the linked directory, and `*.tmp` is ignored.
-6. Delete the `hypridle.conf` bullet under "Patched files" (the `idleTimeouts = false` sed) and add after the list: ``Idle timeouts are no longer a sed: `kraneIiIdle` (in `modules/home/ii-settings.nix`) runs ii's `hypridleconfigurator.py` with the values from `krane.hypr.idle`, `idleTimeouts = false` (all zeros) or the settings window. See "Settings persistence".``
+6. Delete the `hypridle.conf` bullet under "Patched files" (the `idleTimeouts = false` sed) and add after the list: ``Idle timeouts are no longer a sed: `kraneIiIdle` (in `modules/home/desktop/ii-settings.nix`) runs ii's `hypridleconfigurator.py` with the values from `krane.hypr.idle`, `idleTimeouts = false` (all zeros) or the settings window. See "Settings persistence".``
 
 - [ ] **Step 2: Add the "Settings persistence" section**
 

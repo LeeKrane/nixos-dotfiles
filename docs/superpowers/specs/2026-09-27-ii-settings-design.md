@@ -20,7 +20,7 @@ Terms used below:
   into `$HOME` on every switch.
 - **end4-pC** is a third-party rework of ii and the source of the pages.
 - **`krane.hypr.*`** are this repo's options that render Hyprland Lua
-  (`modules/home/hypr-config.nix`). **`display.nix`** is each host's use of
+  (`modules/home/desktop/hypr-config.nix`). **`display.nix`** is each host's use of
   them.
 - **A switch** is `nixos-rebuild switch`.
 
@@ -47,7 +47,7 @@ runtime. The GUI writes both the repo file (persistence) and the runtime file
 - Everything under `~/.config/hypr` and `~/.config/quickshell` is wiped and
   copied again on every switch (`docs/II-INTEGRATION.md`). `monitors.lua` and
   `custom/*.lua` are rendered from `krane.hypr.*`
-  (`modules/home/hypr-config.nix`). `hypridle.conf` is sed-patched when a host
+  (`modules/home/desktop/hypr-config.nix`). `hypridle.conf` is sed-patched when a host
   sets `krane.hypr.idleTimeouts = false`. `~/.config/illogical-impulse/` is
   excluded from the wipe, and its `config.json` is only seeded when it is
   missing.
@@ -461,7 +461,7 @@ change a tracked file on every wallpaper change.
    running generation. The writer calls `hyprctl`, `python3` and `flock` by
    absolute store paths.
 
-3. **Nix consumption.** A new `modules/home/ii-settings.nix`:
+3. **Nix consumption.** A new `modules/home/desktop/ii-settings.nix`:
    - reads the host's file with `lib.importJSON`, falling back to `{}` when
      the path does not exist;
    - builds the rendered file with
@@ -784,7 +784,7 @@ Planned structure for the implementation. The user commits by hand.
    - one commit adding `hosts/*/ii-settings.json` and
      `templates/host/ii-settings.json` as `{}`, `pkgs/krane-ii-settings`
      and its checks;
-   - one for `modules/home/ii-settings.nix`, `guiLocked`, the `monitors.lua`
+   - one for `modules/home/desktop/ii-settings.nix`, `guiLocked`, the `monitors.lua`
      trailer and the `krane_gui.lua` owned file;
    - one for idle (`krane.hypr.idle` replacing the sed entry);
    - one for the ii patches (`HyprlandConfig`, page, presets, border-color
@@ -810,7 +810,7 @@ Planned structure for the implementation. The user commits by hand.
    persist in the repo. The user commits selectively.
 2. **Per-host config.** One settings file per host (`config.json` and
    `ii-settings.json` under `hosts/<host>/`). A shared
-   `modules/home/ii-settings.common.json` layer can be added later without
+   `modules/home/desktop/ii-settings.common.json` layer can be added later without
    changing the ownership rule.
 3. **`ai/` and `actions/` under the config dir.** Track `actions/`, ignore
    `ai/`, which may hold personal prompts.
