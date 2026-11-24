@@ -1,0 +1,140 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Fri, 2 Oct 2026 13:00:00 +0200
+Subject: [PATCH] fix(settings): harden input paths: gate AI set_shell_config,
+ skip malformed autostart entries, validate every preset name
+
+Problem: the AI's set_shell_config wrote config with no approval step;
+one malformed autostart entry (non-object, non-string cmd, NUL in cmd)
+crashed autostart.py and a NaN delay crashed time.sleep, dropping every
+later entry; presets.sh --save/--export-zip and Presets.qml save/exportZip
+accepted names containing "/" or "..", reaching file paths unchecked.
+Fix: set_shell_config uses the run_shell_command approve/reject flow
+(applied in approveCommand); autostart.py skips bad entries with a stderr
+warning and clamps a non-finite delay to 0; presets.sh checks the name on
+all name-bearing actions and Presets.qml rejects unsafe names client-side.
+Drop when: upstream gates set_shell_config and validates preset names.
+---
+ .../quickshell/ii/scripts/hyprland/autostart.py  | 13 +++++++++----
+ dots/.config/quickshell/ii/scripts/presets.sh    |  2 +-
+ dots/.config/quickshell/ii/services/Ai.qml       | 16 +++++++++++++---
+ dots/.config/quickshell/ii/services/Presets.qml  |  8 +++++++-
+ 4 files changed, 30 insertions(+), 9 deletions(-)
+
+diff --git a/dots/.config/quickshell/ii/scripts/hyprland/autostart.py b/dots/.config/quickshell/ii/scripts/hyprland/autostart.py
+index ffc371b..38dc077 100755
+--- a/dots/.config/quickshell/ii/scripts/hyprland/autostart.py
++++ b/dots/.config/quickshell/ii/scripts/hyprland/autostart.py
+@@ -1,5 +1,5 @@
+ #!/usr/bin/env -S\_/bin/sh\_-c\_"source\_\$(eval\_echo\_\$ILLOGICAL_IMPULSE_VIRTUAL_ENV)/bin/activate&&exec\_python\_-E\_"\$0"\_"\$@""
+-import json, subprocess, sys, time, os
++import json, math, subprocess, sys, time, os
+ 
+ 
+ # Same escaping as krane-ii-settings' lua_str: hyprctl dispatch evaluates this
+@@ -29,9 +29,14 @@ if not autostart.get('enable', False):
+     exit(0)
+ 
+ for app in autostart.get('apps', []):
+-    cmd = app.get('cmd', '').strip()
+-    if not cmd:
++    if not isinstance(app, dict):
++        print(f"autostart: skipping non-object entry: {app!r}", file=sys.stderr)
+         continue
++    cmd = app.get('cmd', '')
++    if not isinstance(cmd, str) or not cmd.strip() or '\x00' in cmd:
++        print(f"autostart: skipping entry with invalid cmd: {app!r}", file=sys.stderr)
++        continue
++    cmd = cmd.strip()
+ 
+     workspace = app.get('workspace', 1)
+     if not isinstance(workspace, int) or isinstance(workspace, bool):
+@@ -39,7 +44,7 @@ for app in autostart.get('apps', []):
+         continue
+ 
+     delay = app.get('delay', 0)
+-    if not isinstance(delay, (int, float)) or isinstance(delay, bool) or delay < 0:
++    if not isinstance(delay, (int, float)) or isinstance(delay, bool) or not math.isfinite(delay) or delay < 0:
+         delay = 0
+ 
+     subprocess.run(['hyprctl', 'dispatch', f'hl.dsp.focus({{workspace = {workspace}}})'])
+diff --git a/dots/.config/quickshell/ii/scripts/presets.sh b/dots/.config/quickshell/ii/scripts/presets.sh
+index 0a2e7a9..378d809 100755
+--- a/dots/.config/quickshell/ii/scripts/presets.sh
++++ b/dots/.config/quickshell/ii/scripts/presets.sh
+@@ -255,7 +255,7 @@ else
+ fi
+ 
+ case "$action" in
+-    --remove|--apply)
++    --remove|--apply|--save|--export-zip)
+         # $name is joined into "$PRESETS_DIR/${name}.json" and (for --remove)
+         # "*_imported/assets/${name}" below; "." or ".." there would target
+         # the presets/assets directory itself or its parent.
+diff --git a/dots/.config/quickshell/ii/services/Ai.qml b/dots/.config/quickshell/ii/services/Ai.qml
+index 8ee5dfe..12e98a1 100644
+--- a/dots/.config/quickshell/ii/services/Ai.qml
++++ b/dots/.config/quickshell/ii/services/Ai.qml
+@@ -769,6 +769,13 @@ Singleton {
+         if (!message.functionPending) return;
+         message.functionPending = false; // User decided, no more "thinking"
+ 
++        if (message.functionName === "set_shell_config") {
++            const args = message.functionCall.args;
++            Config.setNestedValue(args.key, args.value);
++            addFunctionOutputMessage(message.functionName, Translation.tr("Config updated by user approval"));
++            return;
++        }
++
+         const responseMessage = createFunctionOutputMessage(message.functionName, "", false);
+         const id = idForMessage(responseMessage);
+         root.messageIDs = [...root.messageIDs, id];
+@@ -816,9 +823,12 @@ Singleton {
+                 addFunctionOutputMessage(name, Translation.tr("Invalid arguments. Must provide `key` and `value`."));
+                 return;
+             }
+-            const key = args.key;
+-            const value = args.value;
+-            Config.setNestedValue(key, value);
++            // Same approval step as run_shell_command; applied in approveCommand.
++            const description = `set ${args.key} = ${JSON.stringify(args.value)}`.replace(/`/g, "'");
++            const contentToAppend = `\n\n**Config change request**\n\n\`\`\`command\n${description}\n\`\`\``;
++            message.rawContent += contentToAppend;
++            message.content += contentToAppend;
++            message.functionPending = true;
+         } else if (name === "run_shell_command") {
+             if (!args.command || args.command.length === 0) {
+                 addFunctionOutputMessage(name, Translation.tr("Invalid arguments. Must provide `command`."));
+diff --git a/dots/.config/quickshell/ii/services/Presets.qml b/dots/.config/quickshell/ii/services/Presets.qml
+index ce292b4..6e1dd50 100644
+--- a/dots/.config/quickshell/ii/services/Presets.qml
++++ b/dots/.config/quickshell/ii/services/Presets.qml
+@@ -70,6 +70,11 @@ Singleton {
+         onExited: root.refreshImported()
+     }
+ 
++    // Same character class as presets.sh's SAFE_NAME_RE; presets.sh re-checks.
++    function isUnsafeName(name) {
++        return !/^[A-Za-z0-9._ -]+$/.test(name) || name.includes("..") || name.startsWith(".")
++    }
++
+     function save(rawInput) {
+         const raw = rawInput.trim()
+         if (raw.length === 0) return
+@@ -84,7 +89,7 @@ Singleton {
+         }
+ 
+         name = name.replace(/\s/g, "_")
+-        if (name.length === 0) return
++        if (name.length === 0 || isUnsafeName(name)) return
+ 
+         saveProc.command = ["bash", Directories.presetsScriptPath, "--save", name, description]
+         saveProc.running = true
+@@ -117,6 +122,7 @@ Singleton {
+     }
+ 
+     function exportZip(name) {
++        if (isUnsafeName(name)) return
+         exportZipProc.command = ["bash", Directories.presetsScriptPath, "--export-zip", name]
+         exportZipProc.running = true
+     }
