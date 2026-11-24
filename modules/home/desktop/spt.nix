@@ -34,30 +34,8 @@ let
   sptMetadataUrl = "https://patcher.sp-tushonka.com";
 
   common = import ./tarkov-common.nix { inherit config lib pkgs; };
-  # Trial: a newer GE-Proton than nixpkgs' for SPT only, for the client's post-raid hang.
-  # Live Tarkov keeps the nixpkgs one from tarkov-common.nix.
-  proton =
-    (pkgs.proton-ge-bin.overrideAttrs (
-      final: prev: {
-        version = "GE-Proton11-11";
-        # src comes from passthru.variants, which is overridden below.
-        __intentionallyOverridingVersion = true;
-        passthru = prev.passthru // {
-          variants = prev.passthru.variants // {
-            x86_64-linux = {
-              toolName = "${final.version}-x86_64";
-              src = pkgs.fetchzip {
-                url = "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/${final.version}/${final.version}-x86_64.tar.gz";
-                hash = "sha256-3tVgf83IkteFtVo/bHd4yG1xCtPeuW8FXaTrHOLjvKQ=";
-              };
-            };
-          };
-        };
-      }
-    )).steamcompattool;
-  env = common.umuEnv "$HOME/Games/spt" + ''
-    export PROTONPATH="${proton}"
-  '';
+  # GE-Proton from nixpkgs, as for live Tarkov (tarkov-common.nix).
+  env = common.umuEnv "$HOME/Games/spt";
 
   # SPT 4.1's server targets .NET 10 and ASP.NET Core 10; a later SPT series needs a newer one.
   dotnet = pkgs.dotnet-aspnetcore_10;
