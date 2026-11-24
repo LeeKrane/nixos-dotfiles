@@ -300,6 +300,16 @@
             "checks.no-flake-nixconfig: flake.nix sets a top-level nix config attribute; move it to nix.settings (modules/nixos/common/nix-settings.nix)"
             (pkgs.runCommand "krane-no-flake-nixconfig" { } "touch $out");
 
+        # overlays/ii-fixes.nix aliases the dropped gnome-icon-theme to adwaita-icon-theme.
+        # Checks the NixOS pkgs; home-manager shares them through useGlobalPkgs (lib/mk-host.nix).
+        ii-overlay =
+          let
+            pname = self.nixosConfigurations.tariognatha.pkgs.gnome-icon-theme.pname;
+          in
+          nixpkgs.lib.throwIf (pname != "adwaita-icon-theme")
+            "checks.ii-overlay: gnome-icon-theme is '${pname}', expected the ii-fixes alias to adwaita-icon-theme"
+            (pkgs.runCommand "krane-ii-overlay" { } "touch $out");
+
         # custom/*.lua is parsed only at Hyprland session start. Catch
         # syntax errors here instead. Parse-only, undefined globals are fine. Desktop
         # hosts only: other roles have no krane.hypr.

@@ -7,22 +7,26 @@ all.
 
 ## 1. Docker loop
 
-Everything here runs via `scripts/docker-check.sh`, wrapping a throwaway
-`nixos/nix` container against a persistent `nixstore` docker volume. See
-its own header comment for what each invocation does.
+Everything here except `test`, `ci` and `diff` (local Nix) runs via
+`scripts/docker-check.sh`, wrapping a throwaway `nixos/nix` container
+against a persistent `nixstore` docker volume. See its own header comment
+for what each invocation does.
 
 ```sh
-just docker-check          # nix flake check --no-build --show-trace
+just check                 # nix flake check --no-build --show-trace
                             # + tariognatha, tarmantria and taractias
                             # toplevel, --dry-run
 just eval-host tariognatha  # fast: single host, eval only, no build
 just docker-build tariognatha   # real (slow) build of one host's toplevel
 just fmt                    # nix fmt
 just lint                   # scripts/lint.sh: nixfmt, statix, deadnix, shellcheck, actionlint, secrets guard
+just test                   # scripts/tests/*-test.sh, local Nix
+just ci                     # lint + test, local Nix
+just diff tariognatha       # closure diff vs /run/current-system, on the target host
 ```
 
-`scripts/docker-check.sh` runs `git add -A` before every one of these.
-Flakes only ever see git-tracked or staged files.
+`scripts/docker-check.sh` runs `git add -N` on untracked, non-ignored files before every one of these.
+Flakes only see tracked files, and intent-to-add tracks a new file without staging its content.
 
 Every `docker run` this script does is capped by default at 6 CPUs and
 14g memory, so a real build doesn't peg the host it runs on. Override per
@@ -34,8 +38,8 @@ invocation on a bigger or smaller machine: `DOCKER_CPUS`,
 - `nix flake check --no-build`: every module evaluates. `checks.lua-syntax`
   runs `luac -p` over every rendered Hyprland Lua file for every
   host. Option types and assertions all pass.
-- `nix eval …pkgs.gnome-icon-theme.pname`: the `ii-fixes` overlay reaches
-  home-manager's package set, not just the NixOS-level one.
+- `checks.ii-overlay`: the `ii-fixes` overlay's `gnome-icon-theme` alias
+  reaches the NixOS pkgs, which home-manager shares via `useGlobalPkgs`.
 - `nix build …toplevel --dry-run` for every host (three desktops, four servers): every derivation in
   the closure would build. The dependency graph is sound, with no missing
   or renamed nixpkgs attrs and no `throw`s hit.

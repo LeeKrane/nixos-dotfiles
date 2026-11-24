@@ -7,16 +7,24 @@ set -euo pipefail
 cd "$(dirname "$(readlink -f "$0")")/.."
 nixsh() { nix shell --inputs-from . "$@"; }
 
-echo "== nixfmt"
-nix fmt -- --ci
-echo "== statix"
-nixsh nixpkgs#statix -c statix check .
-echo "== deadnix"
-nixsh nixpkgs#deadnix -c deadnix --fail --exclude hosts/*/hardware-configuration.nix -- .
-echo "== shellcheck"
-nixsh nixpkgs#shellcheck -c shellcheck -x -S style install.sh scripts/*.sh scripts/tests/*.sh scripts/ii-agents/*.sh
-echo "== actionlint"
+# Every check runs even after one fails, so one run reports all findings.
+failed=()
+step() {
+    local name=$1
+    shift
+    echo "== $name"
+    "$@" || failed+=("$name")
+}
+
+step nixfmt nix fmt -- --ci
+step statix nixsh nixpkgs#statix -c statix check .
+step deadnix nixsh nixpkgs#deadnix -c deadnix --fail --exclude hosts/*/hardware-configuration.nix -- .
+step shellcheck nixsh nixpkgs#shellcheck -c shellcheck -x -S style install.sh scripts/*.sh scripts/tests/*.sh scripts/ii-agents/*.sh
 # With shellcheck on PATH, actionlint also checks every inline `run:` block.
-nixsh nixpkgs#actionlint nixpkgs#shellcheck -c actionlint
-echo "== secrets encrypted"
-bash scripts/check-secrets-encrypted.sh
+step actionlint nixsh nixpkgs#actionlint nixpkgs#shellcheck -c actionlint
+step "secrets encrypted" bash scripts/check-secrets-encrypted.sh
+
+if [ "${#failed[@]}" -gt 0 ]; then
+    echo "lint failed: ${failed[*]}" >&2
+    exit 1
+fi

@@ -133,7 +133,7 @@ On a non-NixOS system `install.sh` defaults to install mode. Pass `--dry-run` or
 
 ### `--dry-run` and `--self-test`
 
-`--dry-run` is safe to run anywhere, any time, as any user. Every destructive step (disk writes, `nixos-install`, `nixos-rebuild switch`, commits, `passwd`, `reboot`) prints `+ the command` instead of running it, while read-only probes still run for real. This is how `just install-lint` (`scripts/docker-check.sh shellcheck`) exercises it in CI, checking `git status --porcelain` and `git rev-parse HEAD` before and after to prove the tree stayed untouched.
+`--dry-run` is safe to run anywhere, any time, as any user. Every destructive step (disk writes, `nixos-install`, `nixos-rebuild switch`, commits, `passwd`, `reboot`) prints `+ the command` instead of running it, while read-only probes still run for real. This is how `just install-test` (`scripts/docker-check.sh install-test`) exercises it locally, checking `git status --porcelain` and `git rev-parse HEAD` before and after to prove the tree stayed untouched.
 
 `--self-test` is an undocumented maintainer and CI hook, not in `--help`, that exercises `install.sh`'s own failure handling: that `run_sh` honours `pipefail`, that the `ERR` trap fires inside a shell function, and that the disko and PRIME sed helpers produce the expected line when run for real against a throwaway fixture, that every new-host template combination renders and parses, and that a failed new-host scaffold rolls back.
 

@@ -5,7 +5,6 @@
 # that only happens in the docker-clean justfile recipe.
 # Usage:
 #   scripts/docker-check.sh              full check, flake check plus all hosts' toplevel, --dry-run
-#   scripts/docker-check.sh seed         create and seed the nixstore volume, idempotent
 #   scripts/docker-check.sh build HOST   real build of one host's toplevel, slow
 #   scripts/docker-check.sh vm           build the tariognatha-vm QEMU/UEFI image
 #   scripts/docker-check.sh eval HOST    print HOST's toplevel drvPath, eval only
@@ -13,7 +12,7 @@
 #   scripts/docker-check.sh lint         scripts/lint.sh, the CI lint checks
 #   scripts/docker-check.sh update       nix flake update, writes flake.lock back into the repo
 #   scripts/docker-check.sh lock         nix flake lock, adds missing entries without bumping existing pins
-#   scripts/docker-check.sh shellcheck   lint and dry-run install.sh, see justfile's install-lint
+#   scripts/docker-check.sh install-test self-test and dry-run install.sh, see justfile's install-test
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -49,9 +48,14 @@ seed_volume_if_missing() {
     docker run --rm "${DOCKER_RESOURCE_ARGS[@]}" -v "$VOLUME:/seed" "$IMAGE" sh -c 'cp -a /nix/. /seed/'
 }
 
+# Flakes only see tracked files. Tracked edits are seen dirty without staging, so only new
+# files need intent-to-add, which records the path but does not stage its content.
+track_new_files() {
+    git ls-files -z --others --exclude-standard | xargs -0 -r git add -N --
+}
+
 run_in_container() {
-    # git add -A stages every edit, since flakes only see tracked/staged files.
-    git add -A
+    track_new_files
     docker run --rm \
         "${DOCKER_RESOURCE_ARGS[@]}" \
         -v "$REPO_ROOT:/work" -w /work \
@@ -85,9 +89,6 @@ mode="${1:-check}"
 seed_volume_if_missing
 
 case "$mode" in
-    seed)
-        # seed_volume_if_missing above already did the work.
-        ;;
     check)
         load_hosts
         # Only the host list is spliced in here, $h expands in the container's sh.
@@ -95,7 +96,6 @@ case "$mode" in
         run_in_container '
             set -eu
             nix flake check --no-build --show-trace
-            nix eval .#nixosConfigurations.tariognatha.pkgs.gnome-icon-theme.pname
             for h in '"${HOSTS[*]}"'; do
                 nix build .#nixosConfigurations.$h.config.system.build.toplevel --dry-run
             done
@@ -127,6 +127,7 @@ case "$mode" in
         run_in_container 'nix fmt'
         ;;
     lint)
+        # Same checks as CI and the pre-push hook, scripts/lint.sh.
         run_in_container 'bash scripts/lint.sh'
         ;;
     update)
@@ -137,9 +138,9 @@ case "$mode" in
         # Writes it back host-side, root-owned, git add/chown it like any file.
         run_in_container 'nix flake lock'
         ;;
-    shellcheck)
-        # install.sh's equivalent of check above, since it has no
-        # build-time check of its own. --self-test proves run_sh honours
+    install-test)
+        # install.sh's runtime tests, since it has no build-time check of
+        # its own (scripts/lint.sh shellchecks it). --self-test proves run_sh honours
         # pipefail, the ERR trap, the disko/PRIME sed helpers and the
         # new-host templates. The four --dry-run runs cover install mode's
         # plain and PRIME branches, a new host's scaffold, and setup mode.
@@ -149,16 +150,14 @@ case "$mode" in
         # with no real hardware via soft_fail. Wrapped in a
         # git-state assertion: these must not leave a staged change, a new
         # commit or a hosts/newbox/ behind.
-        git add -A
+        track_new_files
         before_status=$(git status --porcelain | sort | md5sum)
         before_head=$(git rev-parse HEAD)
         # shellcheck disable=SC2016 # the disk lookups expand inside the container, not here
         run_in_container '
             set -eu
-            nix shell nixpkgs#bash nixpkgs#shellcheck nixpkgs#gum nixpkgs#gnugrep nixpkgs#gnused nixpkgs#gawk nixpkgs#findutils nixpkgs#util-linux nixpkgs#coreutils nixpkgs#diffutils nixpkgs#git nixpkgs#btrfs-progs --command bash -c '"'"'
+            nix shell nixpkgs#bash nixpkgs#gum nixpkgs#gnugrep nixpkgs#gnused nixpkgs#gawk nixpkgs#findutils nixpkgs#util-linux nixpkgs#coreutils nixpkgs#diffutils nixpkgs#git nixpkgs#btrfs-progs --command bash -c '"'"'
                 set -eu
-                bash -n install.sh
-                shellcheck -x -S style install.sh
                 ./install.sh --help >/dev/null
                 ./install.sh --self-test
                 ./install.sh --mode install --host taractias --disk "$(awk -F\" "/device = /{print \$2; exit}" hosts/taractias/disko.nix)" --yes --dry-run
@@ -177,7 +176,7 @@ case "$mode" in
         fi
         ;;
     *)
-        echo "usage: $0 [seed|check|build <host>|vm|eval <host>|fmt|lint|update|lock|shellcheck]" >&2
+        echo "usage: $0 [check|build <host>|vm|eval <host>|fmt|lint|update|lock|install-test]" >&2
         exit 1
         ;;
 esac

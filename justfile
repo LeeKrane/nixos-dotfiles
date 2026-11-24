@@ -1,27 +1,20 @@
-# Common tasks for this flake. check and docker-* route Nix through the
-# throwaway container in scripts/docker-check.sh, working with or
-# without local Nix installed. switch, vm and sops-edit need a real
-# Nix-enabled machine, the target host itself or a dev machine.
+# Common tasks for this flake. Recipes saying "in docker" route Nix through
+# the throwaway container in scripts/docker-check.sh, working with or
+# without local Nix installed. The rest (test, ci, diff, switch*, boot,
+# nvim, check-new-host) need local Nix, on the target host or a dev machine.
 # The docker container is capped by default, 6 CPUs, 14g memory, low CPU
 # shares. Override with env vars, for example:
 #   DOCKER_CPUS=12 DOCKER_MEMORY=28g NIX_MAX_JOBS=4 just docker-build tariognatha
 
 default: check
 
-# Flake check and all hosts' toplevel, --dry-run, in docker.
-check: docker-check
+# nix flake check and all hosts' toplevel, --dry-run, in docker.
+check:
+    scripts/docker-check.sh check
 
 # Single-host eval only, no build, for iterating without waiting on the others.
 eval-host HOST:
     scripts/docker-check.sh eval {{ HOST }}
-
-# Creates and seeds the nixstore docker volume, other recipes do this too.
-docker-seed:
-    scripts/docker-check.sh seed
-
-# nix flake check and all hosts' toplevel, --dry-run, in docker.
-docker-check:
-    scripts/docker-check.sh check
 
 # Real build of one host's toplevel, in docker, slow, see docs/INSTALL.md.
 docker-build HOST:
@@ -35,21 +28,32 @@ docker-clean:
 fmt:
     scripts/docker-check.sh fmt
 
-# scripts/lint.sh (nixfmt, statix, deadnix, shellcheck, actionlint, secrets guard), in docker.
+# scripts/lint.sh (nixfmt, statix, deadnix, shellcheck, actionlint, secrets guard), all checks run, in docker.
 lint:
     scripts/docker-check.sh lint
 
-# bash -n, shellcheck and four --dry-run runs of install.sh, in docker.
-install-lint:
-    scripts/docker-check.sh shellcheck
+# Runs every scripts/tests/*-test.sh with CI's deps, all run and failures listed at the end, needs local Nix.
+test:
+    #!/usr/bin/env bash
+    set -u
+    nix shell --inputs-from . nixpkgs#curl nixpkgs#jq nixpkgs#gawk -c bash -c 'failed=; for t in scripts/tests/*-test.sh; do bash "$t" || failed="$failed $t"; done; [ -z "$failed" ] || { echo "failed:$failed" >&2; exit 1; }'
+
+# CI's lint job, scripts/lint.sh then just test, needs local Nix. Host evals and flake check: just check.
+ci:
+    scripts/lint.sh
+    just test
+
+# install.sh --self-test and four --dry-run runs of it, in docker.
+install-test:
+    scripts/docker-check.sh install-test
 
 # Scaffolds a throwaway testhost for every GPU profile x form factor in a temporary git worktree of HEAD and evaluates each, needs local Nix, commit first.
 check-new-host:
     scripts/check-new-host.sh
 
-# Opens FILE in $EDITOR through sops, never routed through the docker sandbox.
-sops-edit FILE:
-    sops {{ FILE }}
+# Opens secrets/HOST.yaml in $EDITOR through sops, HOST defaults to this machine, a path (with /) opens that file, never in docker.
+sops-edit HOST=`hostname`:
+    sops {{ if HOST =~ '/' { HOST } else { "secrets/" + HOST + ".yaml" } }}
 
 # Runs the NixVim build from this checkout without switching, from the current directory, e.g. `just nvim flake.nix`. New modules need `git add` first.
 [no-cd]
@@ -69,13 +73,34 @@ update-claude VERSION="":
 lock:
     scripts/docker-check.sh lock
 
-# Applies HOST's configuration with a real nixos-rebuild, not docker, run this on the target host itself.
-switch HOST:
+# Applies HOST's configuration with a real nixos-rebuild, not docker, HOST defaults to this machine, run this on the target host itself.
+switch HOST=`hostname`:
     sudo nixos-rebuild switch --flake .#{{ HOST }}
+
+# Switches HOST over ssh for servers and Pis outside auto-upgrade, e.g. the first switch, builds locally so aarch64 Pis need binfmt or a builder.
+switch-remote HOST USER="krane":
+    nixos-rebuild switch --flake .#{{ HOST }} --target-host {{ USER }}@{{ HOST }} --sudo --ask-sudo-password
 
 # Enables the pre-push lint hook (.githooks/pre-push) in this checkout.
 hooks:
     git config core.hooksPath .githooks
+
+# Like switch, but activates on next boot only, HOST defaults to this machine.
+boot HOST=`hostname`:
+    sudo nixos-rebuild boot --flake .#{{ HOST }}
+
+# Like switch, but activates without making it the boot default, HOST defaults to this machine.
+test-switch HOST=`hostname`:
+    sudo nixos-rebuild test --flake .#{{ HOST }}
+
+# Builds HOST's toplevel and diffs its closure against /run/current-system, HOST defaults to this machine, needs local Nix, run on the target host.
+diff HOST=`hostname`:
+    #!/usr/bin/env bash
+    set -eu
+    link=$(mktemp -u -p "${TMPDIR:-/tmp}" diff-{{ HOST }}-XXXXXX)
+    trap 'rm -f "$link"' EXIT
+    nix build .#nixosConfigurations.{{ HOST }}.config.system.build.toplevel --out-link "$link"
+    nix store diff-closures /run/current-system "$link"
 
 # Builds the tariognatha-vm QEMU/UEFI image in docker, llvmpipe only, proves wiring not real GPU or boot.
 vm:
