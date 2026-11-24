@@ -9,7 +9,8 @@
 #   notice channel. The advisory channel can force-install even with autoUpdate=false, and the
 #   store is read-only anyway.
 # - BILI_SQLITE_AUTO_DOWNLOAD: never fetch a SQLite binary, node:sqlite (node >= 22.13) is used.
-# - BILI_MITM, BILI_UPSTREAM_PROXY_MODE: no HTTPS interception, no outbound proxy, direct only.
+# - BILI_MITM, BILI_UPSTREAM_PROXY_MODE: no HTTPS interception, no outbound proxy, direct only
+#   (except the bili-mitm-proxy wrapper, see installPhase).
 # - BILI_SESSION_GC: prune old session data. BILI_CACHE_KEEPALIVE: no synthetic cache pings.
 {
   lib,
@@ -52,6 +53,23 @@ stdenvNoCC.mkDerivation (finalAttrs: {
         --set BILI_SESSION_GC 1 \
         --set BILI_CACHE_KEEPALIVE 0
     done
+
+    # bili-mitm-proxy: used only by the billion-context user service (modules/home/common/
+    # billion-context.nix), which terminates TLS for api.anthropic.com so Claude Code can
+    # reach it through HTTPS_PROXY (Code Mode is off with a custom ANTHROPIC_BASE_URL). Same
+    # hardening, but BILI_MITM=1. The user accepted the risk of the local MITM root CA.
+    # BILI_UPSTREAM_PROXY_MODE=direct stays: an explicit per-URL providers[...].proxy tops the
+    # proxy resolution order (docs/configuration.md), direct only drops the env/system fallbacks.
+    makeWrapper ${lib.getExe nodejs_22} $out/bin/bili-mitm-proxy \
+      --add-flags $dest/dist/index.js \
+      --set ACP_AUTO_UPDATE 0 \
+      --set BILI_ADVISORY_CHECK 0 \
+      --set BILI_RELEASE_NOTES_CHECK 0 \
+      --set BILI_SQLITE_AUTO_DOWNLOAD 0 \
+      --set BILI_MITM 1 \
+      --set BILI_UPSTREAM_PROXY_MODE direct \
+      --set BILI_SESSION_GC 1 \
+      --set BILI_CACHE_KEEPALIVE 0
 
     runHook postInstall
   '';
