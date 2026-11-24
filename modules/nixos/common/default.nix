@@ -11,5 +11,6 @@
     ./keyboard.nix
     ./sops.nix
     ./shells.nix
+    ./claude.nix
   ];
 }

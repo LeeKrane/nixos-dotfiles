@@ -14,6 +14,7 @@ in
   krane-ii-settings = pkgs.callPackage ./krane-ii-settings { };
 
   anydoc = pkgs.callPackage ./anydoc/package.nix { };
+  billion-context = pkgs.callPackage ./billion-context/package.nix { };
   flake-update-notify = pkgs.callPackage ./flake-update-notify { };
   heuristiclab = pkgs.callPackage ./heuristiclab/package.nix { };
   plymouth-lone = pkgs.callPackage ./plymouth-lone { };
