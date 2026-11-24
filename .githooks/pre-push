@@ -1,3 +1,20 @@
 #!/usr/bin/env bash
-# Enable with `just hooks`.
-exec "$(git rev-parse --show-toplevel)/scripts/lint.sh"
+# Enable with `just hooks`. Lints each pushed commit in a temporary worktree,
+# not the working tree. git feeds "<local ref> <local sha> <remote ref> <remote sha>" on stdin.
+set -euo pipefail
+
+tmp=$(mktemp -d)
+trap 'git worktree remove --force "$tmp/wt" 2>/dev/null || true; rm -rf "$tmp"' EXIT
+
+status=0
+declare -A seen
+while read -r _ sha _; do
+    case "$sha" in *[!0]*) ;; *) continue ;; esac # all zeros: branch deletion
+    [ -z "${seen[$sha]:-}" ] || continue
+    seen[$sha]=1
+    git worktree add --detach "$tmp/wt" "$sha" >/dev/null
+    # Unset git's hook env, so git and nix in the worktree see it, not this checkout.
+    (unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE && cd "$tmp/wt" && scripts/lint.sh) || status=1
+    git worktree remove --force "$tmp/wt"
+done
+exit "$status"

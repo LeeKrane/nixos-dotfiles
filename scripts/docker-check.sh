@@ -10,7 +10,7 @@
 #   scripts/docker-check.sh vm           build the tariognatha-vm QEMU/UEFI image
 #   scripts/docker-check.sh eval HOST    print HOST's toplevel drvPath, eval only
 #   scripts/docker-check.sh fmt          nix fmt the whole tree
-#   scripts/docker-check.sh lint         statix check plus deadnix, report only
+#   scripts/docker-check.sh lint         scripts/lint.sh, the CI lint checks
 #   scripts/docker-check.sh update       nix flake update, writes flake.lock back into the repo
 #   scripts/docker-check.sh lock         nix flake lock, adds missing entries without bumping existing pins
 #   scripts/docker-check.sh shellcheck   lint and dry-run install.sh, see justfile's install-lint
@@ -127,15 +127,7 @@ case "$mode" in
         run_in_container 'nix fmt'
         ;;
     lint)
-        # Report-only, each check falls through to status=1 instead of aborting.
-        # shellcheck disable=SC2016 # expands inside the container's sh, not here
-        run_in_container '
-            set -eu
-            status=0
-            nix run nixpkgs#statix -- check . || status=1
-            nix run nixpkgs#deadnix -- --exclude hosts/*/hardware-configuration.nix -- . || status=1
-            exit "$status"
-        '
+        run_in_container 'bash scripts/lint.sh'
         ;;
     update)
         run_in_container 'nix flake update'

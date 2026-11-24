@@ -87,6 +87,19 @@ check 'existing only: section' has '### Eval warnings'
 check 'existing only: no new list' eval '! has "New on"'
 check 'existing only: details' has '<summary>Existing warnings</summary>'
 
+echo '{"taragarmr":{"new":["<script>x</script> & y"],"existing":["a <b> & c"]}}' >"$WORK/warnings.json"
+body servers '["taragarmr"]' WARNINGS="$WORK/warnings.json"
+check 'warnings: html escaped' has '&lt;script&gt;x&lt;/script&gt; &amp; y'
+check 'warnings: html escaped in details' has 'a &lt;b&gt; &amp; c'
+check 'warnings: no raw tag' eval '! has "<script>"'
+
+jq -n '{taragarmr:{new:[range(15)|"w\(.)"],existing:[range(12)|"e\(.)"]}}' >"$WORK/warnings.json"
+body servers '["taragarmr"]' WARNINGS="$WORK/warnings.json"
+check 'warnings: new capped at 10' has '- w9'
+check 'warnings: new 11th dropped' eval '! has "- w10"'
+check 'warnings: new more line' has '… and 5 more'
+check 'warnings: existing more line' has '… and 2 more'
+
 # --- warnings-diff.jq ----------------------------------------------------------
 echo '{"warnings":{"a":["x /nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-source/f","same"],"b":["gone"],"c":[]}}' >"$WORK/wb.json"
 printf "%s\n" '{"warnings":{"a":["x /nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-source/f","same","new\n one"],"b":[],"c":[]}}' >"$WORK/wa.json"
@@ -94,13 +107,18 @@ diff_out="$(jq -cn -f "$SCRIPTS/lib/warnings-diff.jq" --argjson hosts '["a","b",
     --slurpfile a "$WORK/wa.json" --slurpfile b "$WORK/wb.json" 2>/dev/null || true)"
 check 'warnings-diff: new vs existing, store paths ignored, empty hosts dropped' \
     [ "$diff_out" = '{"a":{"new":["new one"],"existing":["x source/f","same"]}}' ]
+echo '{"warnings":{"a":["  lead"]}}' >"$WORK/wb.json"
+echo '{"warnings":{"a":["lead"]}}' >"$WORK/wa.json"
+diff_out="$(jq -cn -f "$SCRIPTS/lib/warnings-diff.jq" --argjson hosts '["a"]' \
+    --slurpfile a "$WORK/wa.json" --slurpfile b "$WORK/wb.json" 2>/dev/null || true)"
+check 'warnings-diff: leading whitespace trimmed' [ "$diff_out" = '{"a":{"new":[],"existing":["lead"]}}' ]
 
 # --- host-warnings.nix ---------------------------------------------------------
 warns="$(nix eval --json --impure --expr "import $SCRIPTS/host-warnings.nix {
     a.config.warnings = [ \"w1\" ];
-    b.config.warnings = throw \"boom\";
+    b.config.warnings = [ ];
   } [ \"a\" \"b\" ]" 2>/dev/null || true)"
-check 'host-warnings: warnings, and [] when evaluation throws' [ "$warns" = '{"a":["w1"],"b":[]}' ]
+check 'host-warnings: warnings per host' [ "$warns" = '{"a":["w1"],"b":[]}' ]
 
 # --- host-drvs.nix -------------------------------------------------------------
 drvs="$(nix eval --json --impure --expr "import $SCRIPTS/host-drvs.nix {

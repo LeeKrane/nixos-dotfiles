@@ -27,6 +27,14 @@ check 'plaintext file fails' eval "! guard '$WORK/bad'"
 printf 'a:\n    sops: x\n# sops:\n' >"$WORK/bad/a.yaml"
 check 'nested sops key fails' eval "! guard '$WORK/bad'"
 
+rm "$WORK/bad/a.yaml"
+printf 'key: ENC[AES256_GCM,data:x]\nsops:\n    version: 3.9.0\nextra: hunter2\n' >"$WORK/bad/b.yaml"
+check 'plaintext after sops block fails' eval "! guard '$WORK/bad'"
+printf 'key: ENC[AES256_GCM,data:x]\nplain: hunter2\nsops:\n    version: 3.9.0\n' >"$WORK/bad/b.yaml"
+check 'plaintext value in encrypted file fails' eval "! guard '$WORK/bad'"
+printf 'm:\n    k: ENC[AES256_GCM,data:x]\n    n:\n        - ENC[AES256_GCM,data:y]\n        - ENC[AES256_GCM,data:z]\n# c\n\nsops:\n    version: 3.9.0\n' >"$WORK/good/b.yaml"
+check 'nested map and ENC lists pass' guard "$WORK/good"
+
 check 'real secrets pass' guard "$ROOT/secrets"
 
 [ "$failures" -eq 0 ]

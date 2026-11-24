@@ -18,7 +18,7 @@ just docker-check          # nix flake check --no-build --show-trace
 just eval-host tariognatha  # fast: single host, eval only, no build
 just docker-build tariognatha   # real (slow) build of one host's toplevel
 just fmt                    # nix fmt
-just lint                   # statix check + deadnix, report-only
+just lint                   # scripts/lint.sh: nixfmt, statix, deadnix, shellcheck, actionlint, secrets guard
 ```
 
 `scripts/docker-check.sh` runs `git add -A` before every one of these.

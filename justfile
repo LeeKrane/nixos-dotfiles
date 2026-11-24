@@ -35,7 +35,7 @@ docker-clean:
 fmt:
     scripts/docker-check.sh fmt
 
-# statix check and deadnix, report-only, in docker.
+# scripts/lint.sh (nixfmt, statix, deadnix, shellcheck, actionlint, secrets guard), in docker.
 lint:
     scripts/docker-check.sh lint
 

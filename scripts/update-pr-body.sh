@@ -43,7 +43,10 @@ if [ -s "${WARNINGS:-}" ]; then
         include "collapse-hosts";
         def groups(f): to_entries | map(select(.value[f] | length > 0)) | group_by(.value[f])
             | map({hosts: map(.key), list: .[0].value[f]});
-        def bullets: .list | map("- " + .) | join("\n");
+        def esc: gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;");
+        def bullets: (.list | length) as $n
+            | (.list[:10] | map("- " + esc) | join("\n"))
+              + (if $n > 10 then "\n- … and \($n - 10) more" else "" end);
         ($w[0] | groups("new")) as $new | ($w[0] | groups("existing")) as $old
         | if ($new + $old | length) == 0 then empty else
             "### Eval warnings",
