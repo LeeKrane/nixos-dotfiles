@@ -1,0 +1,40 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Fri, 2 Oct 2026 15:00:00 +0200
+Subject: [PATCH] fix(settings): restore Nerd Font glyphs as ASCII escapes
+
+---
+ dots/.config/quickshell/ii/modules/settings/GeneralConfig.qml | 2 +-
+ .../quickshell/ii/modules/settings/InterfaceConfig.qml        | 4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/dots/.config/quickshell/ii/modules/settings/GeneralConfig.qml b/dots/.config/quickshell/ii/modules/settings/GeneralConfig.qml
+index e736119..3a16e8b 100644
+--- a/dots/.config/quickshell/ii/modules/settings/GeneralConfig.qml
++++ b/dots/.config/quickshell/ii/modules/settings/GeneralConfig.qml
+@@ -349,7 +349,7 @@ ContentPage {
+                         Layout.alignment: Qt.AlignRight
+                         Layout.preferredHeight: 50
+                         Layout.rightMargin: 8
+-                        nerdIcon: ""
++                        nerdIcon: "\u{F51B}"
+                         enabled: !translationProc.running || (translationProc.locale !== localeField.value.trim())
+                         mainText: enabled ? Translation.tr("Generate\nTypically takes 2 minutes") : Translation.tr("Generating...\nDon't close this window!")
+                         onClicked: {
+diff --git a/dots/.config/quickshell/ii/modules/settings/InterfaceConfig.qml b/dots/.config/quickshell/ii/modules/settings/InterfaceConfig.qml
+index e0b9e91..bdf8fdf 100644
+--- a/dots/.config/quickshell/ii/modules/settings/InterfaceConfig.qml
++++ b/dots/.config/quickshell/ii/modules/settings/InterfaceConfig.qml
+@@ -520,8 +520,8 @@ ContentPage {
+                         }
+                         // Use a nerdfont to see the icons
+                         options: ([
+-                          "󰖳", "", "󰨡", "", "󰌽", "󰣇", "", "", "",
+-                          "", "", "󱄛", "", "", "", "⌘", "󰀲", "󰟍", ""
++                          "\u{F05B3}", "\u{E8E5}", "\u{F0A21}", "\u{EBC6}", "\u{F033D}", "\u{F08C7}", "\u{F322}", "\u{F312}", "\u{E7E6}",
++                          "\u{E77D}", "\u{EF72}", "\u{F111B}", "\u{E7D9}", "\u{F1B6}", "\u{E711}", "\u{2318}", "\u{F0032}", "\u{F07CD}", "\u{F268}"
+                         ]).map(icon => { return {
+                           displayName: icon,
+                           value: icon
+--
+2.56.0
