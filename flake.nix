@@ -641,6 +641,8 @@
                     !c.services.openssh.openFirewall
                     && !builtins.elem 22 fw.allowedTCPPorts
                     && (builtins.elem 22 wgPorts) == enabled
+                    # A key in ~/.ssh/authorized_keys would skip the from= restriction.
+                    && c.services.openssh.authorizedKeysInHomedir == !enabled
                     && (
                       if enabled then
                         keys == map (o: ''from="${wg.peers.${o}.ip}" ${sshKeys.${o}}'') (lib.remove n wg.desktopSsh)

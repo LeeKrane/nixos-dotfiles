@@ -15,6 +15,8 @@ let
 in
 lib.mkIf (builtins.elem hostName wg0.desktopSsh) {
   networking.firewall.interfaces.${wg0.interface}.allowedTCPPorts = [ 22 ];
+  # Only the keys below: a hand-added ~/.ssh/authorized_keys entry would skip from=.
+  services.openssh.authorizedKeysInHomedir = false;
   users.users.${config.krane.user.name}.openssh.authorizedKeys.keys = map (
     n: ''from="${wg0.peers.${n}.ip}" ${sshKeys.${n}}''
   ) others;
