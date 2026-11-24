@@ -654,6 +654,21 @@
                   ) desktopHosts;
                 what = "desktop SSH is not limited to wg0 and the other wg0.desktopSsh hosts";
               }
+              {
+                # tariognatha suspends instead of powering off, so Wake-on-LAN (its USB adapter,
+                # set up by a udev rule) can bring it back. No other host changes poweroff.
+                ok =
+                  let
+                    c = self.nixosConfigurations.tariognatha.config;
+                  in
+                  lib.all (
+                    n:
+                    (self.nixosConfigurations.${n}.config.environment.shellAliases.poweroff or null)
+                    == (if n == "tariognatha" then "systemctl suspend" else null)
+                  ) hosts
+                  && lib.hasInfix (import ./lib/lan.nix).wol.tariognatha.mac c.services.udev.extraRules;
+                what = "poweroff is not aliased to suspend on tariognatha alone, or its Wake-on-LAN rule is missing";
+              }
             ];
             failed = map (e: e.what) (builtins.filter (e: !e.ok) (expectations ++ upgradeExpectations));
           in
@@ -696,6 +711,12 @@
                 {
                   ok = loader.raspberry-pi.variant == (if board == "rpi5" then "5" else "4");
                   what = "${name}: loader variant does not match board ${board}";
+                }
+                {
+                  ok =
+                    name != "tarronax"
+                    || lib.any (p: lib.getName p == "wake-tariognatha") cfg.environment.systemPackages;
+                  what = "${name}: the wake-tariognatha command is missing";
                 }
               ]
             ) piHosts;

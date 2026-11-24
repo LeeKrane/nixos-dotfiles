@@ -14,7 +14,15 @@
 # the account has an empty password (console login only, physical access; sudo, su and SSH
 # password login are refused, SSH is key-only) and sudo is unusable, so deploys fail.
 # Later deploys: nixos-rebuild switch --flake .#tarronax --target-host krane@tarronax
-{ config, inputs, ... }:
+{
+  config,
+  inputs,
+  pkgs,
+  ...
+}:
+let
+  wol = (import ../../lib/lan.nix).wol.tariognatha;
+in
 {
   imports = [ inputs.nixos-raspberrypi.nixosModules.sd-image ];
 
@@ -37,4 +45,13 @@
   # module defines the filesystems; no other bootloader is enabled for Pis.
 
   # Firewall: ssh only (server module). wg0 is outbound to the hub.
+
+  # Wakes tariognatha (next to this Pi on the second LAN) from suspend: `ssh tarronax wake-tariognatha`.
+  environment.systemPackages = [
+    (pkgs.writeShellApplication {
+      name = "wake-tariognatha";
+      runtimeInputs = [ pkgs.wakeonlan ];
+      text = "wakeonlan -i ${wol.broadcast} ${wol.mac}";
+    })
+  ];
 }

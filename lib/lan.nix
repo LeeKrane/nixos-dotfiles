@@ -7,7 +7,13 @@
   hosts = {
     taronychus = "192.168.178.22";
     taragarmr = "192.168.178.23";
-    tarronax = "192.168.178.24";
     tarritator = "192.168.178.25";
+  };
+
+  # The second LAN (tariognatha and tarronax; also 192.168.178.0/24, tarronax on DHCP there).
+  # tariognatha's USB network adapter wakes it from suspend; tarronax sends the magic packet.
+  wol.tariognatha = {
+    mac = "00:e0:4c:6c:58:e5";
+    broadcast = "192.168.178.255";
   };
 }

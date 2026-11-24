@@ -1,4 +1,7 @@
-{ config, ... }:
+{ config, pkgs, ... }:
+let
+  wol = (import ../../lib/lan.nix).wol.tariognatha;
+in
 {
   imports = [
     ./hardware-configuration.nix
@@ -45,4 +48,13 @@
   # Fika (SPT co-op, spt.nix): the SPT server runs on the home server, so only the raid host's
   # UDP 25565 is opened, for when this machine hosts a raid. home-manager cannot open ports.
   networking.firewall.allowedUDPPorts = [ 25565 ];
+
+  # Wake-on-LAN: tarronax runs `wake-tariognatha`. Only from suspend: the onboard I219-V is
+  # dead (its PHY never answers) and the board cuts USB power when fully off, so the USB
+  # adapter is matched by MAC (any port) and `poweroff` suspends instead.
+  # `systemctl poweroff` still shuts down for real.
+  services.udev.extraRules = ''
+    ACTION=="add", SUBSYSTEM=="net", ATTR{address}=="${wol.mac}", RUN+="${pkgs.ethtool}/bin/ethtool -s $name wol g"
+  '';
+  environment.shellAliases.poweroff = "systemctl suspend";
 }
