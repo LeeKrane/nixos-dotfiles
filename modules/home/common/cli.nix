@@ -32,9 +32,9 @@ in
     settings = {
       "*".AddKeysToAgent = "yes";
     }
-    # The servers by name, over wg0 (lib/wireguard.nix): `ssh taragarmr` works from any host
-    # that is a wg0 peer, without relying on DNS.
-    // lib.genAttrs wg0.sshServers (name: {
+    # The servers and SSH desktops by name, over wg0 (lib/wireguard.nix): `ssh taragarmr`
+    # works from any host that is a wg0 peer, without relying on DNS.
+    // lib.genAttrs (wg0.sshServers ++ wg0.desktopSsh) (name: {
       HostName = if name == wg0.hub.name then wg0.hub.ip else wg0.peers.${name}.ip;
       User = kraneUser.name;
     });

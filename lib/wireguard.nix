@@ -59,6 +59,12 @@
       "tarritator"
       "tarronax"
     ];
+    # Desktops that accept SSH from each other, only on wg0 and only from each other's wg0
+    # address (modules/nixos/desktop/ssh.nix). They get `Host` aliases like the servers.
+    desktopSsh = [
+      "tariognatha"
+      "tarmantria"
+    ];
   };
 
   # wg1: hub-only network for the Fika/SPT players. Brought up by hand on the hub.

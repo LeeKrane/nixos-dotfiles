@@ -5,6 +5,7 @@
     ./hardware.nix
     ./boot.nix
     ./networking.nix
+    ./ssh.nix
     ./audio.nix
     ./bluetooth.nix
     ./peripherals.nix

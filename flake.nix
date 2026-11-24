@@ -621,6 +621,35 @@
                 ) desktopHosts;
                 what = "a desktop without an ntfy secrets section defines the ntfy/read-token secret or the server-upgrade-notify unit";
               }
+              {
+                # Desktops in wg0.desktopSsh accept SSH only on wg0, and only from each other's
+                # wg0 address with that host's key. Other desktops keep port 22 closed.
+                ok =
+                  let
+                    wg = (import ./lib/wireguard.nix).wg0;
+                    sshKeys = import ./lib/ssh-keys.nix;
+                  in
+                  lib.all (
+                    n:
+                    let
+                      c = self.nixosConfigurations.${n}.config;
+                      fw = c.networking.firewall;
+                      wgPorts = fw.interfaces.wg0.allowedTCPPorts or [ ];
+                      keys = c.users.users.${c.krane.user.name}.openssh.authorizedKeys.keys;
+                      enabled = builtins.elem n wg.desktopSsh;
+                    in
+                    !c.services.openssh.openFirewall
+                    && !builtins.elem 22 fw.allowedTCPPorts
+                    && (builtins.elem 22 wgPorts) == enabled
+                    && (
+                      if enabled then
+                        keys == map (o: ''from="${wg.peers.${o}.ip}" ${sshKeys.${o}}'') (lib.remove n wg.desktopSsh)
+                      else
+                        keys == [ ]
+                    )
+                  ) desktopHosts;
+                what = "desktop SSH is not limited to wg0 and the other wg0.desktopSsh hosts";
+              }
             ];
             failed = map (e: e.what) (builtins.filter (e: !e.ok) (expectations ++ upgradeExpectations));
           in
