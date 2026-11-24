@@ -53,7 +53,7 @@ unchanged.
 ## Neovim: NixVim build, no LazyVim, no Mason
 
 Neovim is a standalone NixVim build (`modules/nixvim/`, flake output
-`packages.x86_64-linux.nvim`), installed by `modules/home/desktop/neovim.nix`.
+`packages.x86_64-linux.nvim`), installed by `modules/home/common/neovim.nix` (the desktop launcher and MIME entries are in `modules/home/desktop/neovim.nix`).
 Plugins, LSP servers, formatters and treesitter grammars are all inside
 that package; nothing is downloaded at runtime and `~/.config/nvim` is
 unused. Try changes without switching: `just nvim <file>`. Specs:
@@ -116,10 +116,10 @@ through `krane.hypr.binds` if it's missed.
 
 ## texlive packaging note
 
-`modules/home/desktop/dev.nix` uses `texlive.combined.scheme-medium`, which
-nixpkgs flags as deprecated and due for removal in 27.05, though it
-still works today. Switch to `texliveSmall` or another top-level scheme
-before a `nix flake update` lands that release.
+`modules/home/desktop/dev.nix` uses `texliveMedium`, a top-level scheme.
+nixpkgs deprecates `texlive.combined.*` and removes it in 27.05, so the
+old `texlive.combined.scheme-medium` form was replaced ahead of that
+release. Use `texliveSmall` instead if the medium scheme is too large.
 
 ## No standalone `python3` package
 

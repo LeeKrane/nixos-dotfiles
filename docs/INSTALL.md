@@ -2,6 +2,8 @@
 
 Full path from a blank machine to a working `tariognatha`, `tarmantria`, or `taractias`, or to a new host that `install.sh` scaffolds for you (see [Installing a new machine](#installing-a-new-machine)). Read [README.md](../README.md) and [docs/II-INTEGRATION.md](II-INTEGRATION.md) first if you haven't.
 
+This guide covers desktops and laptops only. The servers (`taragarmr`, `taronychus`, `tarritator`, `tarronax`) are not installed with `install.sh`: see their `hosts/<name>/default.nix` header comments and the Servers section of [secrets/README.md](../secrets/README.md).
+
 The normal path runs the repo's own `install.sh`. It drives disko, `nixos-install`, secrets bootstrap, the Rust toolchain, flathub, and the required second `nixos-rebuild switch`, and every destructive step has a `--dry-run` preview. Appendix A is the manual, `install.sh`-free path. Appendix B documents what `install.sh` does, step by step, for auditing or maintenance.
 
 ## 0. Before you start

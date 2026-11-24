@@ -52,8 +52,9 @@ to this document. The steps below are what implementing it looks like.
    overlay logic (`gnome-icon-theme` to `adwaita-icon-theme`, and
    whatever else has accumulated in `overlays/ii-fixes.nix`) directly,
    since no upstream input remains to intercept.
-5. Pin `quickshell` as its own flake input at the revision the soymou
-   module's `quickshell.nix` used, or the
+5. `quickshell` is already its own flake input in `flake.nix`, pinned to a
+   revision (soymou's module follows it). Keep it pinned at a revision that
+   builds, or use the
    `github:quickshell-mirror/quickshell` mirror at that revision:
    upstream, `git.outfoxxed.me`, is occasionally slow or down. Reproduce
    the build flags, notably `-DSERVICE_POLKIT=ON`: with it set,
@@ -83,7 +84,6 @@ the next `flake.lock` update.
   the whole copy step.
 - The `hypr/` custom files become fully ours: `kraneIiOverrides` becomes
   the only writer, not a corrective second pass after an upstream wipe.
-- One more flake input to maintain directly (`quickshell`, previously
-  indirect), a small increase in what `nix flake update` touches, in
-  exchange for removing the single-maintainer dependency this document
-  exists because of.
+- One less flake input to depend on: `illogical-flake` goes away, while
+  `quickshell` stays a direct, pinned input. That removes the
+  single-maintainer dependency this document exists because of.

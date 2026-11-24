@@ -14,8 +14,8 @@ for what each invocation does.
 
 ```sh
 just check                 # nix flake check --no-build --show-trace
-                            # + tariognatha, tarmantria and taractias
-                            # toplevel, --dry-run
+                            # + every x86_64 host's toplevel (tariognatha,
+                            # tarmantria, taractias, taragarmr), --dry-run
 just eval-host tariognatha  # fast: single host, eval only, no build
 just docker-build tariognatha   # real (slow) build of one host's toplevel
 just fmt                    # nix fmt
@@ -40,7 +40,8 @@ invocation on a bigger or smaller machine: `DOCKER_CPUS`,
   host. Option types and assertions all pass.
 - `checks.ii-overlay`: the `ii-fixes` overlay's `gnome-icon-theme` alias
   reaches the NixOS pkgs, which home-manager shares via `useGlobalPkgs`.
-- `nix build …toplevel --dry-run` for every host (three desktops, four servers): every derivation in
+- `nix build …toplevel --dry-run` for every x86_64 host (three desktops and taragarmr; the aarch64
+  Pis are only evaluated, by `checks.pi-eval` and CI): every derivation in
   the closure would build. The dependency graph is sound, with no missing
   or renamed nixpkgs attrs and no `throw`s hit.
 - `just docker-build <host>`: a real build succeeds. It runs slow, because

@@ -1,8 +1,9 @@
 # secrets/
 
-On a fresh checkout, only this file and `.gitkeep` exist here. Create each
-`*.yaml` file locally, encrypt it with [sops](https://github.com/getsops/sops),
-then `git add` and commit it on every host and clone that needs it.
+This directory holds one [sops](https://github.com/getsops/sops)-encrypted
+`<hostname>.yaml` per host, plus this file and `.gitkeep`. For a new host,
+create its `*.yaml` file locally, encrypt it with sops, then `git add` and
+commit it on every host and clone that needs it.
 
 Commit it. Flakes only see git-tracked or staged files, so an untracked
 `secrets/<host>.yaml` evaluates as absent: `sops.secrets`, the wg0 tunnel and
@@ -16,25 +17,29 @@ key exposes only that host's file, not every secret ever created.
 
 ## Files
 
-`<hostname>.yaml` (`tariognatha.yaml`, `tarmantria.yaml`, `taractias.yaml`)
-holds per-host secrets. There is no shared secrets file: each host's
+`<hostname>.yaml` (`tariognatha.yaml`, `tarmantria.yaml`, `taractias.yaml`,
+`taragarmr.yaml`, `taronychus.yaml`, `tarritator.yaml`, `tarronax.yaml`)
+holds per-host secrets. There is no shared secrets file. Each desktop's
 `.yaml` is decryptable by two recipients only, both listed in that host's
 own `creation_rules` entry in `.sops.yaml` and no other host's — that
 host's personal admin age key, which lives in `~/.config/sops/age/keys.txt`
 on that host and nowhere else, and that host's own SSH-host-derived age
-key. `tariognatha-vm` is the one exception, sharing `tariognatha`'s secrets
-file rather than having its own.
+key. Each server's file has three recipients: its own host key plus the
+tariognatha and tarmantria admin keys, since servers are administered from
+those two desktops. `tariognatha-vm` is the one exception, sharing
+`tariognatha`'s secrets file rather than having its own.
 
-One consequence: `secrets/<host>.yaml` can only be edited on that host
-itself, either as the admin user with the personal key above, or as root
+One consequence: a desktop's `secrets/<host>.yaml` can only be edited on that
+desktop itself, either as the admin user with the personal key above, or as root
 there with `SOPS_AGE_SSH_PRIVATE_KEY_FILE=/etc/ssh/ssh_host_ed25519_key`.
-No host, and no single key, can decrypt or edit another host's file.
+No desktop, and no single key, can decrypt or edit another desktop's file. A
+server's file can be edited on tariognatha or tarmantria.
 
-`modules/nixos/common/sops.nix` reads:
+The modules below read:
 
 | Key | Read by | Owner:mode |
 | --- | --- | --- |
-| `wireguard/wg0-private-key` | `modules/nixos/common/sops.nix`'s `wg0.conf` template (`PrivateKey`) | `root:0400` |
+| `wireguard/wg0-private-key` | `modules/nixos/desktop/networking.nix`'s `wg0.conf` template (`PrivateKey`) | `root:0400` |
 | `wireguard/address` | same template (`Address`) | `root:0400` |
 | `wireguard/peer-public-key` | same template (`PublicKey`) | `root:0400` |
 | `wireguard/peer-endpoint` | same template (`Endpoint`) | `root:0400` |
@@ -47,12 +52,13 @@ No host, and no single key, can decrypt or edit another host's file.
 | `ntfy/server-env` | `hosts/taragarmr/ntfy.nix` (`NTFY_AUTH_USERS`, `NTFY_AUTH_ACCESS`, `NTFY_AUTH_TOKENS` for ntfy; taragarmr only) | `root:0400` |
 | `ntfy/read-token` | `modules/nixos/desktop/server-upgrade-notify.nix` (token of ntfy user `krane`, read-only; the three desktop files) | `krane:0400` |
 
-All six wireguard values live encrypted in `secrets/<host>.yaml`; none of
+On the three desktops, all six wireguard values live encrypted in `secrets/<host>.yaml`; none of
 them, including the address and peer identity, are cleartext anywhere in
-this repo. `modules/nixos/common/sops.nix` renders them into a `wg0.conf` template
-(fixed `PersistentKeepalive 25`), which
-`modules/nixos/desktop/networking.nix` points `networking.wg-quick.interfaces.wg0.configFile`
-at. The secret alone does not bring up WireGuard on a new host: add all six
+this repo. `modules/nixos/desktop/networking.nix` renders them into a `wg0.conf` template
+(fixed `PersistentKeepalive 25`) and points `networking.wg-quick.interfaces.wg0.configFile`
+at it. Servers differ: `modules/nixos/server/wireguard.nix` builds their tunnels from the peer
+table in `lib/wireguard.nix` and reads only `wireguard/wg0-private-key` (plus
+`wireguard/wg1-private-key` on the hub, taragarmr) from their file. The secret alone does not bring up WireGuard on a new host: add all six
 keys with `sops set`, for example:
 
 ```sh
@@ -64,8 +70,8 @@ sops set secrets/<hostname>.yaml '["wireguard"]["peer-allowed-ips"]' '"<peer sub
 sops set secrets/<hostname>.yaml '["wireguard"]["listen-port"]' '"51820"'
 ```
 
-Both sections are optional per host: `modules/nixos/common/sops.nix` only declares
-a `sops.secrets` entry for a section that's actually present in
+Both sections are optional per host: `modules/nixos/desktop/networking.nix` (wireguard) and
+`modules/nixos/common/sops.nix` (rclone) only declare a `sops.secrets` entry for a section that's actually present in
 `secrets/<host>.yaml`. To disable WireGuard or the Proton Drive seed on a
 host, delete that whole top-level section (`wireguard:` or `rclone:`) with
 `sops secrets/<host>.yaml`. Leaving the value empty is not enough: sops
@@ -194,8 +200,10 @@ Do these in order, by hand.
 
 ## How to create one
 
-Every recipient in `.sops.yaml` starts as an `age1PLACEHOLDER_...` value
-that decrypts nothing, until step 1 below runs.
+For a desktop host, each of its recipients in `.sops.yaml` starts as an
+`age1PLACEHOLDER_...` value that decrypts nothing, until step 1 below runs (the
+install script adds those placeholders when it scaffolds a new host). The seven
+existing hosts are already bootstrapped.
 
 1. Run `scripts/bootstrap-sops.sh <hostname>` on the target host, after it
    has booted at least once. It needs `/etc/ssh/ssh_host_ed25519_key.pub`,

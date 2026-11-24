@@ -5,7 +5,7 @@ illogical-impulse (ii) dotfiles. ii is delivered by the third-party
 home-manager module soymou/illogical-flake, called the soymou module below.
 
 Pinned revisions (`flake.lock`), re-read this document after either moves:
-`dots-hyprland` at `97c5bc651f68092351b24aaa935af708b1e04514`,
+`dots-hyprland` at `21733c3ca7f4edc20faafedea844dc96002c6f7f`,
 `illogical-flake` at `8629ef302b956cf6ab0089338a867dbe844156fd`.
 
 ## The problem
@@ -169,7 +169,10 @@ for one host or a module under `modules/home/desktop/` for all desktop hosts:
 | --- | --- | --- |
 | `krane.hypr.monitors` | `monitors.lua` | `hl.monitor({...})` |
 | `krane.hypr.env` | `custom/env.lua` | `hl.env(k, v)` |
+| `krane.hypr.extraMonitorsLua` | `monitors.lua` | verbatim Lua |
 | `krane.hypr.variables` | `custom/variables.lua` | `k = v` globals |
+| `krane.hypr.unbinds` | `custom/keybinds.lua` | `hl.unbind(...)` |
+| `krane.hypr.extraKeybindsLua` | `custom/keybinds.lua` | verbatim Lua |
 | `krane.hypr.settings` | `custom/general.lua` | `hl.config({...})` |
 | `krane.hypr.devices` | `custom/general.lua` | `hl.device({...})` |
 | `krane.hypr.extraGeneralLua` | `custom/general.lua` | verbatim Lua |
@@ -227,6 +230,12 @@ file is skipped rather than failing activation:
   no session picker to lock behind; flip the default itself so ii locks
   immediately on startup. `config.json` stays ii-owned after that, the GUI
   can still flip it back off.
+- `~/.config/quickshell/ii/scripts/colors/switchwall.sh`:
+  `s#gsettings \(set\|get\) org.gnome.desktop.interface#GSETTINGS_SCHEMA_DIR=<schemas> <store gsettings> \1 org.gnome.desktop.interface#g`.
+  ii's dark/light toggle writes `color-scheme` with gsettings, but the ii
+  session has no schemas on `XDG_DATA_DIRS`, so every call failed with "No
+  schemas installed" and the portal kept reporting no preference. The patch
+  points each call at the `gsettings-desktop-schemas` directory directly.
 - `~/.config/hypr/hypridle.conf`, only when a host sets
   `krane.hypr.idleTimeouts = false` (tariognatha): `/^listener {/,/^}/d`.
   Strips ii's idle listeners (lock at 5 min, DPMS off at 10, suspend at 15)
@@ -262,8 +271,8 @@ every new terminal after each activation. The backup lives at
 
 `patches/ii/` holds one `git format-patch` series per sub-project:
 `01-fixes` (fixes from [pctrade/end4-pC](https://github.com/pctrade/end4-pC)),
-then `02-translator`, `04-agents`, `05-settings` and `06-notifications` as
-they land.
+then `02-translator`, `04-agents`, `05-settings`, `06-notifications` and
+`07-idle` as they land (`05-settings` is not present yet).
 `lib/mk-host.nix` applies them with `applyPatches`, after the cheatsheet
 patch, to build the `dots-hyprland-patched` source the soymou module copies:
 directories in lexical order, and the files in each directory in lexical
