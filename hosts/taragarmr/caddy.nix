@@ -21,12 +21,19 @@ let
     )
   );
   # Resolved to this host, so the check needs no DNS. Auth-protected vhosts answer 401/403: any
-  # status below 500 means Caddy and TLS work, 000 means no answer at all.
+  # status below 500 means Caddy and TLS work, 000 means no answer at all. Right after a boot a
+  # backend can still be starting (CouchDB's container answered 502 nine seconds in), so a bad
+  # answer is retried for about two minutes before it counts.
   caddyHealth = pkgs.writeShellScript "caddy-health" ''
     for host in ${lib.escapeShellArgs tlsHosts}; do
-      code=$(${lib.getExe pkgs.curl} --resolve "$host:443:127.0.0.1" -s -o /dev/null --max-time 10 \
-        -w '%{http_code}' "https://$host/") || true
-      [ "$code" -ge 100 ] && [ "$code" -lt 500 ] || { echo "$host answered $code" >&2; exit 1; }
+      for _ in {1..24}; do
+        code=$(${lib.getExe pkgs.curl} --resolve "$host:443:127.0.0.1" -s -o /dev/null --max-time 10 \
+          -w '%{http_code}' "https://$host/") || true
+        [ "$code" -ge 100 ] && [ "$code" -lt 500 ] && continue 2
+        ${lib.getExe' pkgs.coreutils "sleep"} 5
+      done
+      echo "$host answered $code" >&2
+      exit 1
     done
   '';
 in
