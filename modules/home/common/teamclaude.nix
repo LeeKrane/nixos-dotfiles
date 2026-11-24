@@ -1,7 +1,8 @@
 # teamclaude proxy as a systemd --user service, replacing `teamclaude service install`, which
 # would write a unit pointing at whatever node and store path were current at install time.
-# The NixOS session variable ANTHROPIC_BASE_URL=http://localhost:3456 (modules/nixos/common/claude.nix)
-# points Claude Code, via bili, at this proxy, so it cannot connect until this runs. Seat tokens live in ~/.config/teamclaude.json, written by
+# Claude Code reaches this proxy through the fish `claude` function (HTTPS_PROXY, MITM) or the
+# NixOS session variable ANTHROPIC_BASE_URL=http://localhost:3456 (modules/nixos/common/claude.nix),
+# so it cannot connect until this runs. Seat tokens live in ~/.config/teamclaude.json, written by
 # `teamclaude login` and refreshed by the proxy itself: live state, never declared here.
 { pkgs, ... }:
 {

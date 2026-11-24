@@ -7,7 +7,6 @@
 }:
 {
   imports = [
-    ./billion-context.nix
     ./cli.nix
     ./git.nix
     ./neovim.nix
