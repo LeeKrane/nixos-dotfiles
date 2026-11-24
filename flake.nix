@@ -656,18 +656,22 @@
               }
               {
                 # tariognatha suspends instead of powering off, so Wake-on-LAN (its USB adapter,
-                # set up by a udev rule) can bring it back. No other host changes poweroff.
+                # set up by a udev rule) can bring it back. A program, not an alias: ii's search
+                # runs commands with `bash -c`, which ignores aliases. No other host changes poweroff.
                 ok =
                   let
                     c = self.nixosConfigurations.tariognatha.config;
                   in
                   lib.all (
                     n:
-                    (self.nixosConfigurations.${n}.config.environment.shellAliases.poweroff or null)
-                    == (if n == "tariognatha" then "systemctl suspend" else null)
+                    let
+                      hc = self.nixosConfigurations.${n}.config;
+                    in
+                    !(hc.environment.shellAliases ? poweroff)
+                    && lib.any (p: lib.getName p == "poweroff") hc.environment.systemPackages == (n == "tariognatha")
                   ) hosts
                   && lib.hasInfix (import ./lib/lan.nix).wol.tariognatha.mac c.services.udev.extraRules;
-                what = "poweroff is not aliased to suspend on tariognatha alone, or its Wake-on-LAN rule is missing";
+                what = "poweroff does not suspend on tariognatha alone, or its Wake-on-LAN rule is missing";
               }
             ];
             failed = map (e: e.what) (builtins.filter (e: !e.ok) (expectations ++ upgradeExpectations));

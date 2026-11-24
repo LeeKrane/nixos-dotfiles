@@ -1,4 +1,9 @@
-{ config, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 let
   wol = (import ../../lib/lan.nix).wol.tariognatha;
 in
@@ -51,10 +56,12 @@ in
 
   # Wake-on-LAN: tarronax runs `wake-tariognatha`. Only from suspend: the onboard I219-V is
   # dead (its PHY never answers) and the board cuts USB power when fully off, so the USB
-  # adapter is matched by MAC (any port) and `poweroff` suspends instead.
-  # `systemctl poweroff` still shuts down for real.
+  # adapter is matched by MAC (any port) and `poweroff` suspends instead. A program, not an
+  # alias, so ii's search (`bash -c`) and sudo get it too. `systemctl poweroff` still shuts down.
   services.udev.extraRules = ''
     ACTION=="add", SUBSYSTEM=="net", ATTR{address}=="${wol.mac}", RUN+="${pkgs.ethtool}/bin/ethtool -s $name wol g"
   '';
-  environment.shellAliases.poweroff = "systemctl suspend";
+  environment.systemPackages = [
+    (lib.hiPrio (pkgs.writeShellScriptBin "poweroff" "exec systemctl suspend"))
+  ];
 }
