@@ -1,7 +1,8 @@
 # WireGuard on servers, from the peer table in lib/wireguard.nix.
 #   hub (taragarmr): wg0 server for every peer, forwarding between them; wg1 for the Fika/SPT
 #     players, defined but never started at boot (`systemctl start wg-quick-wg1`).
-#   spoke (any other host in the table): wg0 client of the hub.
+#   spoke (any other host in the table): wg0 client of the hub, at its LAN address for spokes in
+#     lib/lan.nix, else at wg0.endpoint.
 #
 # Backend: networking.wg-quick for both interfaces, not systemd-networkd netdevs. wg1 must not
 # autostart and only wg-quick has `autostart = false`; networkd netdevs come up whenever their
@@ -24,11 +25,19 @@ let
   cfg = config.krane.wireguard;
   table = import ../../../lib/wireguard.nix;
   inherit (table) wg0 wg1;
+  lan = import ../../../lib/lan.nix;
   hostSecrets = import ../../../lib/host-secrets.nix { inherit lib hostName; };
   hasKeys = hostSecrets.hasSection "wireguard";
 
   isHub = hostName == wg0.hub.name;
   isSpoke = wg0.peers ? ${hostName};
+  # A spoke on the hub's LAN reaches it over the switch. wg.krane.dev resolves to the public
+  # address, which would send its packets through the Fritzbox's NAT loopback.
+  hubEndpoint =
+    if lan.hosts ? ${hostName} then
+      "${lan.hosts.${wg0.hub.name}}:${toString wg0.hub.listenPort}"
+    else
+      wg0.endpoint;
 
   secretPath = name: config.sops.secrets."wireguard/${name}".path;
   iptables = lib.getExe' pkgs.iptables "iptables";
@@ -118,7 +127,7 @@ in
               peers = [
                 {
                   inherit (wg0.hub) publicKey;
-                  inherit (wg0) endpoint;
+                  endpoint = hubEndpoint;
                   allowedIPs = [ wg0.network ];
                   persistentKeepalive = 25;
                 }

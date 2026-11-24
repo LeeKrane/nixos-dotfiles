@@ -458,6 +458,7 @@
             fixture = fixtureFor "server-fixture";
             hub = (fixtureFor "taragarmr").config;
             spoke = (fixtureFor "tarronax").config;
+            lanSpoke = (fixtureFor "taronychus").config;
             inherit (fixture) config;
             release = config.system.nixos.release;
             hmUser = config.home-manager.users.${config.krane.user.name};
@@ -537,6 +538,15 @@
                   && (lib.head wg0Spoke.peers).persistentKeepalive == 25
                   && !(spoke.networking.wg-quick.interfaces ? wg1);
                 what = "a spoke's wg0 is not a keepalive client of the hub with address 192.168.82.4/24 and no wg1";
+              }
+              {
+                # Spokes on the hub's LAN (lib/lan.nix) reach it over the switch, not through
+                # the Fritzbox's NAT loopback; tarronax, on another LAN, keeps wg.krane.dev above.
+                ok =
+                  map (p: p.endpoint) lanSpoke.networking.wg-quick.interfaces.wg0.peers == [
+                    "192.168.178.23:13231"
+                  ];
+                what = "a spoke on the hub's LAN does not use the hub's LAN endpoint 192.168.178.23:13231";
               }
             ];
             x86Servers = builtins.filter (n: hostMeta.${n}.system == "x86_64-linux") serverHosts;
