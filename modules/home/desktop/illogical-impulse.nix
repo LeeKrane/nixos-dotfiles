@@ -188,22 +188,24 @@ in
   # home-manager-<user>.service (logs as hm-activate-<user>) does not get HYPRLAND_INSTANCE_SIGNATURE,
   # so fall back to scanning the runtime dir. `-S` is also true for a socket a crashed instance left
   # behind, so the reload itself is the liveness test: try each candidate, stop at the first that answers.
-  home.activation.kraneIiHyprReload = lib.hm.dag.entryAfter [ "kraneIiOverrides" "kraneIiPatches" "kraneIiActivate" ] ''
-    runtime="''${XDG_RUNTIME_DIR:-/run/user/$(${pkgs.coreutils}/bin/id -u)}"
-    reloadSig() {
-      [ -S "$1/.socket.sock" ] || return 1
-      HYPRLAND_INSTANCE_SIGNATURE="$(${pkgs.coreutils}/bin/basename "$1")" \
-        ${pkgs.hyprland}/bin/hyprctl reload config-only >/dev/null
-    }
-    if [ -n "''${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
-      $DRY_RUN_CMD reloadSig "$runtime/hypr/$HYPRLAND_INSTANCE_SIGNATURE" || true
-    elif [ -d "$runtime/hypr" ]; then
-      for d in "$runtime"/hypr/*/; do
-        [ -d "$d" ] || continue
-        $DRY_RUN_CMD reloadSig "''${d%/}" && break || true
-      done
-    fi
-  '';
+  home.activation.kraneIiHyprReload =
+    lib.hm.dag.entryAfter [ "kraneIiOverrides" "kraneIiPatches" "kraneIiActivate" ]
+      ''
+        runtime="''${XDG_RUNTIME_DIR:-/run/user/$(${pkgs.coreutils}/bin/id -u)}"
+        reloadSig() {
+          [ -S "$1/.socket.sock" ] || return 1
+          HYPRLAND_INSTANCE_SIGNATURE="$(${pkgs.coreutils}/bin/basename "$1")" \
+            ${pkgs.hyprland}/bin/hyprctl reload config-only >/dev/null
+        }
+        if [ -n "''${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
+          $DRY_RUN_CMD reloadSig "$runtime/hypr/$HYPRLAND_INSTANCE_SIGNATURE" || true
+        elif [ -d "$runtime/hypr" ]; then
+          for d in "$runtime"/hypr/*/; do
+            [ -d "$d" ] || continue
+            $DRY_RUN_CMD reloadSig "''${d%/}" && break || true
+          done
+        fi
+      '';
 
   # copyIllogicalImpulseConfigs rm -rf's ~/.config/fish before recopying it, taking
   # fish_variables (universal vars, incl. __fish_initialized) with it. That retriggers
