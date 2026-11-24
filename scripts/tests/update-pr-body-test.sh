@@ -46,7 +46,8 @@ check 'servers: deploy banner' has '**Merging deploys to: servers'
 check 'servers: summary included' has '### Package versions'
 check 'servers: security included' has '### Security'
 check 'servers: fetch command' has 'git fetch origin ci/flake-update-servers && git switch -C ci/flake-update-servers FETCH_HEAD'
-check 'servers: switch host' has 'just switch taragarmr'
+check 'servers: switch host' has 'Before merging, on taragarmr, run:'
+check 'servers: switch command takes no host' grep -qx 'just switch' "$WORK/body.md"
 
 body servers '[]' SECURITY_RESULT=skipped
 check 'servers no hosts: no banner' eval '! has "Merging deploys"'
@@ -55,7 +56,8 @@ check 'servers no hosts: no scan failure' eval '! has "Security scan failed"'
 
 body desktops '["taractias","tariognatha","tarmantria"]'
 check 'desktops only: no banner' eval '! has "Merging deploys"'
-check 'desktops: switch host placeholder' has 'just switch <host>'
+check 'desktops: switch host' has 'Before merging, on one desktop, run:'
+check 'desktops: switch command takes no host' grep -qx 'just switch' "$WORK/body.md"
 
 body desktops '["taractias","tariognatha","tarmantria","taragarmr"]'
 check 'desktops hitting a server: banner names it' has '**Merging deploys to: taragarmr'

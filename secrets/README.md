@@ -177,7 +177,7 @@ Do these in order, by hand.
    only those two have binfmt emulation), from the repo root:
    `nixos-rebuild switch --flake .#<host> --target-host krane@<host> --sudo --ask-sudo-password`
    with `<host>` one of `taragarmr`, `taronychus`, `tarritator`, `tarronax`. Then
-   `just switch <desktop>` on each of tariognatha, tarmantria and taractias for the
+   `just switch` on each of tariognatha, tarmantria and taractias for the
    notification subscriber. Check
    `systemctl list-timers nixos-upgrade.timer` on each server and `systemctl status ntfy-sh`
    on taragarmr.
@@ -250,8 +250,8 @@ existing hosts are already bootstrapped.
 
 4. `git add secrets/<hostname>.yaml && git commit`. Skip this and step 5
    evaluates as if the file never existed.
-5. `just switch <hostname>` (or `sudo nixos-rebuild switch --flake
-   .#<hostname>` on the host itself). Secrets decrypt to `/run/secrets/...`
+5. `just switch` on the host itself (or `sudo nixos-rebuild switch --flake
+   .#<hostname>`). Secrets decrypt to `/run/secrets/...`
    at activation.
 
 ## Rotating or re-keying

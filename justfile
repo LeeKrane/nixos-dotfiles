@@ -73,9 +73,9 @@ update-claude VERSION="":
 lock:
     scripts/docker-check.sh lock
 
-# Applies HOST's configuration with a real nixos-rebuild, not docker, HOST defaults to this machine, run this on the target host itself.
-switch HOST=`hostname`:
-    sudo nixos-rebuild switch --flake .#{{ HOST }}
+# Applies this machine's configuration (picked by hostname) with a real nixos-rebuild, not docker. Use switch-remote for other hosts.
+switch:
+    sudo nixos-rebuild switch --flake .#$(hostname)
 
 # Switches HOST over ssh for servers and Pis outside auto-upgrade, e.g. the first switch, builds locally so aarch64 Pis need binfmt or a builder.
 switch-remote HOST USER="krane":

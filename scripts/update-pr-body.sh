@@ -84,13 +84,13 @@ fi
         echo "$warnings"
         echo
     fi
-    echo 'CI checks eval only. Before merging, on one machine, run:'
+    echo "CI checks eval only. Before merging, on $switch_host, run:"
     echo
     # Two fenced blocks, so GitHub gives each command its own copy button.
     # shellcheck disable=SC2016 # literal backticks for Markdown
     printf '```sh\n%s\n```\n\n```sh\n%s\n```\n' \
         "git fetch origin ci/flake-update-$LANE && git switch -C ci/flake-update-$LANE FETCH_HEAD" \
-        "just switch $switch_host"
+        "just switch"
     echo
     echo 'Checks do not appear on this pull request: it is opened with GITHUB_TOKEN, which triggers no workflows. Merging runs the gate on main.'
 } >"$BODY_FILE"

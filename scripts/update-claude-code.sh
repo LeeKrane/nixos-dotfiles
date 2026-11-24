@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Bumps pkgs/claude-code/manifest.zst.json to a claude-code release,
 # newest by default, or the version given as $1. Nothing else in the
-# flake moves. Review the diff, then `just switch <host>`.
+# flake moves. Review the diff, then `just switch`.
 set -euo pipefail
 
 BASE_URL="https://downloads.claude.ai/claude-code-releases"

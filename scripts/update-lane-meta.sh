@@ -17,7 +17,7 @@ case "${1:?usage: update-lane-meta.sh LANE}" in
         claude_code=false
         title='Update desktop inputs'
         commit='Update desktop inputs'
-        switch_host='<host>'
+        switch_host='one desktop'
         ;;
     *)
         echo "unknown lane: $1" >&2

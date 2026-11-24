@@ -186,7 +186,8 @@ SHA, then create or edit the lane's PR (same-repo filter kept). Titles:
   hosts.
 - **Before-merge commands**: these name the lane branch:
   `git fetch origin ci/flake-update-<lane> && git switch -C ci/flake-update-<lane> FETCH_HEAD`,
-  then `just switch <host>`. The server PR suggests taragarmr.
+  then `just switch` on the machine named in the text. The server PR names taragarmr,
+  the desktop PR "one desktop".
 
 ### Host list collapsing
 
