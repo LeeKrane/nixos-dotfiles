@@ -645,7 +645,9 @@
                     && c.services.openssh.authorizedKeysInHomedir == !enabled
                     && (
                       if enabled then
-                        keys == map (o: ''from="${wg.peers.${o}.ip}" ${sshKeys.${o}}'') (lib.remove n wg.desktopSsh)
+                        keys == map (o: ''from="${wg.peers.${o}.ip}" ${sshKeys.${o}}'') (
+                          lib.remove n wg.desktopSsh ++ wg.desktopSshClients.${n} or [ ]
+                        )
                       else
                         keys == [ ]
                     )

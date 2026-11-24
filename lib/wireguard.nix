@@ -65,6 +65,8 @@
       "tariognatha"
       "tarmantria"
     ];
+    # Extra wg0 peers a desktop in desktopSsh accepts SSH from (key from lib/ssh-keys.nix).
+    desktopSshClients.tariognatha = [ "taryonyx" ];
   };
 
   # wg1: hub-only network for the Fika/SPT players. Brought up by hand on the hub.

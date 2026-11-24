@@ -11,7 +11,7 @@
 let
   inherit (import ../../../lib/wireguard.nix) wg0;
   sshKeys = import ../../../lib/ssh-keys.nix;
-  others = lib.remove hostName wg0.desktopSsh;
+  others = lib.remove hostName wg0.desktopSsh ++ wg0.desktopSshClients.${hostName} or [ ];
 in
 lib.mkIf (builtins.elem hostName wg0.desktopSsh) {
   networking.firewall.interfaces.${wg0.interface}.allowedTCPPorts = [ 22 ];
