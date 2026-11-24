@@ -1,0 +1,531 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Fri, 2 Oct 2026 12:00:00 +0200
+Subject: [PATCH] fix(settings): gate every section on a pending revert and
+ harden the Hyprland page's write paths
+
+Problem: only Displays disabled while a try was pending, so another section
+could overwrite the tried monitor rule; Hyprland-page spin boxes wrote on
+every drag tick; a hung `hyprctl getoption` left controls silently inert;
+the luminance/SDR monitor fields ignored Nix ownership; the revert banner
+counted down its own 15 s instead of the real timer.
+Fix: revertPending gates every section; spin boxes use onValueModified;
+HyprlandConfigOption gets a 5 s watchdog (`available`); every monitor field
+control checks monitorLocked; the banner reads state.revertDeadline.
+Drop when: the Hyprland page is dropped.
+---
+ .../models/hyprland/HyprlandConfigOption.qml       |  16 ++
+ .../ii/modules/settings/HyprlandConfig.qml         | 161 +++++++++++----------
+ 2 files changed, 103 insertions(+), 74 deletions(-)
+
+diff --git a/dots/.config/quickshell/ii/modules/common/models/hyprland/HyprlandConfigOption.qml b/dots/.config/quickshell/ii/modules/common/models/hyprland/HyprlandConfigOption.qml
+index 00f96ce..b4a70f8 100644
+--- a/dots/.config/quickshell/ii/modules/common/models/hyprland/HyprlandConfigOption.qml
++++ b/dots/.config/quickshell/ii/modules/common/models/hyprland/HyprlandConfigOption.qml
+@@ -18,6 +18,8 @@ NestableObject {
+     // decoration:*_opacity left at its compiled-in default) has `set: false`
+     // forever and would permanently block writes if gated on `set`.
+     property bool loaded: false
++    // False when the last fetch got no answer from hyprctl within the watchdog interval.
++    property bool available: true
+     property var value
+     // Nix owns this key (krane.hypr.settings or krane.hypr.guiLocked): show the
+     // control disabled with lockedReason.
+@@ -38,8 +40,21 @@ NestableObject {
+     }
+
+     function fetch() {
++        root.available = true;
+         fetchProc.command = fetchProc.baseCommand.concat([root.key]);
+         fetchProc.running = true;
++        watchdog.restart();
++    }
++
++    // hyprctl did not answer: stop waiting so controls show it instead of staying inert.
++    Timer {
++        id: watchdog
++        interval: 5000
++        onTriggered: {
++            fetchProc.running = false;
++            root.loaded = true;
++            root.available = false;
++        }
+     }
+
+     // Persistent: written to hosts/<host>/ii-settings.json by krane-ii-settings.
+@@ -57,6 +72,7 @@ NestableObject {
+         property list<string> baseCommand: ["hyprctl", "getoption", "-j"]
+         stdout: StdioCollector {
+             onStreamFinished: {
++                watchdog.stop();
+                 if (text == "no such option") {
+                     root.loaded = true;
+                     return;
+diff --git a/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml b/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
+index 25ec44e..cc45e86 100644
+--- a/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
++++ b/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
+@@ -44,8 +44,9 @@ ContentPage {
+         return KraneSettings.isMonitorFieldLocked(monitorConfig.monitors[monitorCanvas.selectedIndex]?.name ?? "", field)
+     }
+
+-    // A try is pending confirm-or-revert: every Displays control is disabled
+-    // until the user keeps or reverts it (the keep/revert banner stays enabled).
++    // A try is pending confirm-or-revert: every settings section is disabled
++    // until the user keeps or reverts it (the keep/revert banner stays enabled),
++    // since any other write would re-render the live file over the tried rule.
+     readonly property bool revertPending: KraneSettings.state.revertPending === true
+
+     MonitorConfigOption { id: monitorConfig }
+@@ -87,19 +88,25 @@ ContentPage {
+             title: Translation.tr("Displays")
+             visible: monitorConfig.monitors.length > 0
+
++            // No VRR control yet: add one only with enabled: !page.monitorLocked("vrr").
++
+             // Shown while krane-ii-settings' revert timer runs: after a try, or after
+             // boot-check found display settings not yet confirmed since this boot.
+             NoticeBox {
+                 id: keepBanner
+                 Layout.fillWidth: true
+                 visible: KraneSettings.state.revertPending === true
+-                property int countdown: 15
+-                onVisibleChanged: if (visible) countdown = 15
++                // Seconds left on the real timer (state.revertDeadline), so a reopened
++                // window or restarted shell shows what will actually happen.
++                property real now: Date.now() / 1000
++                readonly property var deadline: KraneSettings.state.revertDeadline
+                 Timer {
+                     interval: 1000; repeat: true; running: keepBanner.visible
+-                    onTriggered: keepBanner.countdown = Math.max(0, keepBanner.countdown - 1)
++                    onTriggered: keepBanner.now = Date.now() / 1000
+                 }
+-                text: Translation.tr("Keep these display settings? Reverting in %1 s").arg(keepBanner.countdown)
++                text: typeof keepBanner.deadline === "number"
++                    ? Translation.tr("Keep these display settings? Reverting in %1 s").arg(Math.max(0, Math.round(keepBanner.deadline - keepBanner.now)))
++                    : Translation.tr("Keep these display settings? Reverting soon")
+                 Item { Layout.fillWidth: true }
+                 RippleButtonWithIcon {
+                     Layout.fillWidth: false
+@@ -279,9 +286,9 @@ ContentPage {
+
+                         ConfigSpinBox {
+                             Layout.fillWidth: true
+-                            enabled: monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm === "hdr" || monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm === "hdredid"
++                            enabled: (monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm === "hdr" || monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm === "hdredid") && !page.monitorLocked("sdrbrightness")
+                             icon: "brightness_6"
+-                            text: Translation.tr("SDR brightness")
++                            text: Translation.tr("SDR brightness") + (page.monitorLocked("sdrbrightness") ? ` · ${KraneSettings.nixReason}` : "")
+                             value: Math.round((monitorConfig.monitors[monitorCanvas.selectedIndex]?.sdrBrightness ?? 1.0) * 100)
+                             from: 50; to: 300; stepSize: 5
+                             onValueModified: {
+@@ -294,9 +301,9 @@ ContentPage {
+
+                         ConfigSpinBox {
+                             Layout.fillWidth: true
+-                            enabled: monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm === "hdr" || monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm === "hdredid"
++                            enabled: (monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm === "hdr" || monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm === "hdredid") && !page.monitorLocked("sdrsaturation")
+                             icon: "contrast"
+-                            text: Translation.tr("SDR saturation")
++                            text: Translation.tr("SDR saturation") + (page.monitorLocked("sdrsaturation") ? ` · ${KraneSettings.nixReason}` : "")
+                             value: Math.round((monitorConfig.monitors[monitorCanvas.selectedIndex]?.sdrSaturation ?? 1.0) * 100)
+                             from: 0; to: 200; stepSize: 5
+                             onValueModified: {
+@@ -315,10 +322,10 @@ ContentPage {
+                         ConfigSpinBox {
+                             Layout.fillWidth: true
+                             icon: "wb_twilight"
+-                            text: Translation.tr("SDR min (nits)")
++                            text: Translation.tr("SDR min (nits)") + (page.monitorLocked("sdr_min_luminance") ? ` · ${KraneSettings.nixReason}` : "")
+                             value: Math.round(monitorConfig.monitors[monitorCanvas.selectedIndex]?.sdrMinLuminance ?? 0)
+                             from: 0; to: 10; stepSize: 1
+-                            enabled: monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm === "hdr" || monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm === "hdredid"
++                            enabled: (monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm === "hdr" || monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm === "hdredid") && !page.monitorLocked("sdr_min_luminance")
+                             onValueModified: {
+                                 const newVal = value
+                                 if (newVal === (monitorConfig.monitors[monitorCanvas.selectedIndex]?.sdrMinLuminance ?? 0)) return
+@@ -330,10 +337,10 @@ ContentPage {
+                         ConfigSpinBox {
+                             Layout.fillWidth: true
+                             icon: "wb_sunny"
+-                            text: Translation.tr("SDR max (nits)")
++                            text: Translation.tr("SDR max (nits)") + (page.monitorLocked("sdr_max_luminance") ? ` · ${KraneSettings.nixReason}` : "")
+                             value: Math.round(monitorConfig.monitors[monitorCanvas.selectedIndex]?.sdrMaxLuminance ?? 250)
+                             from: 0; to: 10000; stepSize: 10
+-                            enabled: monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm === "hdr" || monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm === "hdredid"
++                            enabled: (monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm === "hdr" || monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm === "hdredid") && !page.monitorLocked("sdr_max_luminance")
+                             onValueModified: {
+                                 const newVal = value
+                                 if (newVal === (monitorConfig.monitors[monitorCanvas.selectedIndex]?.sdrMaxLuminance ?? 250)) return
+@@ -350,10 +357,10 @@ ContentPage {
+                         ConfigSpinBox {
+                             Layout.fillWidth: true
+                             icon: "nightlight"
+-                            text: Translation.tr("HDR min (nits)")
++                            text: Translation.tr("HDR min (nits)") + (page.monitorLocked("min_luminance") ? ` · ${KraneSettings.nixReason}` : "")
+                             value: monitorConfig.monitors[monitorCanvas.selectedIndex]?.minLuminance ?? 0
+                             from: -1; to: 10; stepSize: 1
+-                            enabled: monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm === "hdr" || monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm === "hdredid"
++                            enabled: (monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm === "hdr" || monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm === "hdredid") && !page.monitorLocked("min_luminance")
+                             onValueModified: {
+                                 if (value === (monitorConfig.monitors[monitorCanvas.selectedIndex]?.minLuminance ?? 0)) return
+                                 monitorConfig.updateMonitor(monitorCanvas.selectedIndex, { minLuminance: value })
+@@ -364,10 +371,10 @@ ContentPage {
+                         ConfigSpinBox {
+                             Layout.fillWidth: true
+                             icon: "hdr_strong"
+-                            text: Translation.tr("HDR peak (nits)")
++                            text: Translation.tr("HDR peak (nits)") + (page.monitorLocked("max_luminance") ? ` · ${KraneSettings.nixReason}` : "")
+                             value: monitorConfig.monitors[monitorCanvas.selectedIndex]?.maxLuminance ?? 1000
+                             from: -1; to: 10000; stepSize: 50
+-                            enabled: monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm === "hdr" || monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm === "hdredid"
++                            enabled: (monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm === "hdr" || monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm === "hdredid") && !page.monitorLocked("max_luminance")
+                             onValueModified: {
+                                 if (value === (monitorConfig.monitors[monitorCanvas.selectedIndex]?.maxLuminance ?? 1000)) return
+                                 monitorConfig.updateMonitor(monitorCanvas.selectedIndex, { maxLuminance: value })
+@@ -378,10 +385,10 @@ ContentPage {
+
+                     ConfigSpinBox {
+                         icon: "hdr_weak"
+-                        text: Translation.tr("HDR max average luminance (nits)")
++                        text: Translation.tr("HDR max average luminance (nits)") + (page.monitorLocked("max_avg_luminance") ? ` · ${KraneSettings.nixReason}` : "")
+                         value: monitorConfig.monitors[monitorCanvas.selectedIndex]?.maxAvgLuminance ?? 250
+                         from: -1; to: 10000; stepSize: 10
+-                        enabled: monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm === "hdr" || monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm === "hdredid"
++                        enabled: (monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm === "hdr" || monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm === "hdredid") && !page.monitorLocked("max_avg_luminance")
+                         onValueModified: {
+                             if (value === (monitorConfig.monitors[monitorCanvas.selectedIndex]?.maxAvgLuminance ?? 250)) return
+                             monitorConfig.updateMonitor(monitorCanvas.selectedIndex, { maxAvgLuminance: value })
+@@ -397,13 +404,14 @@ ContentPage {
+             icon: "auto_awesome_mosaic"
+             shape: MaterialShape.Shape.Gem
+             title: Translation.tr("Layout")
++            enabled: !page.revertPending
+
+             GroupedList {
+                 ConfigSelectionArray {
+                     HyprlandConfigOption { id: optLayout; key: "general:layout" }
+-                    text: Translation.tr("Tiling Layout") + (optLayout.locked ? ` · ${optLayout.lockedReason}` : "")
++                    text: Translation.tr("Tiling Layout") + (optLayout.locked ? ` · ${optLayout.lockedReason}` : "") + (optLayout.available ? "" : ` · ${Translation.tr("hyprctl did not answer")}`)
+                     icon: "responsive_layout"
+-                    enabled: !optLayout.locked
++                    enabled: !optLayout.locked && optLayout.available
+                     currentValue: optLayout.value
+                     onSelected: newValue => optLayout.setValue(newValue)
+                     options: [
+@@ -420,6 +428,7 @@ ContentPage {
+             icon: "trackpad_input"
+             shape: MaterialShape.Shape.Pentagon
+             title: Translation.tr("Input")
++            enabled: !page.revertPending
+
+             ContentSubsection {
+                 title: Translation.tr("Keyboard")
+@@ -430,9 +439,9 @@ ContentPage {
+                         id: kbLayoutField
+                         Layout.fillWidth: true
+                         buttonIcon: "keyboard"
+-                        text: Translation.tr("Keyboard layout") + (optKbLayout.locked ? ` · ${optKbLayout.lockedReason}` : "")
++                        text: Translation.tr("Keyboard layout") + (optKbLayout.locked ? ` · ${optKbLayout.lockedReason}` : "") + (optKbLayout.available ? "" : ` · ${Translation.tr("hyprctl did not answer")}`)
+                         placeholderText: Translation.tr("e.g., us, es, latam")
+-                        enabled: !optKbLayout.locked
++                        enabled: !optKbLayout.locked && optKbLayout.available
+                         value: optKbLayout.value ?? ""
+                         onValueChanged: kbLayoutDebounceTimer.restart()
+
+@@ -449,8 +458,8 @@ ContentPage {
+                     ConfigSwitch {
+                         HyprlandConfigOption { id: optNumlock; key: "input:numlock_by_default" }
+                         buttonIcon: "numbers"
+-                        text: Translation.tr("Numlock by default") + (optNumlock.locked ? ` · ${optNumlock.lockedReason}` : "")
+-                        enabled: !optNumlock.locked
++                        text: Translation.tr("Numlock by default") + (optNumlock.locked ? ` · ${optNumlock.lockedReason}` : "") + (optNumlock.available ? "" : ` · ${Translation.tr("hyprctl did not answer")}`)
++                        enabled: !optNumlock.locked && optNumlock.available
+                         checked: optNumlock.boolean
+                         onCheckedChanged: {
+                             if (optNumlock.fetching || !optNumlock.loaded || checked === optNumlock.boolean) return
+@@ -461,11 +470,11 @@ ContentPage {
+                     ConfigSpinBox {
+                         HyprlandConfigOption { id: optRepeatDelay; key: "input:repeat_delay" }
+                         icon: "keyboard_return"
+-                        text: Translation.tr("Repeat delay (ms)") + (optRepeatDelay.locked ? ` · ${optRepeatDelay.lockedReason}` : "")
+-                        enabled: !optRepeatDelay.locked
++                        text: Translation.tr("Repeat delay (ms)") + (optRepeatDelay.locked ? ` · ${optRepeatDelay.lockedReason}` : "") + (optRepeatDelay.available ? "" : ` · ${Translation.tr("hyprctl did not answer")}`)
++                        enabled: !optRepeatDelay.locked && optRepeatDelay.available
+                         value: optRepeatDelay.number
+                         from: 0; to: 2000; stepSize: 10
+-                        onValueChanged: {
++                        onValueModified: {
+                             if (optRepeatDelay.fetching || !optRepeatDelay.loaded || value === optRepeatDelay.number) return
+                             optRepeatDelay.setValue(value)
+                         }
+@@ -474,20 +483,20 @@ ContentPage {
+                     ConfigSpinBox {
+                         HyprlandConfigOption { id: optRepeatRate; key: "input:repeat_rate" }
+                         icon: "speed"
+-                        text: Translation.tr("Repeat rate") + (optRepeatRate.locked ? ` · ${optRepeatRate.lockedReason}` : "")
+-                        enabled: !optRepeatRate.locked
++                        text: Translation.tr("Repeat rate") + (optRepeatRate.locked ? ` · ${optRepeatRate.lockedReason}` : "") + (optRepeatRate.available ? "" : ` · ${Translation.tr("hyprctl did not answer")}`)
++                        enabled: !optRepeatRate.locked && optRepeatRate.available
+                         value: optRepeatRate.number
+                         from: 0; to: 200; stepSize: 1
+-                        onValueChanged: {
++                        onValueModified: {
+                             if (optRepeatRate.fetching || !optRepeatRate.loaded || value === optRepeatRate.number) return
+                             optRepeatRate.setValue(value)
+                         }
+                     }
+                     ConfigSelectionArray {
+                         HyprlandConfigOption { id: optFollowMouse; key: "input:follow_mouse" }
+-                        text: Translation.tr("Follow mouse") + (optFollowMouse.locked ? ` · ${optFollowMouse.lockedReason}` : "")
++                        text: Translation.tr("Follow mouse") + (optFollowMouse.locked ? ` · ${optFollowMouse.lockedReason}` : "") + (optFollowMouse.available ? "" : ` · ${Translation.tr("hyprctl did not answer")}`)
+                         icon: "mouse"
+-                        enabled: !optFollowMouse.locked
++                        enabled: !optFollowMouse.locked && optFollowMouse.available
+                         currentValue: optFollowMouse.number
+                         onSelected: newValue => optFollowMouse.setValue(newValue)
+                         options: [
+@@ -506,8 +515,8 @@ ContentPage {
+                     ConfigSwitch {
+                         HyprlandConfigOption { id: optNaturalScroll; key: "input:touchpad:natural_scroll" }
+                         buttonIcon: "swap_vert"
+-                        text: Translation.tr("Natural scroll") + (optNaturalScroll.locked ? ` · ${optNaturalScroll.lockedReason}` : "")
+-                        enabled: !optNaturalScroll.locked
++                        text: Translation.tr("Natural scroll") + (optNaturalScroll.locked ? ` · ${optNaturalScroll.lockedReason}` : "") + (optNaturalScroll.available ? "" : ` · ${Translation.tr("hyprctl did not answer")}`)
++                        enabled: !optNaturalScroll.locked && optNaturalScroll.available
+                         checked: optNaturalScroll.boolean
+                         onCheckedChanged: {
+                             if (optNaturalScroll.fetching || !optNaturalScroll.loaded || checked === optNaturalScroll.boolean) return
+@@ -518,8 +527,8 @@ ContentPage {
+                     ConfigSwitch {
+                         HyprlandConfigOption { id: optDisableWhileTyping; key: "input:touchpad:disable_while_typing" }
+                         buttonIcon: "keyboard_hide"
+-                        text: Translation.tr("Disable while typing") + (optDisableWhileTyping.locked ? ` · ${optDisableWhileTyping.lockedReason}` : "")
+-                        enabled: !optDisableWhileTyping.locked
++                        text: Translation.tr("Disable while typing") + (optDisableWhileTyping.locked ? ` · ${optDisableWhileTyping.lockedReason}` : "") + (optDisableWhileTyping.available ? "" : ` · ${Translation.tr("hyprctl did not answer")}`)
++                        enabled: !optDisableWhileTyping.locked && optDisableWhileTyping.available
+                         checked: optDisableWhileTyping.boolean
+                         onCheckedChanged: {
+                             if (optDisableWhileTyping.fetching || !optDisableWhileTyping.loaded || checked === optDisableWhileTyping.boolean) return
+@@ -530,8 +539,8 @@ ContentPage {
+                     ConfigSwitch {
+                         HyprlandConfigOption { id: optClickfinger; key: "input:touchpad:clickfinger_behavior" }
+                         buttonIcon: "touch_app"
+-                        text: Translation.tr("Clickfinger behavior") + (optClickfinger.locked ? ` · ${optClickfinger.lockedReason}` : "")
+-                        enabled: !optClickfinger.locked
++                        text: Translation.tr("Clickfinger behavior") + (optClickfinger.locked ? ` · ${optClickfinger.lockedReason}` : "") + (optClickfinger.available ? "" : ` · ${Translation.tr("hyprctl did not answer")}`)
++                        enabled: !optClickfinger.locked && optClickfinger.available
+                         checked: optClickfinger.boolean
+                         onCheckedChanged: {
+                             if (optClickfinger.fetching || !optClickfinger.loaded || checked === optClickfinger.boolean) return
+@@ -542,11 +551,11 @@ ContentPage {
+                     ConfigSpinBox {
+                         HyprlandConfigOption { id: optScrollFactor; key: "input:touchpad:scroll_factor" }
+                         icon: "swipe"
+-                        text: Translation.tr("Scroll factor") + (optScrollFactor.locked ? ` · ${optScrollFactor.lockedReason}` : "")
+-                        enabled: !optScrollFactor.locked
++                        text: Translation.tr("Scroll factor") + (optScrollFactor.locked ? ` · ${optScrollFactor.lockedReason}` : "") + (optScrollFactor.available ? "" : ` · ${Translation.tr("hyprctl did not answer")}`)
++                        enabled: !optScrollFactor.locked && optScrollFactor.available
+                         value: Math.round(optScrollFactor.number * 10)
+                         from: 1; to: 20; stepSize: 1
+-                        onValueChanged: {
++                        onValueModified: {
+                             if (optScrollFactor.fetching || !optScrollFactor.loaded || value === Math.round(optScrollFactor.number * 10)) return
+                             optScrollFactor.setValue(value / 10.0)
+                         }
+@@ -561,6 +570,7 @@ ContentPage {
+             icon: "timer"
+             shape: MaterialShape.Shape.Cookie12Sided
+             title: Translation.tr("Idle")
++            enabled: !page.revertPending
+
+             readonly property list<var> unitOptions: [
+                 { displayName: Translation.tr("Seconds"), icon: "timer",    value: 1    },
+@@ -607,7 +617,7 @@ ContentPage {
+                         from: 0
+                         to: 9999
+                         stepSize: 1
+-                        onValueChanged: {
++                        onValueModified: {
+                             if (!timerRow.loaded) return
+                             timerRow.displayValue = value
+                             timerRow.edited(value * timerRow.displayUnit)
+@@ -688,16 +698,17 @@ ContentPage {
+             icon: "deblur"
+             shape: MaterialShape.Shape.PixelCircle
+             title: Translation.tr("Visual & Aesthetics")
++            enabled: !page.revertPending
+
+             GroupedList {
+                 ConfigSpinBox {
+                     HyprlandConfigOption { id: optRounding; key: "decoration:rounding" }
+                     icon: "rounded_corner"
+-                    text: Translation.tr("Window Rounding") + (optRounding.locked ? ` · ${optRounding.lockedReason}` : "")
+-                    enabled: !optRounding.locked
++                    text: Translation.tr("Window Rounding") + (optRounding.locked ? ` · ${optRounding.lockedReason}` : "") + (optRounding.available ? "" : ` · ${Translation.tr("hyprctl did not answer")}`)
++                    enabled: !optRounding.locked && optRounding.available
+                     value: optRounding.number
+                     from: 0; to: 20; stepSize: 1
+-                    onValueChanged: {
++                    onValueModified: {
+                         if (optRounding.fetching || !optRounding.loaded || value === optRounding.number) return
+                         optRounding.setValue(value)
+                     }
+@@ -706,8 +717,8 @@ ContentPage {
+                 ConfigSwitch {
+                     HyprlandConfigOption { id: optBlur; key: "decoration:blur:enabled" }
+                     buttonIcon: "blur_on"
+-                    text: Translation.tr("Blur") + (optBlur.locked ? ` · ${optBlur.lockedReason}` : "")
+-                    enabled: !optBlur.locked
++                    text: Translation.tr("Blur") + (optBlur.locked ? ` · ${optBlur.lockedReason}` : "") + (optBlur.available ? "" : ` · ${Translation.tr("hyprctl did not answer")}`)
++                    enabled: !optBlur.locked && optBlur.available
+                     checked: optBlur.boolean
+                     onCheckedChanged: {
+                         if (optBlur.fetching || !optBlur.loaded || checked === optBlur.boolean) return
+@@ -718,11 +729,11 @@ ContentPage {
+                 ConfigSpinBox {
+                     HyprlandConfigOption { id: optBlurSize; key: "decoration:blur:size" }
+                     icon: "blur_circular"
+-                    text: Translation.tr("Blur Size") + (optBlurSize.locked ? ` · ${optBlurSize.lockedReason}` : "")
+-                    enabled: !optBlurSize.locked
++                    text: Translation.tr("Blur Size") + (optBlurSize.locked ? ` · ${optBlurSize.lockedReason}` : "") + (optBlurSize.available ? "" : ` · ${Translation.tr("hyprctl did not answer")}`)
++                    enabled: !optBlurSize.locked && optBlurSize.available
+                     value: optBlurSize.number
+                     from: 0; to: 100; stepSize: 1
+-                    onValueChanged: {
++                    onValueModified: {
+                         if (optBlurSize.fetching || !optBlurSize.loaded || value === optBlurSize.number) return
+                         optBlurSize.setValue(value)
+                     }
+@@ -731,11 +742,11 @@ ContentPage {
+                 ConfigSpinBox {
+                     HyprlandConfigOption { id: optBlurPasses; key: "decoration:blur:passes" }
+                     icon: "layers"
+-                    text: Translation.tr("Blur Passes") + (optBlurPasses.locked ? ` · ${optBlurPasses.lockedReason}` : "")
+-                    enabled: !optBlurPasses.locked
++                    text: Translation.tr("Blur Passes") + (optBlurPasses.locked ? ` · ${optBlurPasses.lockedReason}` : "") + (optBlurPasses.available ? "" : ` · ${Translation.tr("hyprctl did not answer")}`)
++                    enabled: !optBlurPasses.locked && optBlurPasses.available
+                     value: optBlurPasses.number
+                     from: 0; to: 10; stepSize: 1
+-                    onValueChanged: {
++                    onValueModified: {
+                         if (optBlurPasses.fetching || !optBlurPasses.loaded || value === optBlurPasses.number) return
+                         optBlurPasses.setValue(value)
+                     }
+@@ -744,11 +755,11 @@ ContentPage {
+                 ConfigSpinBox {
+                     HyprlandConfigOption { id: optGapsIn; key: "general:gaps_in" }
+                     icon: "margin"
+-                    text: Translation.tr("Gaps In") + (optGapsIn.locked ? ` · ${optGapsIn.lockedReason}` : "")
+-                    enabled: !optGapsIn.locked
++                    text: Translation.tr("Gaps In") + (optGapsIn.locked ? ` · ${optGapsIn.lockedReason}` : "") + (optGapsIn.available ? "" : ` · ${Translation.tr("hyprctl did not answer")}`)
++                    enabled: !optGapsIn.locked && optGapsIn.available
+                     value: optGapsIn.number
+                     from: 0; to: 100; stepSize: 1
+-                    onValueChanged: {
++                    onValueModified: {
+                         if (optGapsIn.fetching || !optGapsIn.loaded || value === optGapsIn.number) return
+                         optGapsIn.setValue(value)
+                     }
+@@ -757,11 +768,11 @@ ContentPage {
+                 ConfigSpinBox {
+                     HyprlandConfigOption { id: optGapsOut; key: "general:gaps_out" }
+                     icon: "open_in_full"
+-                    text: Translation.tr("Gaps Out") + (optGapsOut.locked ? ` · ${optGapsOut.lockedReason}` : "")
+-                    enabled: !optGapsOut.locked
++                    text: Translation.tr("Gaps Out") + (optGapsOut.locked ? ` · ${optGapsOut.lockedReason}` : "") + (optGapsOut.available ? "" : ` · ${Translation.tr("hyprctl did not answer")}`)
++                    enabled: !optGapsOut.locked && optGapsOut.available
+                     value: optGapsOut.number
+                     from: 0; to: 200; stepSize: 1
+-                    onValueChanged: {
++                    onValueModified: {
+                         if (optGapsOut.fetching || !optGapsOut.loaded || value === optGapsOut.number) return
+                         optGapsOut.setValue(value)
+                     }
+@@ -770,11 +781,11 @@ ContentPage {
+                 ConfigSpinBox {
+                     HyprlandConfigOption { id: optActiveOpacity; key: "decoration:active_opacity" }
+                     icon: "opacity"
+-                    text: Translation.tr("Active Opacity") + (optActiveOpacity.locked ? ` · ${optActiveOpacity.lockedReason}` : "")
+-                    enabled: !optActiveOpacity.locked
++                    text: Translation.tr("Active Opacity") + (optActiveOpacity.locked ? ` · ${optActiveOpacity.lockedReason}` : "") + (optActiveOpacity.available ? "" : ` · ${Translation.tr("hyprctl did not answer")}`)
++                    enabled: !optActiveOpacity.locked && optActiveOpacity.available
+                     value: Math.round(optActiveOpacity.number * 100)
+                     from: 10; to: 100; stepSize: 5
+-                    onValueChanged: {
++                    onValueModified: {
+                         if (optActiveOpacity.fetching || !optActiveOpacity.loaded || value === Math.round(optActiveOpacity.number * 100)) return
+                         optActiveOpacity.setValue(value / 100)
+                     }
+@@ -783,11 +794,11 @@ ContentPage {
+                 ConfigSpinBox {
+                     HyprlandConfigOption { id: optInactiveOpacity; key: "decoration:inactive_opacity" }
+                     icon: "opacity"
+-                    text: Translation.tr("Inactive Opacity") + (optInactiveOpacity.locked ? ` · ${optInactiveOpacity.lockedReason}` : "")
+-                    enabled: !optInactiveOpacity.locked
++                    text: Translation.tr("Inactive Opacity") + (optInactiveOpacity.locked ? ` · ${optInactiveOpacity.lockedReason}` : "") + (optInactiveOpacity.available ? "" : ` · ${Translation.tr("hyprctl did not answer")}`)
++                    enabled: !optInactiveOpacity.locked && optInactiveOpacity.available
+                     value: Math.round(optInactiveOpacity.number * 100)
+                     from: 10; to: 100; stepSize: 5
+-                    onValueChanged: {
++                    onValueModified: {
+                         if (optInactiveOpacity.fetching || !optInactiveOpacity.loaded || value === Math.round(optInactiveOpacity.number * 100)) return
+                         optInactiveOpacity.setValue(value / 100)
+                     }
+@@ -795,11 +806,11 @@ ContentPage {
+                 ConfigSpinBox {
+                     HyprlandConfigOption { id: optBorderSize; key: "general:border_size" }
+                     icon: "border_outer"
+-                    text: Translation.tr("Border Size") + (optBorderSize.locked ? ` · ${optBorderSize.lockedReason}` : "")
+-                    enabled: !optBorderSize.locked
++                    text: Translation.tr("Border Size") + (optBorderSize.locked ? ` · ${optBorderSize.lockedReason}` : "") + (optBorderSize.available ? "" : ` · ${Translation.tr("hyprctl did not answer")}`)
++                    enabled: !optBorderSize.locked && optBorderSize.available
+                     value: optBorderSize.number
+                     from: 0; to: 20; stepSize: 1
+-                    onValueChanged: {
++                    onValueModified: {
+                         if (optBorderSize.fetching || !optBorderSize.loaded || value === optBorderSize.number) return
+                         optBorderSize.setValue(value)
+                     }
+@@ -842,7 +853,7 @@ ContentPage {
+                         text: Translation.tr("Active border opacity")
+                         value: Math.round(Config.options.hyprland.general.borderColor.activeOpacity * 100)
+                         from: 0; to: 100; stepSize: 5
+-                        onValueChanged: {
++                        onValueModified: {
+                             // Compared as integers: the spin box only holds whole percents.
+                             if (value === Math.round(Config.options.hyprland.general.borderColor.activeOpacity * 100)) return
+                             Config.options.hyprland.general.borderColor.activeOpacity = value / 100.0
+@@ -866,7 +877,7 @@ ContentPage {
+                         text: Translation.tr("Inactive border opacity")
+                         value: Math.round(Config.options.hyprland.general.borderColor.inactiveOpacity * 100)
+                         from: 0; to: 100; stepSize: 5
+-                        onValueChanged: {
++                        onValueModified: {
+                             // Compared as integers: the spin box only holds whole percents.
+                             if (value === Math.round(Config.options.hyprland.general.borderColor.inactiveOpacity * 100)) return
+                             Config.options.hyprland.general.borderColor.inactiveOpacity = value / 100.0
+@@ -882,6 +893,7 @@ ContentPage {
+             icon: "app_registration"
+             shape: MaterialShape.Shape.Sunny
+             title: Translation.tr("Autostart Apps")
++            enabled: !page.revertPending
+             Layout.fillWidth: true
+
+             AutostartApps {}
+@@ -892,12 +904,13 @@ ContentPage {
+             icon: "animation"
+             shape: MaterialShape.Shape.Oval
+             title: Translation.tr("Animations")
++            enabled: !page.revertPending
+             GroupedList {
+                 ConfigSwitch {
+                     HyprlandConfigOption { id: optAnimEnable; key: "animations:enabled" }
+                     buttonIcon: "check"
+-                    text: Translation.tr("Enable") + (optAnimEnable.locked ? ` · ${optAnimEnable.lockedReason}` : "")
+-                    enabled: !optAnimEnable.locked
++                    text: Translation.tr("Enable") + (optAnimEnable.locked ? ` · ${optAnimEnable.lockedReason}` : "") + (optAnimEnable.available ? "" : ` · ${Translation.tr("hyprctl did not answer")}`)
++                    enabled: !optAnimEnable.locked && optAnimEnable.available
+                     checked: optAnimEnable.boolean
+                     onCheckedChanged: {
+                         if (optAnimEnable.fetching || !optAnimEnable.loaded || checked === optAnimEnable.boolean) return

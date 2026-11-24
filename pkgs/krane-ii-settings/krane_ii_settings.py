@@ -471,6 +471,20 @@ class Runtime:
             [SYSTEMCTL, "--user", "is-active", "--quiet", f"{REVERT_UNIT}.timer"])
         return result.returncode == 0
 
+    def revert_deadline(self):
+        """UTC epoch seconds the revert timer next fires, or None if unknown."""
+        try:
+            result = run(
+                [SYSTEMCTL, "--user", "show", f"{REVERT_UNIT}.timer",
+                 "-p", "NextElapseUSecRealtime", "--value"],
+                capture_output=True, text=True)
+        except SettingsError:
+            return None
+        text = result.stdout.strip()
+        if result.returncode != 0 or not text.isdigit() or int(text) == 0:
+            return None
+        return int(text) / 1_000_000
+
     def lock_state(self):
         """"true"/"false" from ii's lock IPC, or None while it is not up."""
         try:
@@ -657,6 +671,7 @@ class Settings:
             "revertPending": self.runtime.revert_timer_active(),
             "unconfirmed": [],
         }
+        state["revertDeadline"] = self.runtime.revert_deadline() if state["revertPending"] else None
         try:
             data, _ = read_repo(self.repo)
             validate_data(data, self.schema)

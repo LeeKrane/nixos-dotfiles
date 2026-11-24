@@ -97,6 +97,11 @@ class FakeRuntime:
     def revert_timer_active(self):
         return self.timer
 
+    deadline = None
+
+    def revert_deadline(self):
+        return self.deadline
+
     def lock_state(self):
         return self.lock_states.pop(0) if self.lock_states else "false"
 
