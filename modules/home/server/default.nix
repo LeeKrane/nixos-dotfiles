@@ -10,8 +10,7 @@ in
   # and `codegraph prompt-hook`; plugin hooks and the claude-mem worker/MCP server need node
   # and bun). ~/.claude itself is a clone of the claude-dotfiles repo. The NixOS
   # session variable ANTHROPIC_BASE_URL (modules/nixos/common/claude.nix) points it at the
-  # teamclaude proxy, which only taragarmr runs (hosts/taragarmr/services.nix); other hosts
-  # need that proxy.
+  # teamclaude proxy every host runs (modules/home/common/teamclaude.nix).
   home.packages = [
     pkgs.claude-code # vendored, from pkgs/claude-code via the overlay
     pkgs.rtk

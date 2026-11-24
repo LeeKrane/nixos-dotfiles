@@ -11,6 +11,7 @@
     ./cli.nix
     ./git.nix
     ./neovim.nix
+    ./teamclaude.nix
     ./zsh-fallback.nix
   ];
 

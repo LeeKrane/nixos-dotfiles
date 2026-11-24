@@ -21,7 +21,6 @@
     ./qwertz-binds.nix
     ./recording.nix
     ./drawing.nix
-    ./teamclaude.nix
     ./flake-update-notify.nix
     ./server-upgrade-notify.nix
     ./steam.nix

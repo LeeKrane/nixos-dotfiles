@@ -1,7 +1,6 @@
-# The other two user services of the old host: the teamclaude proxy (127.0.0.1:3456), the
-# desktops' module imported on its own (it has no desktop dependency; the rest of
-# modules/home/desktop stays out of a server), and the watermarks-remover plugin backend (127.0.0.1:8765).
-# Both run lingering, like the SPT units (spt.nix).
+# The watermarks-remover plugin backend (127.0.0.1:8765), another user service of the old host.
+# It runs lingering, like the SPT units (spt.nix), and so does the teamclaude proxy every host
+# gets from modules/home/common/teamclaude.nix.
 { config, pkgs, ... }:
 let
   # The plugin cache holds one directory per installed version; run the newest, so a plugin
@@ -31,8 +30,6 @@ let
 in
 {
   home-manager.users.${config.krane.user.name} = {
-    imports = [ ../../modules/home/desktop/teamclaude.nix ];
-
     # Runs the python service out of the Claude Code plugin cache (restored with ~/.claude),
     # newest installed version; it does not start until the plugin directory exists.
     systemd.user.services.watermarks-remover = {
