@@ -1,0 +1,26 @@
+# Mic chain for the Razer Seiren V2 Pro (replaces Vesktop's noise suppression and input
+# sensitivity): high-pass, DeepFilterNet, RNNoise voice detection as a speech gate, level gate,
+# compressor, EQ, limiter. Tuned in the EasyEffects GUI, then exported here.
+# EasyEffects itself is started by ii's hyprland/execs.lua on every host; this only ships the
+# preset and an autoload entry that applies it whenever the Seiren is the input device.
+# The preset is a read-only store symlink: to retune, change it in the GUI, "Save as" a new
+# name, and copy that file over easyeffects/RazorSeirenV2Pro.json.
+{ ... }:
+let
+  preset = "RazorSeirenV2Pro";
+  # EasyEffects names autoload files <PipeWire node name>:<route description>.json, the
+  # description of the device's active route (analog-input-mic here), not its name.
+  node = "alsa_input.usb-Razer_Inc_Razer_Seiren_V2_Pro_UC2410L04200310-00.mono-fallback";
+  route = "Microphone";
+in
+{
+  xdg.dataFile = {
+    "easyeffects/input/${preset}.json".source = ./easyeffects/${preset}.json;
+    "easyeffects/autoload/input/${node}:${route}.json".text = builtins.toJSON {
+      device = node;
+      device-description = "Razer Seiren V2 Pro Mono";
+      device-profile = route;
+      preset-name = preset;
+    };
+  };
+}

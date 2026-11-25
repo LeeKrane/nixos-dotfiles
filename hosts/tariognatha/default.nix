@@ -28,6 +28,7 @@ in
   home-manager.users.${config.krane.user.name} = {
     imports = [
       ./display.nix
+      ./easyeffects.nix
       ../../modules/home/desktop/tarkov.nix
       ../../modules/home/desktop/spt.nix
       ../../modules/home/desktop/stalker-gamma.nix
