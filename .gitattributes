@@ -1,0 +1,2 @@
+# ii's config.json: see filter.ii-json in modules/home/common/git.nix.
+hosts/*/illogical-impulse/config.json filter=ii-json

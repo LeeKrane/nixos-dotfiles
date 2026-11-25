@@ -17,6 +17,13 @@
       diff.colorMoved = "default";
       init.defaultBranch = "main";
 
+      # Used by .gitattributes in this repo for ii's config.json. ii saves that file with
+      # 4-space indent, and switchwall.sh rewrites it through jq with 2-space indent. The filter
+      # stores it with 2-space indent, so a save by either writer only shows its real changes.
+      # jq keeps the key order. If jq fails (for example on a half-written file), git keeps the
+      # content unfiltered, because the filter is not required.
+      filter.ii-json.clean = "${pkgs.jq}/bin/jq --indent 2 .";
+
       # From the previous dotfiles' .gitconfig, with `aa` fixed from the invalid `add all` to
       # `add -A`.
       alias = {
