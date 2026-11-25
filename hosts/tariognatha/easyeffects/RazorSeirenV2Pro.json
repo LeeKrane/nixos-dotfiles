@@ -38,19 +38,6 @@
             "threshold": -20.0,
             "wet": 0.0
         },
-        "deepfilternet#0": {
-            "attenuation-limit": 100.0,
-            "bypass": false,
-            "input-gain": 0.0,
-            "max-df-processing-threshold": 20.0,
-            "max-erb-processing-threshold": 35.0,
-            "min-processing-buffer": 0,
-            "min-processing-threshold": -15.0,
-            "model": "DeepFilterNet",
-            "mono-processing": false,
-            "output-gain": 0.0,
-            "post-filter-beta": 0.019999999552965164
-        },
         "equalizer#0": {
             "balance": 0.0,
             "bypass": false,
@@ -213,7 +200,6 @@
         },
         "plugins_order": [
             "filter#0",
-            "deepfilternet#0",
             "rnnoise#0",
             "gate#0",
             "compressor#0",
