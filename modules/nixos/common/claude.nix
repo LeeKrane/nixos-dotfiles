@@ -35,8 +35,10 @@ in
   environment.etc."fish/functions/claude.fish".text = ''
     function claude --wraps claude --description 'claude with Code Mode via teamclaude (MITM)'
         # Probe the port, not the unit: teamclaude may be started by hand, and the user bus may be
-        # unreachable (ssh without linger, sudo -u). Any HTTP answer counts as up.
-        if not ${curl} -s -o /dev/null -m 2 http://127.0.0.1:3456/
+        # unreachable (ssh without linger, sudo -u). Any HTTP answer counts as up. Its own status
+        # endpoint, not /: teamclaude relays unknown paths to api.anthropic.com, so a slow upstream
+        # would time the probe out and report a running proxy as down.
+        if not ${curl} -s -o /dev/null -m 2 http://127.0.0.1:3456/teamclaude/status
             echo "claude: teamclaude is not answering on 127.0.0.1:3456. Start it with `systemctl --user start teamclaude`, or use claude-plain to go direct." >&2
             return 1
         end
