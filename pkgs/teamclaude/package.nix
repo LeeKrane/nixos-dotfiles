@@ -34,7 +34,12 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     # The store is read-only, so its self-updater could never succeed.
     # Disabling it also stops the daily registry check, the reason SETUP.md
     # sets "autoUpdate": false.
+    # Node's happy-eyeballs dialer gives each address 250 ms, then aborts it and tries the next.
+    # On a network with no IPv6 route, one lost SYN or a slow handshake on the IPv4 address
+    # fails the whole connect ("connect ETIMEDOUT <v4>; connect ENETUNREACH <v6>"). 5 s covers
+    # two SYN retransmits and still falls back to the next address when IPv4 is truly down.
     makeWrapper ${lib.getExe nodejs_22} $out/bin/teamclaude \
+      --add-flags --network-family-autoselection-attempt-timeout=5000 \
       --add-flags $dest/src/index.js \
       --set TEAMCLAUDE_DISABLE_AUTOUPDATE 1
 
