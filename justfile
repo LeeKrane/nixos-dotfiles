@@ -81,6 +81,10 @@ switch:
 switch-remote HOST USER="krane":
     nixos-rebuild switch --flake .#{{ HOST }} --target-host {{ USER }}@{{ HOST }} --sudo --ask-sudo-password
 
+# Wakes tariognatha from suspend by sending a magic packet from tarronax, its neighbor on the second LAN.
+wake-tariognatha:
+    ssh tarronax wake-tariognatha
+
 # Enables the pre-push lint hook (.githooks/pre-push) in this checkout.
 hooks:
     git config core.hooksPath .githooks
