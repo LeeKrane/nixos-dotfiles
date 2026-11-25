@@ -10,7 +10,7 @@
     # "Invalid 'buf': Expected Lua number"). Checks skip only for 9.2.2, so any
     # nixpkgs bump re-enables them. Remove this override once a newer version builds.
     package = pkgs.vimPlugins.rustaceanvim.overrideAttrs (old: {
-      doCheck = !(pkgs.lib.hasPrefix "9.2.2" old.version);
+      doCheck = builtins.head (pkgs.lib.splitString "-" old.version) != "9.2.2";
     });
     settings.server.default_settings.rust-analyzer = {
       cargo.allFeatures = true;
