@@ -48,6 +48,18 @@ in
   # browser JavaScript, reading other processes' memory through speculative execution.
   boot.kernelParams = [ "mitigations=off" ];
 
+  # Lets the session raise priority to nice -11, the PipeWire level, for EasyEffects
+  # (easyeffects.nix). greetd's session includes the login PAM service, which loads these.
+  # Applies from the next login.
+  security.pam.loginLimits = [
+    {
+      domain = config.krane.user.name;
+      type = "-";
+      item = "nice";
+      value = "-11";
+    }
+  ];
+
   # Desktop only: peripherals.nix defaults this false via mkDefault, so plain `true` wins.
   services.hardware.openrgb.enable = true;
 

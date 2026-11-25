@@ -78,10 +78,21 @@
                     "solo": false,
                     "type": "Bell",
                     "width": 4.0
+                },
+                "band2": {
+                    "frequency": 5000.0,
+                    "gain": -6.0,
+                    "mode": "RLC (BT)",
+                    "mute": false,
+                    "q": 1.0,
+                    "slope": "x1",
+                    "solo": false,
+                    "type": "Bell",
+                    "width": 4.0
                 }
             },
             "mode": "IIR",
-            "num-bands": 2,
+            "num-bands": 3,
             "output-gain": 0.0,
             "pitch-left": 0.0,
             "pitch-right": 0.0,
@@ -100,6 +111,17 @@
                 "band1": {
                     "frequency": 4000.0,
                     "gain": 2.0,
+                    "mode": "RLC (BT)",
+                    "mute": false,
+                    "q": 1.0,
+                    "slope": "x1",
+                    "solo": false,
+                    "type": "Bell",
+                    "width": 4.0
+                },
+                "band2": {
+                    "frequency": 5000.0,
+                    "gain": -6.0,
                     "mode": "RLC (BT)",
                     "mute": false,
                     "q": 1.0,
@@ -129,7 +151,7 @@
         "gate#0": {
             "attack": 5.0,
             "bypass": false,
-            "curve-threshold": -32.0,
+            "curve-threshold": -30.0,
             "curve-zone": -6.0,
             "dry": -80.01,
             "hpf-frequency": 10.0,
@@ -204,7 +226,7 @@
             "input-gain": 0.0,
             "model-name": "\"\"",
             "output-gain": 0.0,
-            "release": 300.0,
+            "release": 200.0,
             "use-standard-model": true,
             "vad-thres": 90.0,
             "wet": 0.0
