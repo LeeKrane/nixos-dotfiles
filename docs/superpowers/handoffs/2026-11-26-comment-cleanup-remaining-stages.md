@@ -4,7 +4,7 @@ Branch `doc-cleanup`. Stage 1 (code comments) is done; rules in
 `docs/superpowers/specs/2026-11-26-comment-cleanup-design.md` apply to both stages below.
 Unverifiable notes go to a review list for the user, never edited silently.
 
-Next session: write one spec per stage (brainstorming, then writing-plans), starting with stage 2.
+Next session: write the stage 3 spec (brainstorming, then writing-plans).
 
 ## Cross-reference check (both stages)
 
@@ -21,18 +21,12 @@ headers, apps.nix out-of-scope list, "see its own comment" pointers). Each spec 
   `install.sh`, template placeholders, golden files).
 - Stage 3 runs last and must re-verify references created or broken by stages 1 and 2.
 
-## Stage 2: comments in `patches/`
+## Stage 2: comments in `patches/` (done)
 
-- Scope: comments in `+` lines of all 66 `patches/ii/*/*.patch` (all authored in this repo)
-  and the three standalone patches in `patches/`. Context lines are upstream: untouched.
-- Open question: commit messages (fork commit, problem, port, drop-when) stay as is, or get
-  trimmed too. Recommendation: leave them.
-- Method: scratch clone of dots-hyprland at the flake's pinned rev (`flake.lock`), `git am`
-  every series in order, clean comments commit by commit, re-export each series with
-  `git format-patch --zero-commit --no-signature --no-numbered` (see `docs/II-INTEGRATION.md`).
-  Never hand-edit `.patch` files. The stale fork `~/src/dots-hyprland` stays untouched.
-- Done when: series apply cleanly, `just ci`, `just check` pass, diff of the patched source
-  is comment-only.
+Done on this branch (spec `docs/superpowers/specs/2026-11-26-comment-cleanup-stage2-design.md`,
+plan `docs/superpowers/plans/2026-11-26-comment-cleanup-stage2.md`). Review list resolved and deleted.
+Five patches' "Port: clean" lines now read "Port: clean, comments trimmed"; other commit messages unchanged.
+The scratch clone and tools stay in `~/.cache/comment-cleanup/` until merge.
 
 ## Stage 3: Markdown docs
 
