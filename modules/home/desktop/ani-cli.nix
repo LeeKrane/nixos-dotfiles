@@ -1,11 +1,7 @@
-# ani-cli with its watch history synced across devices through the `ani-cli` database on the
-# Obsidian LiveSync CouchDB (couch.krane.dev, hosts/taragarmr/couchdb.nix). The wrapper
-# (scripts/ani-cli-sync.sh) pulls and merges ani-hsts before every run and pushes it after.
-# A separate database, not the LiveSync one: LiveSync stores files chunked and encrypted, and
-# only syncs while Obsidian runs.
-#
-# Credentials come from the `ani-cli/curl-auth` secret (secrets/README.md). Without that
-# section in secrets/<host>.yaml this installs plain ani-cli.
+# ani-cli with watch history synced through the `ani-cli` CouchDB database
+# (hosts/taragarmr/couchdb.nix). Separate from the LiveSync database, which stores files
+# chunked and encrypted and only syncs while Obsidian runs.
+# Without the `ani-cli/curl-auth` secret (secrets/README.md) this installs plain ani-cli.
 #
 # One-time server setup, as the CouchDB admin (secret couchdb/env on taragarmr):
 #   c=https://couch.krane.dev; a=admin:<admin password>
@@ -41,8 +37,7 @@ let
     + builtins.readFile ../../../scripts/ani-cli-sync.sh;
   };
 
-  # Earlier paths win in symlinkJoin: the wrapper's bin/ani-cli shadows the real one, the man
-  # page and anything else come from ani-cli itself.
+  # Earlier paths win: the wrapper's bin/ani-cli shadows the real one.
   synced = pkgs.symlinkJoin {
     name = "ani-cli-synced";
     paths = [

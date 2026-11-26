@@ -1,9 +1,9 @@
-# All hosts use kb_layout = "at" (QWERTZ). Upstream ii binds several actions to keysyms that
-# need Shift or AltGr on QWERTZ (Slash, Semicolon, Apostrophe, Equal). Hyprland matches the
-# modifier mask exactly, so those never fire. This moves them onto unshifted keys. Super+Period
-# and Super+Minus are taken upstream (emoji, zoom out); they are unbound first because Hyprland
-# runs every bind that matches, and custom/keybinds.lua loads after the upstream file.
-# zoomfunction is a local in hyprland/keybinds.lua, so it is reimplemented here.
+# kb_layout = "at" (QWERTZ): upstream ii binds actions to keysyms that need Shift or AltGr
+# (Slash, Semicolon, Apostrophe, Equal), and Hyprland matches the modifier mask exactly, so they
+# never fire. These move them onto unshifted keys. Super+Period and Super+Minus are taken
+# upstream, so they are unbound first: Hyprland runs every matching bind and custom/keybinds.lua
+# loads after the upstream file. zoomfunction is a local in hyprland/keybinds.lua, so it is
+# reimplemented here.
 { ... }:
 {
   krane.hypr.unbinds = [

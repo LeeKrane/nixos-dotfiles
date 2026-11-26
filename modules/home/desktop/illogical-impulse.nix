@@ -1,10 +1,8 @@
-# Wrapper around the soymou module (end-4's illogical-impulse shell), imported in lib/mk-host.nix.
-# Its activation entry copyIllogicalImpulseConfigs does rm -rf + cp -r over ~/.config/hypr on
-# every switch, so home.file symlinks there die. Our overrides are written as plain files by a
-# later DAG entry instead. See docs/II-INTEGRATION.md.
-# OWNED files (monitors.lua, custom/{variables,keybinds,execs,rules}.lua) replace the upstream
-# copy with install -Dm644. APPENDED files (custom/env.lua, custom/general.lua) are also written
-# by the soymou module, so our block goes behind a sentinel and is replaced, never duplicated.
+# Wrapper around the soymou ii module. Its copyIllogicalImpulseConfigs does rm -rf + cp -r over
+# ~/.config/hypr on every switch, so home.file symlinks there die; overrides are written as plain
+# files by a later DAG entry (docs/II-INTEGRATION.md). OWNED files replace the upstream copy.
+# APPENDED files (custom/env.lua, custom/general.lua) are also written by the soymou module, so
+# our block goes behind a sentinel and is replaced, never duplicated.
 {
   config,
   lib,
@@ -14,8 +12,6 @@
 let
   rendered = config.krane.hypr._rendered;
 
-  # Start-of-block marker for appended files. Must match the replace logic below and
-  # docs/VERIFY.md's on-target check exactly, as a whole line.
   sentinel = "-- >>> krane overrides >>>";
 
   ownedFiles = [
@@ -36,41 +32,31 @@ let
   # own hardcoded targetPath, or our overrides land somewhere ii never reads.
   hyprDir = "${config.home.homeDirectory}/.config/hypr";
 
-  # Files this repo sed-patches after ii (re)writes them, since ii's copy step recreates
-  # each one from scratch every switch. See docs/II-INTEGRATION.md "Patched files".
+  # Files sed-patched after ii's copy step recreates them (docs/II-INTEGRATION.md "Patched files").
   iiPatches = [
     {
-      # modules/nixos/common/shells.nix aliases cat to bat at NixOS level (/etc/fish loads first);
-      # ii's config.fish must bypass that alias to print raw OSC sequences, not a bat frame.
       file = "${config.home.homeDirectory}/.config/fish/config.fish";
       sed = ''s|^\(\s*\)cat \(~/.local/state/quickshell/user/generated/terminal/sequences.txt\)|\1command cat \2|'';
       why = "modules/nixos/common/shells.nix aliases cat to bat; bypass it for raw OSC sequences";
     }
     {
-      # The nix-wrapped quickshell binary's comm is truncated to .quickshell-wra, so
-      # `killall qs quickshell` in ii's restart-widgets keybind matches nothing and every
-      # press stacks a new qs instance instead of replacing the old one. pkill -f matches
-      # against the full command line instead, so it still finds the wrapped process.
-      # [q] prevents pkill -f from matching the sh -c wrapper Hyprland spawns for the keybind itself.
+      # pkill -f matches the full command line; [q] stops it matching the sh -c wrapper Hyprland
+      # spawns for the keybind itself.
       file = "${hyprDir}/hyprland/keybinds.lua";
       sed = ''s|killall ydotool qs quickshell|killall ydotool; pkill -f '"'"'[q]s-wrapped -c ii'"'"'|'';
       why = "nix-wrapped quickshell truncates comm to .quickshell-wra, so killall qs quickshell never matches";
     }
     {
-      # Fresh hosts seed ~/.config/illogical-impulse/config.json from this QML default the
-      # first time ii's copy step runs; config.json stays ii-owned after that, so the GUI
-      # can still flip it back off. Every host autologins via greetd straight into Hyprland
-      # (modules/nixos/desktop/desktop.nix), so there's no session picker to lock behind — flip the
-      # default itself so ii locks immediately on startup.
+      # Fresh hosts seed config.json from this QML default; it stays ii-owned afterwards, so the
+      # GUI can flip it back. Autologin goes straight to Hyprland (modules/nixos/desktop/desktop.nix)
+      # with no session picker, so ii locks on startup.
       file = "${config.home.homeDirectory}/.config/quickshell/ii/modules/common/Config.qml";
       sed = "s/property bool launchOnStartup: false/property bool launchOnStartup: true/";
       why = "fresh hosts seed config.json from ii's QML defaults; want ii to lock immediately under greetd autologin";
     }
     {
-      # ii's dark/light toggle writes color-scheme with gsettings, but no schemas are on the
-      # session's XDG_DATA_DIRS (ii's own custom/env.lua hardcodes it), so every call fails with
-      # "No schemas installed" and the portal keeps reporting no preference. Point each call at
-      # the schemas directly instead.
+      # No schemas are on the session's XDG_DATA_DIRS, so each call fails with "No schemas
+      # installed"; point each call at them directly.
       file = "${config.home.homeDirectory}/.config/quickshell/ii/scripts/colors/switchwall.sh";
       # `#` delimiter, not `|`: `\|` is the alternation inside the pattern.
       sed = "s#gsettings \\(set\\|get\\) org.gnome.desktop.interface#GSETTINGS_SCHEMA_DIR=${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}/glib-2.0/schemas ${pkgs.glib.bin}/bin/gsettings \\1 org.gnome.desktop.interface#g";
@@ -84,10 +70,9 @@ let
     fi
   '';
 
-  # Drops everything from the sentinel to EOF first, so a stale block from an older generation
-  # never sits above the fresh one. A store script, not inline: a shell redirect can't be
-  # prefixed with $DRY_RUN_CMD, so dry-run mode would still write. `cat`, not `mv`, preserves
-  # the file's mode.
+  # Drops everything from the sentinel to EOF first, so a stale block never sits above the fresh
+  # one. A store script so $DRY_RUN_CMD can prefix it (a shell redirect can't be); `cat`, not
+  # `mv`, preserves the file's mode.
   appendScript = pkgs.writeShellScript "krane-ii-override-block" ''
     set -eu
     target="$1"
@@ -107,8 +92,8 @@ let
     $DRY_RUN_CMD ${pkgs.coreutils}/bin/install -Dm644 ${rendered.${name}} "${hyprDir}/${name}"
   '';
 
-  # Written even when the rendered body is empty, so docs/VERIFY.md's sentinel check means the
-  # same thing on every host regardless of whether it sets the option.
+  # Written even when the rendered body is empty, so the sentinel check in docs/VERIFY.md means
+  # the same on every host.
   appendBlock = name: ''
     $DRY_RUN_CMD ${appendScript} "${hyprDir}/${name}" ${rendered.${name}} '${sentinel}'
   '';
@@ -127,9 +112,8 @@ in
       '';
     }
     {
-      # home-manager's DAG sorter silently ignores an unknown name in `after`, so a renamed or
-      # removed copyIllogicalImpulseConfigs would misorder us with no error. This assertion
-      # turns that into a loud build failure instead.
+      # home-manager's DAG sorter silently ignores an unknown name in `after`; this turns a
+      # renamed copyIllogicalImpulseConfigs into a build failure.
       assertion = config.home.activation ? copyIllogicalImpulseConfigs;
       message = ''
         illogical-flake no longer defines home.activation.copyIllogicalImpulseConfigs
@@ -139,55 +123,43 @@ in
     }
   ];
 
-  # Default for the portal's color-scheme until ii's toggle (patched above) changes it. Without
-  # it the key stays unset and apps that follow the system preference fall back to light.
-  # Rewritten on every activation, so a light-mode choice lasts until the next switch.
+  # Default portal color-scheme until ii's toggle changes it; unset, apps following the system
+  # preference fall back to light. Rewritten on every activation.
   dconf.settings."org/gnome/desktop/interface".color-scheme = "prefer-dark";
 
   programs.illogical-impulse = {
     enable = true;
 
     dotfiles = {
-      # fish/starship on means HM writes ~/.config/fish/config.fish, which the copy step
-      # replaces with a regular file, hence lib/mk-host.nix's backupFileExtension. Our own
-      # fish lives in NixOS `programs.fish.*` (/etc/fish), outside the wiped set.
+      # fish/starship on makes HM write ~/.config/fish/config.fish, which the copy step replaces
+      # with a regular file, hence backupFileExtension in lib/mk-host.nix. Our fish lives in NixOS
+      # programs.fish (/etc/fish).
       fish.enable = true;
       kitty.enable = true;
       starship.enable = true;
     };
 
-    # Empty on purpose: ii ships its own Quickshell overview instead of hyprexpo, which also
-    # isn't in nixpkgs' hyprland-plugins.
+    # Empty: ii ships its own Quickshell overview, and hyprexpo isn't in nixpkgs' hyprland-plugins.
     hyprland.plugins = [ ];
   };
 
-  # Runs after copyIllogicalImpulseConfigs rewrites custom/env.lua and custom/general.lua.
-  # The assertion above catches a renamed upstream entry as a build failure, not silent
-  # misordering.
   home.activation.kraneIiOverrides = lib.hm.dag.entryAfter [ "copyIllogicalImpulseConfigs" ] (
     ''
-      # Declarative Hyprland overrides (krane.hypr.*, modules/home/desktop/hypr-config.nix).
-      # Regular files, not symlinks: the copy step above rm -rf's ~/.config/hypr.
+      # Regular files, not symlinks: the copy step rm -rf's ~/.config/hypr.
     ''
     + lib.concatMapStrings installOwned ownedFiles
     + lib.concatMapStrings appendBlock appendedFiles
   );
 
-  # Sibling to kraneIiOverrides rather than folded into it: these patch files ii itself
-  # writes or wipes, not a Hyprland file, and don't fit the owned/appended/assertion
-  # machinery above.
   home.activation.kraneIiPatches = lib.hm.dag.entryAfter [ "copyIllogicalImpulseConfigs" ] (
     lib.concatMapStrings patchFile iiPatches
   );
 
-  # copyIllogicalImpulseConfigs rm -rf's and recopies ~/.config/hypr non-atomically. A running
-  # Hyprland reloads on the first inotify event, mid-copy, hits `module 'hyprland.lib' not found`
-  # and latches emergency mode (no binds) until the next explicit reload. Reload once the tree is
-  # complete and our overrides are in. `config-only` skips the monitor reapply; execs.lua keeps
-  # every exec inside hyprland.start, so nothing respawns.
-  # home-manager-<user>.service (logs as hm-activate-<user>) does not get HYPRLAND_INSTANCE_SIGNATURE,
-  # so fall back to scanning the runtime dir. `-S` is also true for a socket a crashed instance left
-  # behind, so the reload itself is the liveness test: try each candidate, stop at the first that answers.
+  # copyIllogicalImpulseConfigs recopies ~/.config/hypr non-atomically; a running Hyprland reloads
+  # mid-copy, hits `module 'hyprland.lib' not found` and latches emergency mode (no binds). Reload
+  # once the tree is complete. `config-only` skips the monitor reapply. home-manager-<user>.service
+  # lacks HYPRLAND_INSTANCE_SIGNATURE, so scan the runtime dir; `-S` is also true for a crashed
+  # instance's socket, so the reload itself is the liveness test.
   home.activation.kraneIiHyprReload =
     lib.hm.dag.entryAfter [ "kraneIiOverrides" "kraneIiPatches" "kraneIiActivate" ]
       ''
@@ -207,11 +179,10 @@ in
         fi
       '';
 
-  # copyIllogicalImpulseConfigs rm -rf's ~/.config/fish before recopying it, taking
-  # fish_variables (universal vars, incl. __fish_initialized) with it. That retriggers
-  # fish's 4.3 upgrade notice and conf.d/fish_frozen_key_bindings.fish every activation.
-  # Save it before the wipe, restore it after. See docs/II-INTEGRATION.md "Preserved files".
-  # A fish instance that runs set -U between the save and ii's rm -rf loses that write; acceptable.
+  # copyIllogicalImpulseConfigs rm -rf's ~/.config/fish, taking fish_variables (incl.
+  # __fish_initialized) with it and retriggering fish's 4.3 upgrade notice every activation. Saved
+  # before the wipe, restored after (docs/II-INTEGRATION.md "Preserved files"). A `set -U` between
+  # save and wipe is lost.
   home.activation.kraneIiSaveFishVars =
     lib.hm.dag.entryBetween [ "copyIllogicalImpulseConfigs" ] [ "writeBoundary" ]
       ''

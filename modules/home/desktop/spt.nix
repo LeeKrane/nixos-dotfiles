@@ -1,18 +1,16 @@
-# Single Player Tarkov with Fika co-op, next to the live game of tarkov.nix. Imported by
-# hosts/tarmantria/default.nix and hosts/tariognatha/default.nix, which also open Fika's ports.
+# Single Player Tarkov with Fika co-op, next to the live game of tarkov.nix. The importing hosts
+# also open Fika's ports.
 #
-# SPT needs an older client than live: SPT 4.1 runs on EFT 0.16.9.40743. `spt-setup` copies the
-# live install into its own prefix at ~/Games/spt (~150 GB, reflinked where the filesystem can),
-# downgrades the copy with the SPT team's delta patcher, then adds SPT and Fika on top. The live
-# game and its prefix are never touched. Everything downloaded is looked up at run time, as
-# tarkov-setup does, since the SPT team's builds move with every EFT patch; only the series
-# and the Fika tags below are chosen here. Fika-Installer.exe wants admin rights and the
-# Windows firewall, so the Fika files are unpacked by hand.
+# SPT 4.1 needs an older client (EFT 0.16.9.40743) than live. `spt-setup` copies the live install
+# into ~/Games/spt (~150 GB, reflinked where possible), downgrades the copy with the SPT team's
+# delta patcher, then adds SPT and Fika. The live game and its prefix are untouched. Downloads are
+# looked up at run time (SPT builds move with every EFT patch); only the series and the Fika tags
+# are chosen here. Fika-Installer.exe wants admin rights and the Windows firewall, so the Fika
+# files are unpacked by hand.
 #
-# `spt` runs the server natively, with the Nix ASP.NET Core 10, then SPT.Launcher.exe under umu
-# like tarkov does. Offline: no BattlEye runtime. The server and the live game never run
-# together, see exclusion in tarkov-common.nix. Layout follows MadByteDE's SPT-Linux-Guide.
-# The server listens on all interfaces so Fika peers reach it; the hosts open the ports. With
+# `spt` runs the server natively on the Nix ASP.NET Core 10, then SPT.Launcher.exe under umu.
+# Offline: no BattlEye runtime. Server and live game never run together (exclusion in
+# tarkov-common.nix). The server listens on all interfaces so Fika peers reach it. With
 # krane.spt.server set, `spt` runs no server and only checks that the remote one answers.
 {
   config,
@@ -23,21 +21,19 @@
 let
   cfg = config.krane.spt;
 
-  # The SPT series to install, as the SPTVersion in the SPT team's release.json. It pins the
-  # EFT client the copy is downgraded to and the ASP.NET Core major below.
+  # SPT series to install (SPTVersion in release.json); pins the EFT client and the ASP.NET Core
+  # major below.
   sptSeries = "4.1";
-  # Fika releases built for that EFT client. Plugin tags come from project-fika/Fika-Plugin,
-  # server tags from project-fika/Fika-Server-CSharp, which version separately.
+  # Fika releases for that EFT client; plugin tags from project-fika/Fika-Plugin, server tags from
+  # project-fika/Fika-Server-CSharp (versioned separately).
   fikaPluginTag = "v2.4.6";
   fikaServerTag = "v2.4.2";
-  # Where the SPT team publishes release.json (SPT builds) and mirrors.json (downgrade patches).
   sptMetadataUrl = "https://patcher.sp-tushonka.com";
 
   common = import ./tarkov-common.nix { inherit config lib pkgs; };
-  # GE-Proton from nixpkgs, as for live Tarkov (tarkov-common.nix).
   env = common.umuEnv "$HOME/Games/spt";
 
-  # SPT 4.1's server targets .NET 10 and ASP.NET Core 10; a later SPT series needs a newer one.
+  # SPT 4.1's server targets .NET 10 and ASP.NET Core 10.
   dotnet = pkgs.dotnet-aspnetcore_10;
 
   # hpatchz applies the patcher's deltas. Not in nixpkgs; the upstream binary is static, so it
@@ -48,7 +44,6 @@ let
     stripRoot = false;
   };
 
-  # The live install's folder under the live prefix, and the SPT copy's under the SPT prefix.
   liveRoot = "$HOME/Games/tarkov/drive_c/Battlestate Games";
   sptDir = "$WINEPREFIX/drive_c/SPT";
 
@@ -78,8 +73,7 @@ let
 
       die() { echo "spt-setup: $*" >&2; exit 1; }
 
-      # Every temp dir and the half-built copy go on exit, whether by die, a failed command or
-      # Ctrl-C, so an interrupted run leaves nothing big behind.
+      # Every temp dir and the half-built copy go on exit (die, failed command, Ctrl-C).
       tmpdirs=()
       mktmp() { local d; d=$(mktemp -d "$cache/$1.XXXXXX") && tmpdirs+=("$d") && echo "$d"; }
       trap 'rm -rf "''${tmpdirs[@]}"' EXIT
@@ -88,7 +82,6 @@ let
       # The SPT team's hashes are the base64 of the MD5.
       md5b64() { md5sum "$1" | cut -d' ' -f1 | xxd -r -p | base64; }
 
-      # download <dest> <base64 md5> <url>...: resumes a partial file, tries each mirror in turn.
       download() {
         local dest=$1 hash=$2 url
         shift 2
@@ -101,15 +94,12 @@ let
         return 1
       }
 
-      # The EFT build number, the last field of the exe's FileVersion (0.16.9.<build>).
       eft_build() {
         local out
         out=$(7zz l "$1")
         grep -m1 -o 'FileVersion:[^}]*' <<<"$out" | cut -d' ' -f2 | awk -F. '{ print $NF }'
       }
 
-      # patch_files <patch dir> <game dir>: each file under the patch dir is a delta against, a
-      # deletion of, or an addition of the game file of the same path, by its extension.
       patch_files() {
         local patches=$1 game=$2 f rel out n=0
         while IFS= read -r -d "" f; do
@@ -135,8 +125,7 @@ let
         done < <(find "$patches" -type f -print0)
       }
 
-      # stamp <name> [value]: the value last installed for that part of the SPT copy, kept in
-      # the copy itself so a new copy starts with none. Without a value, prints it.
+      # stamp <name> [value]: value last installed for that part, kept in the copy so a new copy starts with none.
       stamp() {
         if [ "$#" -eq 2 ]; then echo "$2" >"$spt_dir/.spt-setup-$1"; return; fi
         cat "$spt_dir/.spt-setup-$1" 2>/dev/null || true
@@ -148,13 +137,12 @@ let
       target=$(jq -r '.ClientVersion' <<<"$release")
       spt_hash=$(jq -r '.Mirrors[0].Hash' <<<"$release")
       mapfile -t spt_urls < <(jq -r '.Mirrors[].DownloadUrl' <<<"$release")
-      # The launcher needs the version of the .NET desktop runtime that the release names.
       desktop=$(jq -r 'first(.RequiredRuntimes[] | select(.Identifier == "Microsoft.WindowsDesktop.App")) | .MinimumVersion' <<<"$release")
       [ -n "$desktop" ] && [ "$desktop" != null ] || die "release.json names no desktop runtime"
 
-      # The prefix: Windows 8.1 as SPT's guide sets, vc++, BepInEx's winhttp.dll loaded as the
-      # game's entry point (it is how the SPT client patches get in), and the empty Steam
-      # library file the launcher looks for.
+      # Prefix: Windows 8.1 as SPT's guide sets, vc++, BepInEx's winhttp.dll as the game's entry
+      # point (how the SPT client patches get in), and the empty Steam library file the launcher
+      # looks for.
       mkdir -p "$WINEPREFIX"
       if [ ! -e "$WINEPREFIX/.spt-prefix-base" ]; then
         umu-run winetricks -q vcrun2022 win81
@@ -164,10 +152,9 @@ let
         touch "$WINEPREFIX/.spt-prefix-base"
       fi
 
-      # The .NET desktop runtime for the launcher, the exact one the release asks for. Not
-      # winetricks' dotnetdesktop9: SPT 4.1 wants 10.x. The marker holds the installed
-      # version, so a prefix with another one is fixed on the next run. Microsoft's installer,
-      # silent; the shared folder is checked afterwards as its exit codes vary.
+      # The .NET desktop runtime the release names, not winetricks' dotnetdesktop9 (SPT 4.1 wants
+      # 10.x). The marker holds the installed version, so a prefix with another one is fixed next
+      # run. The shared folder is checked afterwards as the installer's exit codes vary.
       if [ "$(cat "$WINEPREFIX/.spt-desktop-runtime" 2>/dev/null || true)" != "$desktop" ]; then
         installer="$cache/windowsdesktop-runtime-$desktop-win-x64.exe"
         curl -fL --retry 3 -C - -o "$installer" \
@@ -180,10 +167,9 @@ let
         echo "$desktop" >"$WINEPREFIX/.spt-desktop-runtime"
       fi
 
-      # The live client, copied then downgraded. Redone when the copy is not for the wanted
-      # client, so a newer SPT series (or none yet) is picked up. The copy is built beside its
-      # final place and swapped in only when patched, so an interrupted run leaves the old
-      # copy; the SPT profiles are carried over.
+      # The live client, copied then downgraded; redone when the copy is not for the wanted client.
+      # Built beside its final place and swapped in only when patched, so an interrupted run leaves
+      # the old copy; SPT profiles carry over.
       if [ ! -e "$spt_dir/EscapeFromTarkov.exe" ] || [ "$(stamp client)" != "$target" ]; then
         live=$(find "$live_root" -maxdepth 3 -name EscapeFromTarkov.exe -printf '%h\n' -quit 2>/dev/null || true)
         [ -n "$live" ] || die "no live EscapeFromTarkov.exe under $live_root. Install the game with tarkov first."
@@ -216,7 +202,7 @@ let
           rm -rf "''${patches_tmp:?}" "''${archive:?}"
         fi
 
-        # Move the old copy aside rather than into the new one's path, which would nest it.
+        # Move the old copy aside, not into the new one's path, which would nest it.
         if [ -d "$spt_dir" ]; then
           if [ -d "$spt_dir/SPT_Runtime/user" ]; then
             mkdir -p "$work/SPT_Runtime"
@@ -229,10 +215,9 @@ let
         stamp client "$target"
       fi
 
-      # SPT: the BepInEx loader, the client plugins, SPT_Runtime with the server and launcher.
-      # Extracted aside and copied over the game, so a failed extraction touches nothing and
-      # the profiles in SPT_Runtime/user, which the archive does not contain, stay. Redone when
-      # the release's archive changes.
+      # SPT: the BepInEx loader, client plugins, SPT_Runtime with server and launcher. Extracted
+      # aside and copied over the game, so a failed extraction touches nothing and the profiles in
+      # SPT_Runtime/user stay. Redone when the release's archive changes.
       if [ ! -e "$spt_dir/SPT_Runtime/SPT.Server.Linux.dll" ] || [ "$(stamp spt)" != "$spt_hash" ]; then
         archive="$cache/spt.7z"
         download "$archive" "$spt_hash" "''${spt_urls[@]}" || die "SPT download failed"
@@ -243,11 +228,10 @@ let
         stamp spt "$spt_hash"
       fi
 
-      # The server listens on 127.0.0.1 by default, which Fika's other players cannot reach, so
-      # bind every interface. backendIp is different: it is the address the server tells clients
-      # to reach it on, so it must be one they can route to (public, LAN or VPN IP), never
-      # 0.0.0.0. Left as is unless SPT_BACKEND_IP is given. Set on every run: an SPT reinstall
-      # resets it.
+      # The server listens on 127.0.0.1 by default, which Fika peers cannot reach, so bind every
+      # interface. backendIp is the address clients are told to reach it on, so it must be
+      # routable (public, LAN or VPN IP), not 0.0.0.0; left as is unless SPT_BACKEND_IP is given.
+      # Set every run: an SPT reinstall resets it.
       http="$spt_dir/SPT_Runtime/SPT_Data/configs/http.json"
       [ -f "$http" ] || die "no $http in the SPT install"
       jq --arg backend "''${SPT_BACKEND_IP:-}" \
@@ -255,9 +239,8 @@ let
         "$http" >"$http.new"
       mv "$http.new" "$http"
 
-      # Fika: the plugin unpacks into BepInEx/plugins/Fika, the server into
-      # SPT_Runtime/user/mods/fika-server, both relative to the game root. Release notes name
-      # the client each is built for. Redone when a tag below changes.
+      # Fika: plugin into BepInEx/plugins/Fika, server into SPT_Runtime/user/mods/fika-server
+      # (relative to the game root). Redone when a tag changes.
       fika() {
         local repo=$1 tag=$2 file=$3 body unpack
         body=$(curl -fsSL "https://api.github.com/repos/project-fika/$repo/releases/tags/$tag" |
@@ -282,7 +265,6 @@ let
     '';
   };
 
-  # The SPT launcher wrapper for one install (dir) and its server (null runs its own).
   mkSpt =
     {
       name,
@@ -291,7 +273,7 @@ let
     }:
     pkgs.writeShellApplication {
       inherit name;
-      # No gamemoderun, for the same reason as tarkov: the game is registered by PID instead.
+      # No gamemoderun, same as tarkov: the game is registered by PID instead.
       runtimeInputs = common.runtimeInputs ++ [
         dotnet
         pkgs.iproute2
@@ -310,9 +292,7 @@ let
         ensure_exclusive SPT "Escape from Tarkov" "$HOME/Games/tarkov"
 
         runtime="${dir}/SPT_Runtime"
-        # krane.spt.server: the remote server to use, empty to run this install's own.
         remote=${lib.escapeShellArg (if server == null then "" else server)}
-        # krane.spt.cpus: the CPUs the launcher and the game are confined to, empty for all.
         cpus=${lib.escapeShellArg (if cfg.cpus == null then "" else cfg.cpus)}
         if [ ! -e "$runtime/SPT.Launcher.exe" ] || { [ -z "$remote" ] && [ ! -e "$runtime/SPT.Server.Linux.dll" ]; }; then
           echo "No SPT in $runtime. Run spt-setup first." >&2
@@ -322,7 +302,7 @@ let
         ${common.primeEnv}
         ${common.renderEnv "SPT.Launcher.exe"}
 
-        # alive <pid>: running, a zombie not yet reaped by us does not count.
+        # alive <pid>: a zombie not yet reaped by us does not count.
         alive() {
           local st
           st=$(ps -o stat= -p "$1" 2>/dev/null) || return 1
@@ -340,10 +320,9 @@ let
           kill -KILL "$server" 2>/dev/null || true
         }
         if [ -n "$remote" ]; then
-          # A remote server (krane.spt.server): nothing to start, but the launcher only shows a
-          # dead server as offline, so say so up front. The launcher keeps its own server list;
-          # add the address there once with "Add new server".
-          # The URL as the launcher takes it: scheme, host, then port, SPT's 6969 if none.
+          # A remote server: nothing to start, but the launcher only shows a dead server as offline,
+          # so say so up front. The launcher keeps its own server list; add the address once with
+          # "Add new server".
           hostport=''${remote#*://}
           hostport=''${hostport%%/*}
           host=''${hostport%:*}
@@ -357,16 +336,16 @@ let
             exit 1
           fi
         else
-          # The server is native. SPT.Server.Linux is a dynamically linked apphost that NixOS cannot
-          # run, so run its dll on the Nix runtime instead. It has to start in SPT_Runtime, where
-          # SPT_Data and user/ are. It keeps WINEPREFIX from above in its environment on purpose:
-          # that is how prefix_pids finds it, for the exclusion with live Tarkov and for the
-          # clean-up of a leftover one below. The Nix dotnet finds its own root, so DOTNET_ROOT is
-          # not set: it would leak into umu and Wine, and break the Windows launcher's hostfxr.
+          # The server is native. SPT.Server.Linux is a dynamically linked apphost NixOS cannot run,
+          # so run its dll on the Nix runtime, from SPT_Runtime (where SPT_Data and user/ are).
+          # WINEPREFIX stays in its environment so prefix_pids finds it, for the exclusion with live
+          # Tarkov and the clean-up of a leftover server below. DOTNET_ROOT is not set: the Nix
+          # dotnet finds its own root, and setting it would leak into umu and Wine and break the
+          # Windows launcher's hostfxr.
           log="''${XDG_STATE_HOME:-$HOME/.local/state}/spt/server.log"
           mkdir -p "$(dirname "$log")"
 
-          # A server left from an earlier run holds port 6969 and the profiles. Kill it, whichever
+          # A server left from an earlier run holds port 6969 and the profiles: kill it, whichever
           # SPT script started it, and wait for the port.
           for pid in $(prefix_pids "$WINEPREFIX"); do
             read -r comm <"/proc/$pid/comm" 2>/dev/null || continue
@@ -389,9 +368,9 @@ let
           ) >"$log" 2>&1 &
           server=$!
 
-          # The listener on 6969 has to be our server: its process is alive and owns the port, so
-          # a stranger on the port does not pass. Listening means the profile and mods are loaded;
-          # the launcher cannot log in before. Checked on 127.0.0.1 although it binds all addresses.
+          # The listener on 6969 must be our server (alive and owning the port); listening means
+          # profile and mods are loaded, and the launcher cannot log in before. Checked on
+          # 127.0.0.1 though it binds all addresses.
           ours() { ss -ltnpH 'sport = :6969' | grep -q "pid=$server,"; }
           listening() { (exec 3<>/dev/tcp/127.0.0.1/6969) 2>/dev/null; }
           for _ in $(seq 120); do
@@ -409,10 +388,10 @@ let
         trap 'stop_server; session_end' EXIT
 
         cd "$runtime"
-        # Unlike BSG's, the SPT launcher stays open while the game runs, and umu-run only returns
-        # once it closes. Run it in the background and watch the game instead. With
-        # krane.spt.cpus, taskset confines it before it starts, so every game thread inherits
-        # the set; gamemoded's own pinning only comes once it has registered the game.
+        # Unlike BSG's, the SPT launcher stays open while the game runs, so umu-run only returns
+        # once it closes: run it in the background and watch the game. With krane.spt.cpus,
+        # taskset confines it before start so every game thread inherits the set; gamemoded's
+        # pinning only comes once it has registered the game.
         if [ -n "$cpus" ]; then
           taskset -c "$cpus" umu-run SPT.Launcher.exe "$@" &
         else
@@ -420,10 +399,9 @@ let
         fi
         launcher=$!
 
-        # Wait for the game, for as long as the launcher is open: the player may sit in it a
-        # while, and on a cold prefix the game takes a while to appear after Start. Only this
-        # prefix's game counts: live Tarkov's has the same name. The server has to outlive the
-        # game, so the trap stops it only when this script ends.
+        # Wait for the game while the launcher is open (a cold prefix is slow to show it after
+        # Start). Only this prefix's game counts: live Tarkov's has the same name. The server must
+        # outlive the game, so the trap stops it only when this script ends.
         while alive "$launcher" && [ -z "$(game_pids "$WINEPREFIX")" ]; do
           sleep 2
         done
@@ -431,9 +409,9 @@ let
           sleep 5
         done
 
-        # The game has exited: close the launcher with it. KILL, as for the exclusion: nothing in
-        # the prefix needs a clean shutdown. That also ends umu's container and this session's
-        # helpers in the prefix, the server included; prefix_pids skips this shell.
+        # The game has exited: close the launcher with it. KILL: nothing in the prefix needs a
+        # clean shutdown; that also ends umu's container and this session's helpers in the prefix,
+        # the server included (prefix_pids skips this shell).
         if alive "$launcher"; then
           # shellcheck disable=SC2046
           kill -KILL $(prefix_pids "$WINEPREFIX") 2>/dev/null || true
@@ -442,8 +420,8 @@ let
       '';
     };
 
-  # Greed.exe, the [SVM] Server Value Modifier's preset editor, in the SPT prefix. Presets are
-  # written to this install's SPT_Runtime; a remote server needs them copied over and a restart.
+  # Greed.exe, the [SVM] Server Value Modifier's preset editor, in the SPT prefix. Presets go to
+  # this install's SPT_Runtime; a remote server needs them copied over and a restart.
   spt = mkSpt {
     name = "spt";
     dir = sptDir;

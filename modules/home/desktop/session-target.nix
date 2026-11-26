@@ -1,9 +1,8 @@
-# Activates graphical-session.target for the plain (non-UWSM) Hyprland session. greetd
-# autologins into start-hyprland (modules/nixos/desktop/desktop.nix), and nothing in that path starts
-# the target. xdg-desktop-portal has Requisite=graphical-session.target, so without it every
-# portal call fails with "Dependency failed" and screen sharing, file pickers etc. never open.
-# graphical-session.target refuses manual start, so a bound target is started instead. The env
-# import runs first because portal-hyprland needs WAYLAND_DISPLAY in the systemd environment.
+# Activates graphical-session.target for the non-UWSM Hyprland session: nothing in the greetd
+# autologin path starts it, and xdg-desktop-portal has Requisite=graphical-session.target, so
+# portal calls fail with "Dependency failed". The target refuses manual start, so a bound target
+# is started instead, after the env import (portal-hyprland needs WAYLAND_DISPLAY in the systemd
+# environment).
 { ... }:
 {
   systemd.user.targets.hyprland-session.Unit = {

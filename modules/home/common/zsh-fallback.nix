@@ -33,10 +33,8 @@ in
         ];
       };
 
-      # zsh-autosuggestions and zsh-syntax-highlighting come straight from nixpkgs (HM's
-      # programs.zsh.plugins) instead of being vendored like the previous dotfiles did. `file`
-      # is set explicitly since HM's default `<name>.plugin.zsh` doesn't exist in these packages,
-      # and zsh-syntax-highlighting must load last since it wraps every other widget.
+      # `file` is explicit: HM's default `<name>.plugin.zsh` doesn't exist in these packages.
+      # zsh-syntax-highlighting must load last; it wraps every other widget.
       plugins = [
         {
           name = "zsh-autosuggestions";
@@ -44,8 +42,6 @@ in
           file = "zsh-autosuggestions.zsh";
         }
         {
-          # Sources the nixpkgs theme file directly, same effect as the previous dotfiles'
-          # manually cloned $ZSH_CUSTOM theme, without oh-my-zsh's theme-lookup machinery.
           name = "powerlevel10k";
           src = pkgs.zsh-powerlevel10k;
           file = "share/zsh-powerlevel10k/powerlevel10k.zsh-theme";
@@ -62,8 +58,7 @@ in
       '';
     };
 
-    # ~/.p10k.zsh isn't in the ii wipe set (only ~/.config/zshrc.d is, docs/II-INTEGRATION.md),
-    # so this plain symlink survives every switch.
+    # Not in the ii wipe set (docs/II-INTEGRATION.md), so a plain symlink survives.
     home.file.".p10k.zsh".source = ../../../config/zsh/p10k.zsh;
   };
 }

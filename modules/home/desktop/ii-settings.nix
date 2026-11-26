@@ -1,9 +1,8 @@
-# Hyprland settings saved from the ii settings window. The GUI writes them, through
-# krane-ii-settings (pkgs/krane-ii-settings), as sparse deltas into hosts/<host>/ii-settings.json.
-# This module renders that file into the owned custom/krane_gui.lua, which monitors.lua requires
-# last, and gives the writer its manifest: which keys Nix owns, and the monitor and idle
-# baselines. Every key has exactly one owner, Nix or the GUI file; a key set in both fails
-# evaluation. See docs/II-INTEGRATION.md "Settings persistence".
+# Hyprland settings saved from the ii settings window: the GUI writes sparse deltas through
+# krane-ii-settings (pkgs/krane-ii-settings) into hosts/<host>/ii-settings.json. This module
+# renders that file into the owned custom/krane_gui.lua (required last by monitors.lua) and gives
+# the writer its manifest: the Nix-owned keys and the monitor and idle baselines. A key set in both
+# Nix and the GUI file fails evaluation. See docs/II-INTEGRATION.md "Settings persistence".
 {
   config,
   lib,
@@ -15,7 +14,6 @@ let
   cfg = config.krane.hypr;
   home = config.home.homeDirectory;
   writer = pkgs.callPackage ../../../pkgs/krane-ii-settings { };
-  # One key list for Nix and the writer; read here without building anything.
   schema = lib.importJSON ../../../pkgs/krane-ii-settings/schema.json;
 
   where = "hosts/${hostName}/ii-settings.json";
@@ -24,7 +22,6 @@ let
   guiHypr = gui.hyprland or { };
   guiMonitors = gui.monitors or { };
 
-  # { input = { kb_layout = "at"; }; } -> [ "input:kb_layout" ]
   flatten =
     prefix: attrs:
     lib.concatLists (
@@ -38,15 +35,13 @@ let
     );
   nixHyprKeys = lib.unique (flatten "" cfg.settings ++ cfg.guiLocked);
 
-  # These have defaults, so every monitor Nix declares sets them.
   fixedMonitorFields = [
     "output"
     "mode"
     "scale"
     "disabled"
   ];
-  # Nix-owned only when non-null. `or null` keeps this valid for fields the monitor submodule
-  # does not have yet.
+  # Nix-owned only when non-null; `or null` tolerates fields the monitor submodule lacks.
   optionalMonitorFields = [
     "position"
     "transform"
@@ -84,7 +79,6 @@ let
     ) cfg.monitors
   );
 
-  # krane.hypr.idle, or idleTimeouts = false as shorthand for all zeros. null: not set by Nix.
   nixIdle =
     if cfg.idle != null then
       { inherit (cfg.idle) lock screenOff suspend; }
@@ -96,15 +90,12 @@ let
       }
     else
       null;
-  # ii's own hypridle.conf listeners at the pinned revision.
   iiIdle = {
     lock = 300;
     screenOff = 600;
     suspend = 900;
   };
 
-  # What activation writes into hypridle.conf: Nix's values, else the GUI file's over ii's
-  # defaults, else nothing (ii's copied hypridle.conf stays as it is).
   idleValues =
     if nixIdle != null then
       nixIdle
@@ -133,14 +124,13 @@ let
     builtins.toJSON manifest
   );
 
-  # The writer with this host's manifest baked in; what the GUI calls.
   wrapped = pkgs.writeShellScriptBin "krane-ii-settings" ''
     export KRANE_II_SETTINGS_MANIFEST=${manifestFile}
     exec ${writer}/bin/krane-ii-settings "$@"
   '';
 
-  # Same renderer as the GUI uses at runtime. Plain build-time runCommand on repo files, not
-  # import-from-derivation: the result is only installed, never read back into evaluation.
+  # Plain build-time runCommand, not import-from-derivation: the result is only installed, never
+  # read back into evaluation.
   rendered = pkgs.runCommand "krane-hypr-custom-krane_gui.lua" { } ''
     ${writer}/bin/krane-ii-settings --manifest ${manifestFile} \
       render --json ${pkgs.writeText "ii-settings-${hostName}.json" (builtins.toJSON gui)} > $out
@@ -207,10 +197,8 @@ in
     # unlock, ask again and revert them 15 s later unless kept (krane-ii-settings boot-check).
     krane.hypr.execOnce = [ "${wrapped}/bin/krane-ii-settings boot-check" ];
 
-    # Replaces the old hypridle.conf sed in illogical-impulse.nix. Runs ii's own
-    # hypridleconfigurator.py (patches/ii/05-settings) with a pinned interpreter; the script is
-    # standard-library only. hypridle reads its config at start: the change applies from the
-    # next login, or at once when the GUI's writer restarts hypridle.
+    # hypridle reads its config at start: the change applies from the next login, or at once when
+    # the GUI's writer restarts hypridle.
     home.activation.kraneIiIdle = lib.mkIf (idleValues != null) (
       lib.hm.dag.entryAfter [ "copyIllogicalImpulseConfigs" ] ''
         conf=${lib.escapeShellArg manifest.hypridleFile}
@@ -224,20 +212,13 @@ in
       ''
     );
 
-    # home-manager re-runs activation at every boot (home-manager-krane.service wants
-    # multi-user.target), but krane.hypr._rendered above is a build-time render of the repo
-    # file as it stood at the last `nixos-rebuild switch`. Any GUI change made since then
-    # (krane-ii-settings set/try/confirm) would otherwise be silently lost on reboot, until
-    # the next switch. Re-render from the live repo file at every activation instead; `activate`
-    # itself never fails (a missing/unparseable/rejected repo file just warns and leaves the
-    # build-time render above in place), and `|| true` is belt-and-braces for anything else.
-    # entryAfter kraneIiIdle: kraneIiIdle is wrapped in lib.mkIf above and may not exist in the
-    # activation DAG at all; home-manager's dag.topoSort silently ignores an unknown name in
-    # `after` (only a cycle fails the build), so naming it here is safe whether or not it's
-    # present. Ordering keeps idle ownership exactly as today: when idle is Nix-owned,
-    # kraneIiIdle (not this step) wrote hypridle.conf from the Nix value, and activate's own
-    # idle write below reads that same Nix value back out (effective_idle prefers the Nix
-    # baseline when nixOwned), so it leaves hypridle.conf as kraneIiIdle set it.
+    # Activation reruns at every boot, but krane.hypr._rendered is a build-time render, so GUI
+    # changes made since the last switch would be lost. Re-render from the live repo file;
+    # `activate` never fails (a bad repo file just warns and keeps the build-time render).
+    # entryAfter kraneIiIdle: that entry is under lib.mkIf and may not exist; dag.topoSort ignores
+    # unknown names in `after`. When idle is Nix-owned, kraneIiIdle wrote hypridle.conf and
+    # activate's idle write reads the same Nix value back (effective_idle prefers the Nix
+    # baseline), so it leaves the file as kraneIiIdle set it.
     home.activation.kraneIiActivate = lib.hm.dag.entryAfter [ "kraneIiOverrides" "kraneIiIdle" ] ''
       $DRY_RUN_CMD ${wrapped}/bin/krane-ii-settings activate || true
     '';

@@ -1,15 +1,13 @@
-# Declarative Hyprland overrides for ii. ii is configured in Lua, not hyprland.conf:
-# hyprland.lua sources hyprland/* then custom/*.lua and monitors.lua. This module only renders
-# krane.hypr.* into Lua files in the store (krane.hypr._rendered). Installing them into $HOME is
-# modules/home/desktop/illogical-impulse.nix's job, since that must run after soymou's dotfiles copy.
+# Declarative Hyprland overrides for ii. ii is configured in Lua: hyprland.lua sources hyprland/*
+# then custom/*.lua and monitors.lua. This module renders krane.hypr.* into Lua files in the store
+# (krane.hypr._rendered); illogical-impulse.nix installs them after soymou's dotfiles copy.
 # Sourcing order (dots/.config/hypr/hyprland.lua):
 #   hyprland.lib -> hyprland.services -> hyprland.env -> custom.env
 #   -> hyprland.{execs,general,rules,colors,keybinds} -> custom.execs
 #   -> custom.general -> custom.rules -> custom.keybinds
 #   -> workspaces.lua -> monitors.lua -> hyprland.shellOverrides.main
-# custom/variables.lua is sourced from hyprland/keybinds.lua instead, right after
-# hyprland/variables.lua, which is why it is the place to override terminal/browser/... globals.
-# There is no custom/monitors.lua: monitor rules go in top-level monitors.lua instead.
+# custom/variables.lua is sourced from hyprland/keybinds.lua right after hyprland/variables.lua,
+# so it overrides the terminal/browser/... globals. Monitor rules go in top-level monitors.lua.
 {
   config,
   lib,
@@ -99,7 +97,6 @@ let
     else
       throw "krane.hypr: cannot serialise a value of type ${builtins.typeOf v} to Lua";
 
-  # fields is an ordered list of { name, value } so output/name come first, not alphabetically.
   luaFields =
     indent: fields:
     let
@@ -215,11 +212,10 @@ let
     + (lib.optionalString (opts != [ ]) ", { ${lib.concatStringsSep ", " opts} }")
     + ")\n";
 
-  # The trailer loads the settings saved from the ii settings window (modules/home/ii-settings.nix)
-  # last, after every krane.hypr.* file and extraMonitorsLua, and before ii's transient shellOverrides.
-  # If extraMonitorsLua defined krane_after_gui (a hook that rebuilds its own hl.monitor rules from
-  # KRANE_GUI_MONITORS, e.g. hosts/tarmantria/display.nix's scale_internal), it runs after
-  # custom/krane_gui.lua so GUI-owned fields survive a reload or hotplug instead of being clobbered.
+  # The trailer loads the settings saved from the ii settings window (ii-settings.nix) last, after
+  # every krane.hypr.* file and extraMonitorsLua, before ii's transient shellOverrides. A
+  # krane_after_gui hook from extraMonitorsLua (e.g. hosts/tarmantria/display.nix's scale_internal)
+  # runs after custom/krane_gui.lua so GUI-owned fields survive a reload or hotplug.
   monitorsFile =
     header "monitors.lua"
     + "\n"
@@ -242,14 +238,14 @@ let
     header "custom/variables.lua"
     + ''
 
-      -- These are plain Lua globals, read by hyprland/keybinds.lua after it has
-      -- sourced hyprland/variables.lua (which sets the upstream defaults).
+      -- Plain Lua globals, read by hyprland/keybinds.lua after hyprland/variables.lua sets the
+      -- upstream defaults.
     ''
     + lib.concatStrings (
       lib.mapAttrsToList (
         k: v:
-        # A Lua global can't be bracket-quoted like a table key: `["x-y"] = 1` is a syntax
-        # error at file scope, which luac -p only catches once someone has written it.
+        # A Lua global can't be bracket-quoted like a table key: `["x-y"] = 1` is a syntax error at
+        # file scope.
         if isLuaIdent k then
           "${k} = ${luaValue "" v}\n"
         else

@@ -1,12 +1,10 @@
 # Escape from Tarkov, BSG launcher copy (direct purchase, not Steam), offline PvE only. Online
-# PvP needs BattlEye's Proton runtime, which BSG has not enabled for Tarkov. Imported by
-# hosts/tarmantria/default.nix and hosts/tariognatha/default.nix.
+# PvP needs BattlEye's Proton runtime, which BSG has not enabled for Tarkov.
 #
-# umu-launcher runs the launcher with the Nix GE-Proton, so no Proton build is downloaded at
-# runtime. The prefix is live state, never declared here: `tarkov-setup <installer.exe>` builds
-# it once from the installer on the BSG account page (the download needs a login), then the
-# launcher downloads the game itself. The game also needs Steam's free Proton BattlEye Runtime
-# (app 1161040), installed once with `steam steam://install/1161040`.
+# umu-launcher runs the launcher with the Nix GE-Proton. The prefix is live state:
+# `tarkov-setup <installer.exe>` builds it once from the installer on the BSG account page (the
+# download needs a login), then the launcher downloads the game itself. The game also needs
+# Steam's free Proton BattlEye Runtime (app 1161040): `steam steam://install/1161040`.
 {
   config,
   lib,
@@ -17,7 +15,6 @@ let
   common = import ./tarkov-common.nix { inherit config lib pkgs; };
   env = common.umuEnv "$HOME/Games/tarkov";
 
-  # Starting one install offers to close the other, SPT (spt.nix), found by its prefix.
   sptPrefix = "$HOME/Games/spt";
 
   # The launcher refuses to start the game unless the BattlEye service is registered.
@@ -75,7 +72,6 @@ let
         exit 1
       fi
 
-      # The game ships its BattlEye files; put them where the registered service points.
       common="$drive_c/Program Files (x86)/Common Files/BattlEye"
       if [ ! -e "$common/BEService_x64.exe" ]; then
         service=$(find "$drive_c/Battlestate Games" -name BEService_x64.exe -print -quit 2>/dev/null || true)
@@ -91,7 +87,6 @@ let
       # The launcher is CEF-based and hangs on its software rasterizer under Proton.
       umu-run "$launcher" --disable-software-rasterizer "$@" || true
 
-      # umu-run returns when the launcher exits, and the launcher exits once the game starts.
       ${common.waitForGameExit}
     '';
   };

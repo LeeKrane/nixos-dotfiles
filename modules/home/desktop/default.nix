@@ -1,6 +1,4 @@
-# Home-manager modules for role "desktop" (Hyprland + illogical-impulse). tarkov.nix, spt.nix,
-# stalker-gamma.nix and heuristiclab.nix are not listed: only the hosts that use them import
-# them (see hosts/tariognatha/default.nix).
+# tarkov.nix, spt.nix, stalker-gamma.nix and heuristiclab.nix are imported per host only.
 { ... }:
 {
   imports = [

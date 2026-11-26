@@ -1,8 +1,4 @@
-# GUI applications from the machine inventory. flameshot is absent: ii ships hyprshot instead,
-# already wired into its keybinds.
-# Out of scope, never add here or elsewhere in this repo: jetbrains-toolbox, kate,
-# android-studio, audacity, brave, thunderbird, notesnook, alpaca, gnome-clocks,
-# super-productivity, Hytale Launcher, DaVinci Resolve, VirtualBox.
+# GUI applications. flameshot is absent: ii ships hyprshot, already wired into its keybinds.
 {
   inputs,
   lib,
@@ -38,43 +34,42 @@ in
       vscode
       zed-editor
       code-cursor
-      pycharm # unified edition; its free tier includes Jupyter notebooks
-      jetbrains.idea # unified edition; Scala plugin installs from its Marketplace, sbt/JDK from dev.nix
+      pycharm
+      jetbrains.idea # Scala plugin from its Marketplace; sbt/JDK from dev.nix
 
       # File manager
       kdePackages.dolphin
-      kdePackages.kio-extras # thumbnails/protocols
-      kdePackages.qtsvg # icons
-      kdePackages.ark # archive manager; adds Extract/Compress to Dolphin's context menu
-      # ii themes Qt only through ~/.config/kdeglobals (MaterialYouDark, Darkly, breeze-dark),
-      # which only the "kde" platform theme reads. lib/mk-host.nix patches illogical-flake
-      # to keep QT_QPA_PLATFORMTHEME=kde; these packages make that theme resolvable.
-      kdePackages.plasma-integration # "kde" Qt platform theme: reads ii's kdeglobals
-      darkly # widgetStyle=Darkly named in ii's kdeglobals
-      kdePackages.breeze-icons # Icons Theme=breeze-dark named in ii's kdeglobals
+      kdePackages.kio-extras
+      kdePackages.qtsvg
+      kdePackages.ark
+      # ii themes Qt through ~/.config/kdeglobals, which only the "kde" platform theme reads.
+      # lib/mk-host.nix patches illogical-flake to keep QT_QPA_PLATFORMTHEME=kde.
+      kdePackages.plasma-integration
+      darkly
+      kdePackages.breeze-icons
 
       # Media
-      qview # image viewer; default for image types below
+      qview
       obs-studio
       vlc
       mpv
       spotify
       losslesscut
       upscaler
-      voicestudio # pkgs/voicestudio
+      voicestudio
 
       # Comms
       vesktop
 
-      # Notes: vault syncs to the home server through the Self-hosted LiveSync plugin,
-      # configured in-app (its config holds the CouchDB credentials, so it stays out of Nix).
+      # Vault syncs through the Self-hosted LiveSync plugin, configured in-app (its config holds
+      # the CouchDB credentials).
       obsidian
 
       # Networking / downloads
       qbittorrent
-      proton-vpn # renamed from protonvpn-gui
+      proton-vpn
       rclone
-      yad # rclone script's GTK dialogs (scripts/proton-drive-rclone-mount.sh)
+      yad # used by scripts/proton-drive-rclone-mount.sh
 
       # System / misc utilities
       mission-center
@@ -84,22 +79,14 @@ in
 
       # Path of Exile
       awakened-poe-trade
-      # Rust runtime for Path of Building Community. The "Path of Building" desktop entry runs
-      # PoE 1 (`rusty-path-of-building poe1`), "Path of Building 2" runs PoE 2. It downloads
-      # PoB's Lua sources on first start and updates them itself.
+      # Runtime for Path of Building Community; fetches PoB's Lua sources itself on first start.
       path-of-building
     ]
     ++ [
-      # Third-party flake (github:0xc000022070/zen-browser-flake, input zen-browser), not
-      # nixpkgs. Uses pkgs.stdenv.hostPlatform.system, not the deprecated pkgs.system.
+      # Third-party flake (input zen-browser), not nixpkgs.
       inputs.zen-browser.packages.${pkgs.stdenv.hostPlatform.system}.default
     ];
 
-  # Text types are mapped to Zed in neovim.nix. VS Code was previously the
-  # de facto inode/directory handler by nixpkgs/desktop-file default, not by
-  # explicit config here. Likewise chromium was the de facto web handler until
-  # the web types below were pinned to zen-beta, matching the hyprland `browser`
-  # global set per host in hosts/*/display.nix.
   xdg.mimeApps =
     let
       zen = "zen-beta.desktop";
@@ -130,7 +117,7 @@ in
       };
     };
 
-  # Vesktop has no global shortcuts on Wayland, so forward Discord's built-in in-app toggles
+  # Vesktop has no global shortcuts on Wayland: forward Discord's in-app toggles
   # (Ctrl+Shift+M mute, Ctrl+Shift+D deafen) to its window without focusing it.
   krane.hypr.binds = [
     {
@@ -145,7 +132,5 @@ in
     }
   ];
 
-  # xdg-settings/xdg-open consult $BROWSER first in some tools; keep it aligned
-  # with the mime defaults above.
   home.sessionVariables.BROWSER = "zen-beta";
 }

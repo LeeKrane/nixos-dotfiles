@@ -1,7 +1,5 @@
-# Installs the standalone NixVim build (modules/nixvim, flake output packages.<system>.nvim,
-# or nvim-stable for role = "server", built with the stable nixvim and nixpkgs). Plugins, LSP
-# servers and formatters live inside that package; nothing is linked into ~/.config/nvim.
-# Desktop-only launcher and MIME entries: ../desktop/neovim.nix.
+# Standalone NixVim build (modules/nixvim); nvim-stable for role = "server". Nothing is linked
+# into ~/.config/nvim.
 {
   inputs,
   pkgs,

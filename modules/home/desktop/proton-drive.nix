@@ -1,10 +1,6 @@
-# Proton Drive via rclone, replacing the previous host's btrfs subvolume mount (`/@protondrive`)
-# with a plain directory under $HOME. See docs/MIGRATION-NOTES.md. rclone.conf is a live,
-# not-declarative file: 2FA rewrites happen in place, so losing it means re-authenticating, not
-# a config regression.
-# The wrapper is `pkgs.proton-drive-mount`, not an inline writeShellApplication: its own comment
-# explains why (in short, the default `set -euo pipefail` breaks its retry/2FA flow, and it needs
-# to build and shellcheck independently).
+# Proton Drive via rclone, mounted on a plain directory under $HOME. rclone.conf is live state
+# (2FA rewrites it in place). The wrapper is pkgs.proton-drive-mount, not an inline
+# writeShellApplication; see its own comment.
 {
   config,
   lib,
@@ -13,17 +9,14 @@
   ...
 }:
 let
-  # Interpolating a Nix path into a string yields its store path as plain text, the LOGO_PATH
-  # format scripts/proton-drive-rclone-mount.sh expects.
+  # A Nix path interpolated into a string is its store path, the LOGO_PATH format the script expects.
   logoPath = "${../../../scripts/assets/proton-drive-logo.png}";
 
-  # Shared by ExecStart and ExecStop, rather than ExecStop's old systemd specifier `%h`, which
-  # happens to match config.home.homeDirectory today but isn't kept in sync with it.
+  # Shared by ExecStart and ExecStop instead of systemd's %h, which isn't tied to config.home.homeDirectory.
   mountPath = "${config.home.homeDirectory}/ProtonDrive";
   rcloneConfigPath = "${config.home.homeDirectory}/.config/rclone/rclone.conf";
 
-  # osConfig.sops.secrets has no `rclone/config-seed` attribute until secrets/<host>.yaml exists
-  # and is encrypted (secrets/README.md). `?` tolerates that instead of throwing.
+  # osConfig.sops.secrets has no rclone/config-seed until secrets/<host>.yaml exists; `?` tolerates that.
   hasRcloneSeed = osConfig.sops.secrets ? "rclone/config-seed";
 in
 {
@@ -31,8 +24,8 @@ in
     Unit = {
       Description = "Mount Proton Drive via rclone";
       PartOf = [ "graphical-session.target" ];
-      # Skip the unit (not fail it) until rclone is configured, so an unconfigured host doesn't
-      # hit proton-drive-mount's config-file error and a yad dialog on every login.
+      # Skip (not fail) until rclone is configured, so an unconfigured host doesn't hit a config
+      # error and a yad dialog on every login.
       ConditionPathExists = rcloneConfigPath;
     };
     Install.WantedBy = [ "graphical-session.target" ];
@@ -52,8 +45,7 @@ in
     };
   };
 
-  # Seed-if-absent: rclone.conf is live, rewritten in place on 2FA re-auth. Overwriting it every
-  # switch would lose that session's 2FA state. Runs only once a config-seed secret exists.
+  # Seed if absent: rclone.conf is live and rewritten in place on 2FA re-auth.
   home.activation.seedRcloneConfig = lib.mkIf hasRcloneSeed (
     lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       target="${rcloneConfigPath}"
@@ -66,15 +58,11 @@ in
     ''
   );
 
-  # Plain directory, not a btrfs subvolume. See docs/MIGRATION-NOTES.md. A home.file .keep here
-  # would make the mountpoint non-empty, and rclone mount refuses that without --allow-non-empty.
-  # A later switch could also symlink .keep into the live mount. `mkdir -p` here only ensures
-  # the directory exists, nothing more.
+  # A home.file .keep would make the mountpoint non-empty, which rclone mount refuses without
+  # --allow-non-empty.
   home.activation.ensureProtonDriveMountpoint = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     $DRY_RUN_CMD ${pkgs.coreutils}/bin/mkdir -p "${mountPath}"
   '';
 
-  # rclone and yad are already home.packages'd in apps.nix (rclone drives the script, yad shows
-  # its 2FA dialogs).
   home.packages = [ pkgs.proton-drive-mount ];
 }

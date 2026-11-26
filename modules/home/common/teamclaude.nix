@@ -1,9 +1,7 @@
-# teamclaude proxy as a systemd --user service, replacing `teamclaude service install`, which
-# would write a unit pointing at whatever node and store path were current at install time.
-# Claude Code reaches this proxy through the fish `claude` function (HTTPS_PROXY, MITM) or the
-# NixOS session variable ANTHROPIC_BASE_URL=http://localhost:3456 (modules/nixos/common/claude.nix),
-# so it cannot connect until this runs. Seat tokens live in ~/.config/teamclaude.json, written by
-# `teamclaude login` and refreshed by the proxy itself: live state, never declared here.
+# teamclaude proxy as a systemd --user service, replacing `teamclaude service install`, whose unit
+# would pin the node and store path current at install time. Claude Code reaches it through the
+# fish `claude` function or ANTHROPIC_BASE_URL (modules/nixos/common/claude.nix).
+# Seat tokens live in ~/.config/teamclaude.json (live state, written by `teamclaude login`).
 { pkgs, ... }:
 {
   systemd.user.services.teamclaude = {
@@ -11,11 +9,9 @@
       Description = "TeamClaude multi-account Claude proxy";
       Documentation = [ "https://github.com/KarpelesLab/teamclaude" ];
     };
-    # No network ordering: network-online.target does not exist in the user manager, so an After=
-    # on it did nothing. The proxy needs the network only when forwarding a request, and
+    # No network ordering: network-online.target does not exist in the user manager.
     # Restart=always covers a failed start.
-    # default.target, not graphical-session.target: claude also runs from TTYs and SSH. No
-    # linger, so the proxy stops with the last session, same as upstream's own unit.
+    # default.target, not graphical-session.target: claude also runs from TTYs and SSH.
     Install.WantedBy = [ "default.target" ];
     Service = {
       ExecStart = "${pkgs.teamclaude}/bin/teamclaude server --headless";

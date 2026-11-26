@@ -20,3 +20,32 @@ For each: keep, trim, or delete. This file is deleted before `doc-cleanup` merge
 - `modules/nixos/server/networking.nix:17-21` Fritzbox IPv6 DNS did not answer on taragarmr (2026-11-14). Dated network incident.
 - `modules/nixos/server/auto-upgrade.nix:104-105` Upstream already adds --refresh and `--flake <this>`. nixpkgs autoUpgrade internals.
 - `modules/nixos/server/base.nix:3-4` `--sudo --ask-sudo-password` work on both nixos-rebuild-ng generations. Tool version behaviour.
+
+## modules/home
+
+- `desktop/apps.nix:10-13` Upstream bundles Electron 40; Electron 44 clipboard returns Promises; 43 newest sync. Upstream Electron/APT.
+- `desktop/apps.nix:15-21` APT overlay X11-only; Windowed Fullscreen, "Confine Mouse to Window" off in PoE. Wine/Hyprland runtime.
+- `desktop/proton-drive.nix:42` `fuse` (2.x) not `fuse3`: rclone mount needs classic `fusermount`. rclone behaviour.
+- `desktop/hypr-config.nix:4-8` Hyprland sourcing order of `dots/.config/hypr/hyprland.lua`. External pinned repo.
+- `desktop/hypr-config.nix:56-58` Hyprland Lua config rewrites `-` to `_` and `:` to `.` in keys. Upstream.
+- `desktop/hypr-config.nix:121-123` Color fields checked against Hyprland 0.56 Lua monitor parser; unknown field is hard error. Upstream source.
+- `desktop/tarkov.nix:20-21` Launcher refuses to start game unless BattlEye service registered. BSG launcher.
+- `desktop/tarkov.nix:51-53` gamemoderun preload cannot see libgamemode.so in umu's container. Runtime.
+- `desktop/tarkov.nix:60-62` Proton swaps BEClient for runtime's Linux one; else BATTLEYE_ServiceNotRunningProperly. BattlEye/Proton.
+- `desktop/tarkov.nix:87` Launcher is CEF-based, hangs on software rasterizer under Proton. Upstream.
+- `desktop/tarkov-common.nix:70` umu-default: GE-Proton's Tarkov protonfix expects Steam layout. GE-Proton.
+- `desktop/tarkov-common.nix:83-86` pressure-vessel imports host MangoHud layer; blacklist keeps it off launcher. Container layers.
+- `desktop/tarkov-common.nix:88-93` vkBasalt reaches DXVK in umu container, tints launcher; GE-Proton bundled vkBasalt applied LUT twice. Container/GE-Proton.
+- `desktop/tarkov-common.nix:101-103` Replay buffer holds ~220 MiB VRAM, keeps NVENC busy; Tarkov fills 8 GiB. Measurement.
+- `desktop/spt.nix:285-287` Proton's Xalia layer hangs launcher; menu TV videos decode on 3-4 threads at 100%. Proton/Wine.
+- `desktop/spt.nix:437-438` Under X11 Greed dies on XI_BadDevice on input hotplug; Wayland driver has no XInput. Wine.
+- `desktop/recording.nix:15-31` config_ui format, gsr-ui defaults and hotkey grabbing, Config.cpp line refs. Upstream source.
+- `desktop/recording.nix:37-55` PRIME offload, NVENC API 13.0 vs 13.1 on nvidia 595, 20% FPS cost, overlay freeze. Hardware/driver.
+- `desktop/recording.nix:81` Peripheral batteries report scope Device. Kernel.
+- `desktop/recording.nix:93` simpledrm has no vendor; skip connectors. Kernel.
+- `desktop/recording.nix:111-112` Hyprland exec_cmd detaches script; logind keeps leftovers. Hyprland/logind.
+- `desktop/recording.nix:118-120` gsr-ui ignores SIGTERM; force-kill leaves replay recorder running. Upstream.
+- `desktop/recording.nix:133-134` Regular recording holds unsaved work; replay restarts with gsr-ui. Upstream.
+- `desktop/recording.nix:165-167` Power plug events arrive as `power_supply` change uevents; 30 s read timeout. Kernel.
+- `desktop/recording.nix:226-229` gsr-ui rewrites config_ui when settings page closes. Upstream source.
+- `desktop/illogical-impulse.nix:31-32` Hardcoded `$HOME/.config` must match soymou module's `targetPath` (also a keep-in-sync rule). External flake input.

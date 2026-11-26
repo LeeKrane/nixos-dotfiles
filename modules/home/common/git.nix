@@ -4,8 +4,7 @@
     enable = true;
 
     settings = {
-      # programs.git.userName/.userEmail are renamed to settings.user.{name,email} on this revision.
-      # Per host, from krane.user.gitName/gitEmail (modules/nixos/common/user.nix).
+      # From krane.user.gitName/gitEmail (modules/nixos/common/user.nix).
       user.name = kraneUser.gitName;
       user.email = kraneUser.gitEmail;
 
@@ -17,15 +16,11 @@
       diff.colorMoved = "default";
       init.defaultBranch = "main";
 
-      # Used by .gitattributes in this repo for ii's config.json. ii saves that file with
-      # 4-space indent, and switchwall.sh rewrites it through jq with 2-space indent. The filter
-      # stores it with 2-space indent, so a save by either writer only shows its real changes.
-      # jq keeps the key order. If jq fails (for example on a half-written file), git keeps the
-      # content unfiltered, because the filter is not required.
+      # For ii's config.json (.gitattributes): ii saves it with 4-space indent, switchwall.sh via jq
+      # with 2-space. The filter stores 2-space so diffs show real changes. A failing jq leaves the
+      # content unfiltered (filter not required).
       filter.ii-json.clean = "${pkgs.jq}/bin/jq --indent 2 .";
 
-      # From the previous dotfiles' .gitconfig, with `aa` fixed from the invalid `add all` to
-      # `add -A`.
       alias = {
         st = "status -sb";
         co = "checkout";
@@ -37,13 +32,9 @@
         dc = "diff --cached";
       };
     };
-    # core.pager/interactive.diffFilter aren't set here: programs.delta.enableGitIntegration
-    # below wires both, avoiding a competing second definition.
+    # core.pager/interactive.diffFilter come from programs.delta.enableGitIntegration.
   };
 
-  # delta is its own top-level module, programs.delta, not programs.git.delta, on this
-  # home-manager revision. enableGitIntegration reproduces the original core.pager and
-  # diffFilter, options.navigate reproduces [delta] navigate = true.
   programs.delta = {
     enable = true;
     enableGitIntegration = true;

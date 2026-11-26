@@ -1,8 +1,7 @@
-# Autologin (modules/nixos/desktop/desktop.nix initial_session) gives no password to PAM, so the
-# session must lock itself before anything is visible. pidof only proves the qs process
-# exists; ii's Lock panel sits behind a LazyLoader gated on Config.ready, so its IpcHandler
-# appears seconds later. Wait for the handler, call it directly (no hypridle / global-shortcut
-# hop, which drops silently when the target is not registered), and fail closed to hyprlock.
+# Autologin gives PAM no password, so the session must lock itself. pidof only proves the qs
+# process exists; ii's Lock IpcHandler appears seconds later (LazyLoader gated on Config.ready).
+# Wait for it, call it directly (a hypridle/global-shortcut hop drops silently when the target is
+# not registered), and fail closed to hyprlock.
 { config, pkgs, ... }:
 let
   lockOnStart = pkgs.writeShellScript "krane-lock-on-start" ''

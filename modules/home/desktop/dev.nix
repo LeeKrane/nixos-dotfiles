@@ -1,24 +1,19 @@
-# Language toolchains and dev CLIs. direnv is a NixOS-level `programs.direnv` module instead
-# (modules/nixos/common/shells.nix), so it hooks fish's real init at /etc/fish, never wiped by ii.
+# direnv is NixOS-level (modules/nixos/common/shells.nix), so it hooks /etc/fish, which ii never wipes.
 { pkgs, ... }:
 {
-  # jdk21 is also packaged below for Mason-free lspconfig/jdtls use. programs.java sets
-  # JAVA_HOME too.
   programs.java = {
     enable = true;
     package = pkgs.jdk21;
   };
 
   home.packages = with pkgs; [
-    # No standalone `corepack`: nodejs_22 already bundles bin/corepack (Node 16.9+), and adding
-    # it separately collides in home-manager's buildEnv (found by the container build).
+    # No standalone corepack: nodejs_22 bundles it and a second copy collides in buildEnv.
     nodejs_22
     bun
     pnpm
     yarn
 
-    # No standalone `python3`: illogical-flake's own python3.withPackages env already owns
-    # bin/python3 and collides in buildEnv (found by the container build). Use `uv` per-project.
+    # No standalone python3: illogical-flake's python3.withPackages env owns bin/python3 and collides in buildEnv.
     uv
     pipx
     virtualenv
@@ -27,15 +22,13 @@
     go
     jdk21
 
-    # Scala: sbt for builds, scala-cli for single-file scripts. Both run on programs.java's jdk21.
-    # metals sits on PATH for Zed's Scala extension; nixvim bundles its own (lang/scala.nix).
+    # metals is for Zed's Scala extension; nixvim bundles its own (lang/scala.nix).
     sbt
     scala-cli
     metals
     scalafmt
 
-    # No `clang` alongside `gcc`: both ship bin/c++/bin/cc and collide in buildEnv the same way.
-    # For clang-specific work use `nix shell nixpkgs#clang` or a devShell instead.
+    # No clang: collides with gcc on bin/cc and bin/c++ in buildEnv.
     gcc
     cmake
     gnumake
@@ -48,8 +41,7 @@
     anydoc # converts office docs and PDFs to Markdown for Claude Code
     skillspector # scans Claude Code skills for security issues before install
 
-    # scheme-medium (~1-2 GB) instead of scheme-full (~5 GB). Switch if a package is missing.
-    # texlive.combined.* is deprecated for Nixpkgs 27.05. See docs/MIGRATION-NOTES.md.
+    # scheme-medium (~1-2 GB) instead of scheme-full (~5 GB).
     texliveMedium
   ];
 }

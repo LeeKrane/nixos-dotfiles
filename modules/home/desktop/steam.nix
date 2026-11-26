@@ -1,13 +1,12 @@
-# Steam opens its Friends List window on every client start since the 2023 UI rewrite, even with
-# the window closed at last exit, and has no setting to stop it short of disabling "Sign in to
-# Friends when Steam Client starts". This closes only the first Friends List window each Steam
-# process maps, so friends sign-in stays on and opening the list by hand later still works.
+# Steam opens its Friends List window on every start (since the 2023 UI rewrite) and has no
+# setting to stop it short of disabling friends sign-in. This closes only the first Friends List
+# window each Steam process maps, so sign-in stays on and opening the list by hand still works.
 #
-# Steam's "Add desktop shortcut" writes only to ~/Desktop, which app launchers never scan, and
-# sets Icon=steam. A path unit watches ~/Desktop and copies every Steam shortcut into
-# ~/.local/share/applications with Icon=steam_icon_<appid>, the name Steam itself uses and
-# Papirus themes. The game's 32x32 icon from Steam's library cache goes into hicolor as the
-# fallback for themes without one, such as breeze-dark. Copies whose shortcut was deleted go too.
+# Steam's "Add desktop shortcut" writes only to ~/Desktop, which app launchers never scan, with
+# Icon=steam. A path unit copies Steam shortcuts into ~/.local/share/applications with
+# Icon=steam_icon_<appid> (the name Papirus themes), and installs the game's 32x32 library-cache
+# icon into hicolor as fallback for themes without one, such as breeze-dark. Copies whose
+# shortcut was deleted go too.
 { lib, pkgs, ... }:
 let
   syncSteamShortcuts = pkgs.writeShellScript "sync-steam-shortcuts" ''
@@ -28,8 +27,7 @@ let
     marker="X-Steam-Shortcut-Source="
     mkdir -p "$apps" "$icons"
 
-    # Point Icon= at the game and install that icon into hicolor. Non-Steam games added to
-    # Steam have no library cache entry and keep Icon=steam.
+    # Non-Steam games have no library cache entry and keep Icon=steam.
     set_icon() {
       id=$(grep -m1 -o 'steam://rungameid/[0-9]*' "$1" | cut -d/ -f4)
       [ -n "$id" ] || return 0
@@ -49,7 +47,6 @@ let
       [ -f "$f" ] || continue
       grep -q '^Exec=.*steam://rungameid/' "$f" || continue
       target="$apps/$(basename "$f")"
-      # Entries Steam itself wrote here only get their icon fixed.
       if [ -e "$target" ] && ! grep -q "^$marker" "$target"; then continue; fi
       { cat "$f"; echo "$marker$f"; } > "$target.tmp"
       set_icon "$target.tmp"

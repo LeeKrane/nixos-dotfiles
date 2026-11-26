@@ -1,5 +1,3 @@
-# Desktop-only parts of the editor setup: the kitty launcher entry and the MIME defaults.
-# The nvim package itself is installed for every role by ../common/neovim.nix.
 { lib, ... }:
 let
   textTypes = [
@@ -26,8 +24,8 @@ let
   ];
 in
 {
-  # nvim.desktop from the package sets Terminal=true, which leaves the choice of
-  # terminal to each launcher (Dolphin would pick konsole). This entry pins kitty.
+  # The package's nvim.desktop has Terminal=true, leaving the terminal to each launcher (Dolphin
+  # would pick konsole); this entry pins kitty.
   xdg.desktopEntries.nvim-kitty = {
     name = "Neovim";
     genericName = "Text Editor";
@@ -41,7 +39,5 @@ in
     mimeType = textTypes;
   };
 
-  # GUI default for text files is Zed (dev.zed.Zed.desktop, from apps.nix); nvim
-  # stays $EDITOR for terminal tools such as git.
   xdg.mimeApps.defaultApplications = lib.genAttrs textTypes (_: "dev.zed.Zed.desktop");
 }

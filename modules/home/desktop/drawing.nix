@@ -1,11 +1,6 @@
-# Live screen annotation with wayscriber. It draws on wlr-layer-shell surfaces rather than a
-# window, so Hyprland's SUPER+drag cannot move it and nothing is left on screen when it is
-# toggled off. (gromit-mpx was tried first: under XWayland it is a regular floating window
-# that SUPER+drag moves, and its strokes stay visible after toggling off.)
-#
-# The daemon starts hidden at login. SUPER+Y toggles the overlay, and starts the daemon first
-# if it is not running (first use after a rebuild without a re-login, or after a crash).
-# Undo, clear and tool keys are wayscriber's own, shown in its in-overlay help.
+# wayscriber draws on wlr-layer-shell surfaces, not a window, so SUPER+drag cannot move it and
+# nothing stays on screen when toggled off. The daemon starts hidden at login; SUPER+Y toggles
+# the overlay, starting the daemon first if it is not running.
 { pkgs, ... }:
 let
   wayscriber = "${pkgs.wayscriber}/bin/wayscriber";
