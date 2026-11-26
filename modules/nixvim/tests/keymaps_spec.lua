@@ -40,10 +40,6 @@ assert(not vim.g.disable_autoformat, "<leader>uF re-enables")
 vim.fn.maparg("<leader>uf", "n", false, true).callback()
 assert(vim.b.disable_autoformat == true, "<leader>uf disables for buffer")
 
--- LSP maps are buffer-local on LspAttach. Target only our own handler's
--- group: firing this on every LspAttach handler (no group) also reaches
--- other plugins' global handlers (e.g. nvim-jdtls's), which rightly assert
--- a real client behind client_id and would fail on this fake id.
 local buf = vim.api.nvim_get_current_buf()
 vim.api.nvim_exec_autocmds("LspAttach", { group = "nixvim_lsp_keymaps", buffer = buf, data = { client_id = 0 } })
 for _, lhs in ipairs({ "gd", "gr", "gI", "gy", "gD", "K", "gK", "<leader>ca", "<leader>cr" }) do

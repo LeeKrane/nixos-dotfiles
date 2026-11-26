@@ -39,8 +39,6 @@ in
         "LOGO_PATH=${logoPath}"
       ];
       ExecStart = "${pkgs.proton-drive-mount}/bin/proton-drive-mount";
-      # `fuse` (2.x) not `fuse3`: fuse3 ships `fusermount3`, and rclone's mount here needs the
-      # classic `fusermount` ABI.
       ExecStop = "${pkgs.fuse}/bin/fusermount -u ${mountPath}";
     };
   };

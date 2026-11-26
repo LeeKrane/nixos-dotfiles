@@ -67,7 +67,6 @@ in
   umuEnv = prefix: ''
     export WINEPREFIX="${prefix}"
     export PROTONPATH="${proton}"
-    # umu-default: GE-Proton's Tarkov protonfix is for the Steam copy and expects its layout.
     export GAMEID=umu-default
   '';
 
@@ -80,16 +79,9 @@ in
 
   # launcherExe is the launcher's file name, kept out of MangoHud.
   renderEnv = launcherExe: ''
-    # FPS counter, top right like Steam's. pressure-vessel imports the host's MangoHud Vulkan
-    # layer (gaming.nix) into umu's container, so the variable alone enables it for DXVK. The
-    # blacklist keeps it off the launcher, which DXVK also renders.
     export MANGOHUD=1
     export MANGOHUD_CONFIG="''${MANGOHUD_CONFIG:-fps_only,position=top-right,blacklist=${launcherExe}}"
-    # Color correction (colorLut above). Like MangoHud, the host's vkBasalt layer (gaming.nix)
-    # reaches DXVK in umu's container; it also tints the launcher. Home toggles it in game.
     export ENABLE_VKBASALT=1
-    # GE-Proton bundles its own vkBasalt layer under another name and enables it on the same
-    # variable, which applied the LUT twice. Keep only the host layer.
     export VK_LOADER_LAYERS_DISABLE=VK_LAYER_VKBASALT_post_processing
     export VKBASALT_CONFIG_FILE="''${VKBASALT_CONFIG_FILE:-${vkbasaltConf}}"
   '';
@@ -98,9 +90,6 @@ in
   # caller needing more cleanup replaces the trap and calls session_end too. The game process is
   # EscapeFromTarkov.exe in both installs.
   session = reason: ''
-    # gsr-ui's replay buffer (recording.nix) holds ~220 MiB of VRAM and keeps NVENC busy, and
-    # Tarkov fills tarmantria's 8 GiB of VRAM on its own. Pause it for the session, and resume it only
-    # if it was on. The replay recorder is the gpu-screen-recorder process run with -r.
     replay_on() {
       local pid
       for pid in $(pgrep -x gpu-screen-reco || true); do

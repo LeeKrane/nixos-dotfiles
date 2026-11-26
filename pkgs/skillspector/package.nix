@@ -1,7 +1,3 @@
-# pywhatwgurl is the one dependency missing from nixpkgs, so it's packaged
-# inline below straight from its PyPI wheel: its sdist relies on hatch-vcs
-# for its version string, which needs git metadata that isn't present when
-# fetched standalone; the wheel sidesteps that entirely.
 {
   lib,
   python3Packages,
@@ -46,10 +42,6 @@ python3Packages.buildPythonApplication (finalAttrs: {
 
   build-system = [ python3Packages.hatchling ];
 
-  # typer's upstream pin (<0.24) only exists to dodge a click version clash
-  # with a dev-only tool that isn't part of our closure; nixpkgs' typer
-  # (0.25+) scans fine. regex's exact `==` pin just trails nixpkgs' newer
-  # calendar-versioned release.
   pythonRelaxDeps = [
     "typer"
     "regex"
@@ -77,11 +69,6 @@ python3Packages.buildPythonApplication (finalAttrs: {
 
   pythonImportsCheck = [ "skillspector" ];
 
-  # Upstream's suite covers the full LLM-analysis graph and its own
-  # provider integrations (tests/integration, tests/provider); pytest's
-  # addopts already skip those marks, but the remainder still wants the
-  # unpackaged `dev` extras (pytest-asyncio, ruff, mypy, ...). Skip and
-  # rely on pythonImportsCheck plus a manual `--help`/`scan` smoke test.
   doCheck = false;
 
   meta = {

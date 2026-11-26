@@ -18,10 +18,6 @@
       "goimports"
       "gofumpt"
     ];
-    # Absolute path, not extraPackages: gotools ships many other binaries
-    # (stringer, gonew, ...) that would land on the editor's PATH. Its
-    # goimports wrapper references nixpkgs' go internally, so go is in the
-    # editor's closure (not its PATH) regardless.
     formatters.goimports.command = "${pkgs.gotools}/bin/goimports";
   };
   plugins.lint.lintersByFt.go = [ "golangcilint" ];

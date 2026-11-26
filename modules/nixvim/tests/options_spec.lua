@@ -53,12 +53,6 @@ assert(
 	"clipboard: want " .. (vim.env.SSH_TTY and "" or "unnamedplus") .. ", got " .. o.clipboard
 )
 
--- SSH branch, for real: spawn a fresh headless nvim with SSH_TTY set and
--- read back its vim.o.clipboard. `vim.v.progpath` is the *unwrapped*
--- neovim-byte-compiled binary here (no VIMRUNTIME/package setup -- it
--- fails to even start, missing lua module 'lz.n'), so this uses `nvim` on
--- PATH instead, which is the nixvim wrapper itself (available via the
--- nvim-specs check's `nativeBuildInputs`, see flake.nix).
 local function clipboard_subprocess(ssh_tty)
 	local base = vim.fn.environ()
 	base.SSH_TTY = nil

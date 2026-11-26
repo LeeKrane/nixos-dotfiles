@@ -52,11 +52,6 @@ if [ -f "$state_file" ] \
     exit 0
 fi
 
-# Probes the notification daemon before writing state, so a daemon that
-# isn't up yet (racing the session at login) retries without a popup ever
-# having been shown. Exits 1 with state untouched: the systemd unit's
-# Restart=on-failure/RestartSec=2min (modules/home/desktop/flake-update-notify.nix)
-# retries this, same as a curl failure above.
 if ! busctl --user call org.freedesktop.Notifications /org/freedesktop/Notifications \
     org.freedesktop.Notifications GetServerInformation >/dev/null; then
     echo "flake-update-notify: notification daemon not reachable" >&2

@@ -10,9 +10,6 @@
 }:
 let
   hostSecrets = import ../../lib/host-secrets.nix { inherit lib hostName; };
-  # The image's entrypoint (set -e) chowns and chmods everything under /opt/couchdb; on a
-  # read-only bind mount from the store that fails and the container exits 1 without output.
-  # So the ini is copied to a host file it already owns (5984, 0644) before every start.
   etcDir = "/var/lib/couchdb-etc";
   ini = "${etcDir}/10-livesync.ini";
 in
@@ -23,7 +20,6 @@ in
       mode = "0400";
     };
 
-    # 5984 is the couchdb user's uid/gid inside the image.
     systemd.tmpfiles.rules = [ "d /srv/couchdb 0750 5984 5984 -" ];
 
     virtualisation.oci-containers.containers.couchdb = {

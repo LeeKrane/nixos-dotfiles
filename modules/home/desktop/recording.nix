@@ -12,47 +12,11 @@ let
   # PRIME offload hosts (tarmantria) switch the recorder between GPUs; taken from host config, not
   # sysfs, so an NVIDIA desktop with an enabled iGPU is not mistaken for one.
   primeOffload = osConfig.hardware.nvidia.prime.offload.enable or false;
-  # Seed content for ~/.config/gpu-screen-recorder/config_ui, verified against
-  # gpu-screen-recorder-ui's own Config.cpp: config_ui is a flat "key value" (single space,
-  # no "=") file, one setting per line (parse_key_value, Config.cpp ~L165); keys the file
-  # doesn't set just keep the app's built-in defaults on load (read_config, ~L376), so this
-  # minimal two-line file loads cleanly instead of resetting anything.
-  #
-  # main.config_file_version's value is GSR_CONFIG_FILE_VERSION (include/Config.hpp), 2 as of
-  # this gsr-ui version; save_config() always rewrites it to the app's current constant anyway,
-  # so this only needs to be a value the loader accepts, not track upstream forever.
-  #
-  # main.hotkeys_enable_option controls gsr-ui's own native evdev hotkey grab. Its default is
-  # "enable_hotkeys" (main_config.hotkeys_enable_option, include/Config.hpp), which would grab
-  # gsr-ui's built-in keyboard hotkeys (Alt+Z, Alt+F9, Alt+F10, ...) directly from the input
-  # device, racing the Hyprland binds below for the same keys. "disable_hotkeys" is the literal
-  # id used both by that config field and by the settings-page radio button
-  # (GlobalSettingsPage.cpp's create_enable_keyboard_hotkeys_button, ~L195-208), and leaves
-  # Hyprland as the only thing driving gsr-ui, via gsr-ui-cli.
   gsrUiConfigSeed = pkgs.writeText "gsr-ui-config-ui-seed" ''
     main.config_file_version 2
     main.hotkeys_enable_option disable_hotkeys
   '';
 
-  # Runs gsr-ui's recorder on the GPU that suits the power state, and restarts gsr-ui when
-  # that changes. gsr only lists monitors of the GPU it runs on, and on a hybrid laptop that is
-  # the iGPU Hyprland renders on, so the dGPU's HDMI port could not be picked and replay
-  # captured and encoded the internal panel on the iGPU, costing about 20% game FPS. On mains
-  # power, with an NVIDIA card next to another GPU, only the gpu-screen-recorder processes run
-  # under PRIME offload, through a PATH wrapper (gsr-ui appends its own copy to the end of
-  # PATH, so an earlier entry wins): they capture the NVIDIA-attached monitors and encode on
-  # NVIDIA. gsr-ui itself stays on the iGPU: its overlay is an XWayland window, and running it
-  # under offload froze the overlay on stopping replay, holding every input. On battery nothing
-  # is offloaded, so the dGPU can sleep. A host whose only GPU is NVIDIA (tariognatha) is
-  # NVIDIA mode always, without the wrapper.
-  #
-  # Encoding uses NVENC through gsr's normal codec choice. The NVIDIA hosts run
-  # nvidiaPackages.latest because the stable 595 driver only offers NVENC API 13.0 and gsr's
-  # FFmpeg needs 13.1; without it gsr-ui fell back to CPU encoding, and the Vulkan encode
-  # workaround hung on stop and sat idle mid-replay.
-  #
-  # Offload for the recorder only. Execs the system copy by absolute path, so it cannot find
-  # itself again through PATH.
   gsrOffload = pkgs.writeShellScriptBin "gpu-screen-recorder" ''
     export __NV_PRIME_RENDER_OFFLOAD=1
     export __VK_LAYER_NV_optimus=NVIDIA_only
@@ -78,7 +42,6 @@ let
           [ -r "$ps/type" ] || continue
           type=$(<"$ps/type")
           if [ "$type" = Battery ]; then
-            # Peripheral batteries (mice, headsets) report scope Device; only system ones count.
             [ "$(cat "$ps/scope" 2>/dev/null || true)" = Device ] || have_battery=1
           elif [ "$(cat "$ps/online" 2>/dev/null || true)" = 1 ]; then
             return 0
@@ -90,7 +53,6 @@ let
       pick_mode() {
         local card nvidia=0
         for card in /sys/class/drm/card[0-9]*; do
-          # Skip connectors (card1-eDP-1) and non-PCI framebuffers (simpledrm has no vendor).
           [[ $(basename "$card") == *-* ]] && continue
           [ -r "$card/device/vendor" ] || continue
           [ "$(<"$card/device/vendor")" = 0x10de ] && nvidia=1
@@ -108,16 +70,11 @@ let
 
       log() { logger -t gsr-ui-power "$*" || true; }
 
-      # Hyprland's exec_cmd detaches this script and logind keeps leftover processes, so a
-      # logout or compositor restart does not stop it. Leave once the compositor is gone.
       session_alive() {
         [ -d "$XDG_RUNTIME_DIR/hypr/''${HYPRLAND_INSTANCE_SIGNATURE:-}" ] &&
           [ -S "$XDG_RUNTIME_DIR/''${WAYLAND_DISPLAY:-}" ]
       }
 
-      # gsr-ui runs in its own session (setsid), so its pid is also its process group id. It
-      # ignores SIGTERM, and a force-killed gsr-ui leaves its replay recorder running with its
-      # RAM buffer, so the whole group is stopped: TERM first, KILL whatever is left after 5s.
       gsr_pid=""
       stop_gsr() {
         [ -n "$gsr_pid" ] || return 0
@@ -130,8 +87,6 @@ let
         gsr_pid=""
       }
 
-      # A regular recording (a recorder without -r, which replay uses) holds unsaved work, so a
-      # mode switch waits for it to end. Replay restarts with gsr-ui, so it does not block.
       recording_active() {
         local pid
         for pid in $(pgrep -g "$gsr_pid" -x gpu-screen-reco || true); do
@@ -162,9 +117,6 @@ let
       mode=$(pick_mode)
       start_gsr "$mode"
 
-      # Power plug events arrive as power_supply change uevents; the 30 s read timeout also
-      # wakes the loop without them (a desktop has none), so a crashed gsr-ui comes back and a
-      # dead compositor is noticed. gsr-ui restarts only when it died or the mode differs.
       exec 3< <(udevadm monitor --udev --subsystem-match=power_supply)
       udev_pid=$!
       while :; do
@@ -223,9 +175,6 @@ in
     }
   ];
 
-  # Seed-if-absent, not owned: gsr-ui rewrites config_ui in full whenever its settings page is
-  # closed (GlobalSettingsPage::save(), called from on_navigate_away_from_page()), so treating
-  # this file as declarative would fight the app on every settings change made through its UI.
   home.activation.seedGsrUiConfig = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     target="$HOME/.config/gpu-screen-recorder/config_ui"
     if [ ! -e "$target" ]; then

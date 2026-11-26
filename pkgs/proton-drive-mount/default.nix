@@ -19,8 +19,6 @@ writeShellApplication {
     coreutils
   ];
 
-  # The script handles rclone's own errors via retry/2FA prompts, so
-  # `set -euo pipefail` from bashOptions would abort too early.
   bashOptions = [ ];
 
   # SC2034: only `$?` of `yad_response=$(yad ...)` is used.

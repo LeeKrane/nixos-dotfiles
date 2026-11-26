@@ -33,7 +33,6 @@ stdenv.mkDerivation (finalAttrs: {
   dontUnpack = true;
   dontBuild = true;
   __noChroot = stdenv.hostPlatform.isDarwin;
-  # otherwise the bun runtime is executed instead of the binary
   dontStrip = true;
 
   nativeBuildInputs = [
@@ -61,12 +60,9 @@ stdenv.mkDerivation (finalAttrs: {
       ''}--prefix PATH : ${
         lib.makeBinPath (
           [
-            # claude-code uses [node-tree-kill](https://github.com/pkrumins/node-tree-kill) which requires procps's pgrep(darwin) or ps(linux)
             procps
-            # https://code.claude.com/docs/en/troubleshooting#search-and-discovery-issues
             ripgrep
           ]
-          # the following packages are required for the sandbox to work (Linux only)
           ++ lib.optionals stdenv.hostPlatform.isLinux [
             bubblewrap
             socat

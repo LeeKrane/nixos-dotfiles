@@ -178,9 +178,6 @@ die() {
     exit 1
 }
 
-# LC_ALL=C keeps [@-~] a byte range: under a UTF-8 locale sed's collation
-# silently drops that range and the strip never matches. Shared by err_trap
-# and run_nixos_install's retry loop.
 clean_log_lines() {
     LC_ALL=C sed -E $'s/\x1b\\[[0-9;?]*[ -\\/]*[@-~]//g' | LC_ALL=C tr -d '\000-\010\013-\037\177' | cut -c1-100
 }
@@ -586,12 +583,6 @@ flake_config_opt() {
     fi
 }
 
-# Read-only DNS probe, not routed through run: a lookup here changes
-# nothing. cache.nixos-cuda.org is only checked on the CUDA host, since a
-# non-CUDA install never queries it. Seen on taractias: the live ISO's
-# inherited DNS server timed out on cache.nixos-cuda.org while
-# cache.nixos.org resolved fine, and nix gave up waiting on the stalled
-# lookup instead of just skipping that substituter.
 check_dns() {
     local names=(cache.nixos.org)
     host_uses_cuda && names+=(cache.nixos-cuda.org)
@@ -1245,9 +1236,6 @@ run_disko() {
     run_sh "\"$disko_script\" 2>&1" || { LAST_CMD=""; die "disko run failed for $HOST, see $LOG"; }
 }
 
-# Under 24 GiB: the nix eval heap alone holds ~5 GiB resident for the whole
-# build phase, and local C++ compiles (e.g. quickshell) at default
-# max-jobs/cores pile on top of that on a live ISO with no swap.
 install_swap_needed() { [ "$1" -lt 25165824 ]; }
 
 # The live ISO has no swap backing RAM, so nixos-install's nix build can OOM on low-RAM machines.
@@ -1370,15 +1358,6 @@ commit_hardware_config() {
     run git -C "$REPO_ROOT" "${id_args[@]}" commit -m "$message" --quiet
 }
 
-# disko's own nix build already ran before /mnt existed, so it used the
-# ISO's own tmp. TMPDIR/XDG_CACHE_HOME are scoped to this one command, not
-# exported, so --dry-run never touches the real environment.
-#
-# Retries up to 3 times: nixos-install resumes from paths nix already
-# copied, so a transient network failure only costs the 10 s wait between
-# attempts, not the whole download. mkdir/rm around the loop run once,
-# not per attempt, and each run_sh stays paired with its own handler so a
-# failure here never trips the ERR trap.
 run_nixos_install() {
     log_step "Running nixos-install for $HOST"
     if host_uses_cuda; then
@@ -1388,11 +1367,6 @@ run_nixos_install() {
     fi
     local flake_opt
     flake_opt=$(flake_config_opt)
-    # The live ISO has no swap by default (setup_install_swap only adds one
-    # under 24 GiB RAM) and the nix eval heap alone stays ~5 GiB resident for
-    # the whole build phase. Local C++ compiles (e.g. quickshell) at default
-    # max-jobs=auto/cores=all pile on top of that and can OOM the box, so
-    # nixos-install alone is limited to one job at half the cores.
     local install_cores
     install_cores=$(( $(command -v nproc >/dev/null 2>&1 && nproc || echo 1) / 2 ))
     [ "$install_cores" -ge 1 ] || install_cores=1
@@ -1664,15 +1638,6 @@ edit_host_secrets() {
     if confirm "Edit $secrets_file with sops now?"; then
         log_info "opening sops editor for secrets/$HOST.yaml (output goes to the terminal, not the log)"
         run_tty "sops \"$secrets_file\"" || {
-            # sops exits 200 "File has not changed, exiting." when the user
-            # quits without editing; tolerate only that. Anything else
-            # (e.g. 128 on an undecryptable file with sops 3.13.3) is a
-            # real failure and must abort setup rather than be silently
-            # skipped. Clear LAST_CMD ourselves, same as run_soft, so a
-            # later unrelated failure in this function is never blamed on
-            # this handled one; die() itself never re-triggers the ERR
-            # trap since it's reached via `||`, exempting it, and die only
-            # runs log_error/print_fail_box/exit from there.
             local rc=$?
             LAST_CMD=""
             [ "$rc" -eq 200 ] || die "sops failed on $secrets_file (exit $rc)"
@@ -1750,8 +1715,6 @@ verify_checks() {
         bash -c '[ "$(grep -c -- "-- >>> krane overrides >>>" "$HOME/.config/hypr/custom/general.lua" 2>/dev/null || echo 0)" = 1 ]'
 
     if [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
-        # hyprctl exits 0 even when it prints errors; test the output instead. hyprctl prints
-        # connect errors to stdout and "command not found" to stderr, so capture both.
         # shellcheck disable=SC2016
         verify_check "Hyprland config has no errors" bash -c 'out=$(hyprctl configerrors 2>&1) && [ -z "$out" ]'
         # shellcheck disable=SC2016

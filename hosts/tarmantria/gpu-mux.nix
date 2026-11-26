@@ -1,13 +1,3 @@
-# The FX707VV4's display MUX, through the kernel's asus-armoury firmware attribute. Hybrid (1)
-# wires the panel to the Intel iGPU and makes Hyprland composite there, so a game rendered on
-# the dGPU is copied across PCIe every frame, twice for HDMI-A-1, which hangs off the dGPU in
-# both modes. dgpu (0) wires the panel to the NVIDIA dGPU too: no copies, but the dGPU never
-# sleeps, which costs battery. The firmware applies a new mode only at the next boot.
-#
-# Reading the attribute returns the active mode, not the one written for the next boot; the
-# firmware only flags that a change is waiting (attributes/pending_reboot). So every write also
-# records its value in /run/gpu-mux/next, which a reboot clears along with the pending change.
-#
 # gpu-mux-auto sets the mode for the next boot from the power state (dgpu on external power,
 # hybrid on battery), at boot and on every plug or unplug.
 { pkgs, ... }:
@@ -81,8 +71,6 @@ in
     };
   };
 
-  # SYSTEMD_WANTS fires only on add, so start the unit by hand on change events too. Not on
-  # battery events: BAT0 sends one with every capacity update.
   services.udev.extraRules = ''
     SUBSYSTEM=="power_supply", ACTION=="change", ATTR{type}!="Battery", RUN+="${pkgs.systemd}/bin/systemctl start --no-block gpu-mux-auto.service"
   '';

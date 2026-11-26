@@ -28,8 +28,6 @@ let
     "custom/general.lua"
   ];
 
-  # Hardcoded $HOME/.config, not config.xdg.configHome: must agree with the soymou module's
-  # own hardcoded targetPath, or our overrides land somewhere ii never reads.
   hyprDir = "${config.home.homeDirectory}/.config/hypr";
 
   # Files sed-patched after ii's copy step recreates them (docs/II-INTEGRATION.md "Patched files").

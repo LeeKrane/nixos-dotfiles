@@ -18,8 +18,6 @@
 
   # GE-Proton uses ntsync whenever /dev/ntsync exists, which needs the module loaded.
   boot.kernelModules = [ "ntsync" ];
-  # The kernel deliberately slows down split-lock instructions, which some Windows games issue
-  # constantly. Valve's Steam Deck kernel disables the slowdown for the same reason.
   boot.kernel.sysctl."kernel.split_lock_mitigate" = 0;
   programs.gamescope.enable = true;
 

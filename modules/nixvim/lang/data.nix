@@ -2,7 +2,6 @@
 {
   extraPlugins = [ pkgs.vimPlugins.SchemaStore-nvim ];
 
-  # nixpkgs has no jsonc treesitter grammar; use the json parser for jsonc buffers.
   extraConfigLua = ''
     vim.treesitter.language.register("json", "jsonc")
   '';

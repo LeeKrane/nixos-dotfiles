@@ -27,10 +27,6 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     mkdir -p $dest
     cp -r package.json src $dest/
 
-    # Node's happy-eyeballs dialer gives each address 250 ms, then aborts it and tries the next.
-    # On a network with no IPv6 route, one lost SYN or a slow handshake on the IPv4 address
-    # fails the whole connect ("connect ETIMEDOUT <v4>; connect ENETUNREACH <v6>"). 5 s covers
-    # two SYN retransmits and still falls back to the next address when IPv4 is truly down.
     # The store is read-only, so its self-updater could never succeed (TEAMCLAUDE_DISABLE_AUTOUPDATE).
     # Disabling it also stops the daily registry check, the reason SETUP.md
     # sets "autoUpdate": false.

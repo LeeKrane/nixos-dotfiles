@@ -35,9 +35,6 @@
         ip = "192.168.82.6";
         publicKey = "CteLK18EBm4MBlzBhCBAjhGGjSqEmClTDbjJoSXa0XU=";
       };
-      # Android phone, not a NixOS host. Its WireGuard app config needs PersistentKeepalive = 25
-      # on the peer: without it the phone stays silent until it sends traffic itself, so the hub
-      # never learns its address and nothing can reach it.
       taryonyx = {
         ip = "192.168.82.7";
         publicKey = "K8fZU7WupZLJeXlRm9hYCysQPYc46E6My+/RUKakex0=";

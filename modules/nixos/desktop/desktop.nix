@@ -24,13 +24,6 @@
       };
     };
 
-    # The NixOS greetd module defaults `restart` to false whenever `initial_session` is
-    # set, on the pre-0.9 assumption that a greetd restart re-triggers autologin. greetd
-    # 0.10.3's /run/greetd.run runfile already gates autologin to once per boot, so a
-    # restart is safe here and desirable: it recovers a crashed greetd back into the
-    # locked session instead of stranding the machine. `systemctl restart greetd` yields
-    # tuigreet, not another autologin (see docs/II-INTEGRATION.md "Rollback and escape
-    # hatches").
     restart = true;
   };
 

@@ -29,9 +29,6 @@ in
 let
   roleInputs = inputsFor role;
   rpi = roleInputs.nixos-raspberrypi;
-  # Per RPi board: the module that sets variant, kernel and firmware. Only the plain
-  # overlays are injected (not inject-overlays-global, page-size-16k or a kernel override),
-  # which would miss nixos-raspberrypi's cache and need emulated kernel builds.
   boardModules = {
     rpi4 = rpi.nixosModules.raspberry-pi-4.base;
     rpi5 = rpi.nixosModules.raspberry-pi-5.base;
@@ -81,8 +78,6 @@ roleInputs.nixpkgs.lib.nixosSystem {
         home-manager = {
           useGlobalPkgs = true;
           useUserPackages = true;
-          # Mandatory: soymou's activation step replaces ~/.config/fish
-          # every switch. Without this, the next switch collides with it.
           backupFileExtension = "hm-bak";
           extraSpecialArgs = {
             inherit hostName role;
@@ -91,7 +86,6 @@ roleInputs.nixpkgs.lib.nixosSystem {
           };
           users.${config.krane.user.name}.imports =
             roleInputs.nixpkgs.lib.optional (role == "desktop")
-              # HM level, not NixOS: soymou #19 dconf error.
               # Patched copy of the flake source, not homeManagerModules.default: illogical-flake pins Qt to
               # qt6ct, which detaches Qt apps from ii's kdeglobals theming
               # (patches/illogical-flake-kde-platformtheme.patch).

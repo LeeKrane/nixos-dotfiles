@@ -342,7 +342,6 @@ def clear_pending():
 
 @contextlib.contextmanager
 def locked(manifest):
-    # Before login the runtime dir may not exist yet: lock next to the repo file.
     rt = runtime_dir()
     if os.path.isdir(rt):
         path = os.path.join(rt, "krane-ii-settings.lock")
@@ -477,7 +476,6 @@ class Runtime:
             check=True, capture_output=True, text=True)
 
     def stop_revert_timer(self):
-        # Only the timer: the service may be the process calling this.
         run([SYSTEMCTL, "--user", "stop", f"{REVERT_UNIT}.timer"], capture_output=True)
 
     def revert_timer_active(self):

@@ -1,11 +1,6 @@
 # Declarative Hyprland overrides for ii. ii is configured in Lua: hyprland.lua sources hyprland/*
 # then custom/*.lua and monitors.lua. This module renders krane.hypr.* into Lua files in the store
 # (krane.hypr._rendered); illogical-impulse.nix installs them after soymou's dotfiles copy.
-# Sourcing order (dots/.config/hypr/hyprland.lua):
-#   hyprland.lib -> hyprland.services -> hyprland.env -> custom.env
-#   -> hyprland.{execs,general,rules,colors,keybinds} -> custom.execs
-#   -> custom.general -> custom.rules -> custom.keybinds
-#   -> workspaces.lua -> monitors.lua -> hyprland.shellOverrides.main
 # custom/variables.lua is sourced from hyprland/keybinds.lua right after hyprland/variables.lua,
 # so it overrides the terminal/browser/... globals. Monitor rules go in top-level monitors.lua.
 {
@@ -53,9 +48,6 @@ let
     + builtins.replaceStrings [ "\\" ''"'' "\n" "\t" "\r" ] [ "\\\\" ''\"'' "\\n" "\\t" "\\r" ] s
     + ''"'';
 
-  # Hyprland's Lua config exposes every option with underscores: it rewrites `-` to
-  # `_` and `:` to `.` when registering config keys, so settings keys here are plain
-  # identifiers. The bracket form is kept only for keys that collide with Lua keywords.
   luaKey = k: if isLuaIdent k then k else "[${luaStr k}]";
 
   luaValue =
@@ -121,9 +113,6 @@ let
     -- Every `home-manager switch` overwrites (or re-appends) this content.
   '';
 
-  # Color management and luminance fields, in the order krane-ii-settings renders them. Each name
-  # was checked against Hyprland 0.56's Lua monitor parser (LuaBindingsConfigRules.cpp): an
-  # unknown hl.monitor field is a hard error at Hyprland start.
   colorFields = [
     "cm"
     "sdrbrightness"

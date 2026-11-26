@@ -21,7 +21,6 @@
     showmode = false;
 
     # LazyVim baseline
-    # no system clipboard over SSH (OSC 52 reads block)
     clipboard.__raw = ''vim.env.SSH_TTY and "" or "unnamedplus"'';
     undofile = true;
     undolevels = 10000;
@@ -49,7 +48,6 @@
     foldmethod = "expr";
     foldexpr = "v:lua.vim.treesitter.foldexpr()";
     foldtext = "";
-    # theme sets GUI colours only; force on where truecolor detection fails (tmux, SSH, VT)
     termguicolors = true;
   };
 }

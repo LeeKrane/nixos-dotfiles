@@ -39,7 +39,6 @@
     }
   ];
 
-  # venv-selector v2 API (nixvim's own example still shows v1 keys).
   plugins.venv-selector = {
     enable = true;
     settings.options.picker = "snacks";

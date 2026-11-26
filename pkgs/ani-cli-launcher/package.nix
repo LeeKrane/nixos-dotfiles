@@ -46,8 +46,6 @@ let
     '';
   };
 
-  # sign <unsigned.apk> <signed.apk>: signs with a keystore kept in $XDG_DATA_HOME, created on
-  # first use. Losing it means the phone must uninstall the app before an update installs.
   sign = writeShellApplication {
     name = "ani-cli-launcher-sign";
     runtimeInputs = [

@@ -30,7 +30,6 @@
   plugins.grug-far = {
     enable = true;
     lazyLoad.settings.cmd = "GrugFar";
-    # Its UI tests time out under qemu (aarch64 server builds on x86 via binfmt).
     package = pkgs.vimPlugins.grug-far-nvim.overrideAttrs (
       lib.optionalAttrs pkgs.stdenv.hostPlatform.isAarch64 { doCheck = false; }
     );

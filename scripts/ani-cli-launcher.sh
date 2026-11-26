@@ -14,7 +14,6 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 "$sign" "$unsigned" "$tmp/ani-cli-launcher.apk"
 
-# RUN_COMMAND is refused by Termux unless allow-external-apps is true.
 # shellcheck disable=SC2016 # expands on the phone
 ssh -n -p "$port" "$host" '
   set -e

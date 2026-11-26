@@ -101,8 +101,6 @@ in
   config = {
     system.autoUpgrade = {
       enable = true;
-      # With a flake set, upstream already adds --refresh (bypasses the tarball cache) and
-      # `--flake <this>`.
       flake = "github:LeeKrane/nixos-dotfiles/deploy#${hostName}";
       dates = "hourly";
       randomizedDelaySec = "10min";

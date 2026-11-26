@@ -17,8 +17,6 @@ let
 
   sptPrefix = "$HOME/Games/spt";
 
-  # The launcher refuses to start the game unless the BattlEye service is registered.
-  # Registering it does not make BattlEye work and does not enable online play.
   beService = "HKLM\\System\\CurrentControlSet\\Services\\BEService";
   beServiceImage = "C:\\Program Files (x86)\\Common Files\\BattlEye\\BEService_x64.exe";
 
@@ -48,18 +46,12 @@ let
 
   tarkov = pkgs.writeShellApplication {
     name = "tarkov";
-    # No gamemoderun: its preload runs inside umu's Steam Runtime container, which cannot see
-    # libgamemode.so in the Nix store, so gamemode never engaged and only spammed the log. The
-    # game is registered from outside the container by PID instead, below.
     inherit (common) runtimeInputs;
     text = ''
       ${env}
       ${common.exclusion}
       ensure_exclusive "Escape from Tarkov" SPT "${sptPrefix}"
 
-      # Proton swaps the Windows BEClient for this runtime's Linux one. Without it the game
-      # loads the Windows client, which needs the BEService kernel service Wine cannot run, and
-      # quits with BATTLEYE_ServiceNotRunningProperly. Steam only installs it for Steam games.
       export PROTON_BATTLEYE_RUNTIME="''${PROTON_BATTLEYE_RUNTIME:-$HOME/.local/share/Steam/steamapps/common/Proton BattlEye Runtime}"
       if [ ! -d "$PROTON_BATTLEYE_RUNTIME" ]; then
         echo "No BattlEye runtime in $PROTON_BATTLEYE_RUNTIME. Install it: steam steam://install/1161040" >&2
@@ -84,7 +76,6 @@ let
       ${common.primeEnv}
       ${common.renderEnv "BsgLauncher.exe"}
       ${common.session "Escape from Tarkov"}
-      # The launcher is CEF-based and hangs on its software rasterizer under Proton.
       umu-run "$launcher" --disable-software-rasterizer "$@" || true
 
       ${common.waitForGameExit}

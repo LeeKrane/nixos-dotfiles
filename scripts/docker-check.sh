@@ -17,9 +17,6 @@ cd "$REPO_ROOT"
 IMAGE="nixos/nix:latest"
 VOLUME="nixstore"
 
-# filter-syscalls=false works around seccomp restrictions on the Nix
-# sandbox. max-jobs/cores match the cgroup limits below, so Nix backs off
-# instead of the cgroup OOM-killing it. Override with NIX_MAX_JOBS/NIX_CORES.
 NIX_CONFIG_VALUE="experimental-features = nix-command flakes
 filter-syscalls = false
 max-jobs = ${NIX_MAX_JOBS:-2}
@@ -55,7 +52,6 @@ run_in_container() {
         -v "$VOLUME:/nix" \
         -e NIX_CONFIG="$NIX_CONFIG_VALUE" \
         "$IMAGE" sh -c "
-            # libgit2 refuses an unowned bind-mounted repo without this.
             git config --global --add safe.directory /work
             $1
         "

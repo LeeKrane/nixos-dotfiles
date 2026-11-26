@@ -1,9 +1,3 @@
-# HeuristicLab: .NET Framework 4.x (WinForms) optimization environment, run
-# under Wine. wine-mono crashes on it and plain Mono breaks its plugin loading,
-# so the launcher keeps a dedicated prefix with Microsoft's .NET 4.8 installed
-# by winetricks on first start (needs network, a few minutes). The release is
-# copied into the prefix so the app sees a normal, writable install folder.
-# To bump: set `version` and `hash` from the GitHub release zip.
 {
   lib,
   stdenvNoCC,
@@ -77,10 +71,6 @@ let
         echo "${release}" > "$install_dir/.nix-release"
       fi
 
-      # Wine's DPI (96 = 100 %). WinForms scales fonts and controls from it;
-      # 144 = 150 %. HEURISTICLAB_DPI overrides. The reg calls start wineserver
-      # and the desktop process, which read the old DPI and keep it for the
-      # session, so after a change Wine is shut down before the app starts.
       dpi="''${HEURISTICLAB_DPI:-144}"
       dpi_hex=$(printf '0x%x' "$dpi")
       desktop_key='HKCU\Control Panel\Desktop'

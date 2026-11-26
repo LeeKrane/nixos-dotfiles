@@ -53,8 +53,6 @@ let
   # NixOS has no /bin/bash: run the restored scripts through bash instead of exec'ing them.
   bash = "${pkgs.bash}/bin/bash";
 
-  # The server takes ~30 s to listen after a (re)start, which systemd also restarts the
-  # headless units with; a headless that starts first gets "Connection refused" and hangs.
   waitFor6969 = pkgs.writeShellScript "wait-for-6969" ''
     export PATH=${sptPath}
     for i in $(seq 120); do
@@ -81,8 +79,6 @@ let
       TimeoutStartSec = 300;
       Slice = "spt.slice";
       ExecStart = "${bash} %h/spt-headless/run-headless.sh";
-      # The headless leaks memory over raids; restart it on exit. The per-unit caps keep one
-      # leaking instance from eating the slice; spt.slice below is the real guard.
       Restart = "always";
       RestartSec = 15;
       MemoryHigh = memHigh;
@@ -96,7 +92,6 @@ in
 {
   users.users.${user}.linger = true;
 
-  # The old /etc/hosts entry: the server hands this name out as its backend address.
   networking.hosts."127.0.0.1" = [ "spt-tarkov.krane.dev" ];
 
   networking.firewall.interfaces.wg1 = {
@@ -104,7 +99,6 @@ in
     allowedUDPPorts = udpPorts;
   };
 
-  # Wine and the headless client's software rendering (PROTON_USE_WINED3D) need Mesa/GL.
   hardware.graphics.enable = true;
 
   home-manager.users.${user} = {

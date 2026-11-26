@@ -3,9 +3,6 @@
 #   LANE_INPUT     dispatch only: both (default) | servers | desktops
 #   POLL_INTERVAL  seconds between mergeability polls (default 10)
 #   POLL_DEADLINE  seconds to keep polling an UNKNOWN answer (default 120)
-# On push (a lane PR merged), only lanes whose open same-repo PR now conflicts are selected:
-# GitHub computes `mergeable` lazily, so UNKNOWN is polled until the deadline, then skipped
-# with a warning (next Monday's run or a dispatch refreshes it). gh reads GH_TOKEN/GH_REPO.
 set -euo pipefail
 
 : "${EVENT:?EVENT must be set}"

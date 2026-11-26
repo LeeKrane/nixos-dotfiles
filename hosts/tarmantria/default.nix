@@ -15,16 +15,9 @@
   # For building the Raspberry Pi servers' images (aarch64 steps that cannot be cross-built).
   boot.binfmt.emulatedSystems = [ "aarch64-linux" ];
 
-  # zram at twice the RAM size instead of boot.nix's 1:1 default: Tarkov alone keeps ~9 GiB
-  # resident plus swapped on this 16 GiB laptop, and its launcher another ~3 GiB.
   zramSwap.memoryPercent = 200;
-  # lz4 instead of boot.nix's zstd: SPT keeps over 10 GiB swapped mid-raid, and zstd's slower
-  # decompression shows up as stutter whenever the game touches it. lz4 compresses less, so the
-  # same swapped data takes more RAM.
   zramSwap.algorithm = "lz4";
 
-  # nvidia-powerd: without it the RTX 4060 Laptop GPU stays at its 80 W base limit; Dynamic
-  # Boost lets it borrow CPU headroom up to the 140 W nvidia-smi reports as its maximum.
   hardware.nvidia.dynamicBoost.enable = true;
 
   # tarkov, spt, stalker-gamma and heuristiclab are imported only on the hosts that use them.
@@ -39,12 +32,9 @@
     krane.tarkov.primeOffload = true;
     # taragarmr's wg1 address, reached over wg0; the public port is closed.
     krane.spt.server = "https://192.168.83.1:6969";
-    # The i7-13700H's P-cores (/sys/devices/cpu_core/cpus); 12-19 are its E-cores.
     krane.spt.cpus = "0-11";
   };
 
-  # The SPT server hands out spt-tarkov.krane.dev as its backend address, so it has to
-  # resolve to the WireGuard side too.
   networking.hosts."192.168.83.1" = [ "spt-tarkov.krane.dev" ];
 
   # PCI bus IDs from `lspci | grep -E 'VGA|3D'`.

@@ -37,8 +37,6 @@ vim.wait(200, function()
 	return package.loaded["crates"] ~= nil
 end)
 assert(package.loaded["crates"] ~= nil, "crates.nvim loaded for Cargo.toml")
--- in-process LSP (completion/hover/actions) instead of the nvim-cmp source;
--- crates.nvim 0.7.x keeps the built config in crates.state.cfg (lua/crates/init.lua: setup)
 local ccfg = require("crates.state").cfg
 assert(ccfg.lsp.enabled == true, "crates lsp enabled")
 assert(ccfg.lsp.completion and ccfg.lsp.hover and ccfg.lsp.actions, "crates lsp completion/hover/actions")

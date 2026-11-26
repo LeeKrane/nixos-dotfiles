@@ -206,8 +206,6 @@ class TestGuiOwnedPosition(Base):
         self.assertEqual(self.repo_data(), {"monitors": {"DP-1": {"position": "2560x0"}}})
 
     def test_revert_unconfirmed_drops_incomplete_gui_owned_previous(self):
-        # DP-3 was Nix-declared when its position was remembered, and has left krane.hypr.monitors
-        # since: a position-only rule would have no mode or scale.
         self.repo.write_text('{"monitors": {"DP-3": {"bootConfirmed": false, '
                              '"bootPrevious": {"position": "2560x0"}, "mode": "1x1@60", '
                              '"position": "0x0", "scale": 1}}}\n')

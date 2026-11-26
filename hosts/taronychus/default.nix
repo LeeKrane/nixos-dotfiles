@@ -4,8 +4,7 @@
 # Image: nix build .#image-taronychus, then write it straight to the NVMe (USB-NVMe adapter on a
 # desktop): `zstd -dc ... | dd of=/dev/sdX`. The sd-image module mounts / by label (NIXOS_SD),
 # so the same image boots from NVMe, and its root partition grows to fill the disk on first
-# boot. BOOT_ORDER is read right to left: 0xf461 (SD, NVMe, USB) and 0xf416 both reach the NVMe
-# without an SD card. The sops age key derives from this host's pre-generated SSH host key
+# boot. The sops age key derives from this host's pre-generated SSH host key
 # (stored encrypted in the password manager, recipient &host_taronychus in .sops.yaml):
 # before first boot, copy ssh_host_ed25519_key (root:root 0600) and .pub (0644) from there into
 # /etc/ssh on the flashed root partition. Secrets: wireguard/wg0-private-key; without that

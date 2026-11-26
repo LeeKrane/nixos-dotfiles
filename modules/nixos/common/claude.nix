@@ -1,43 +1,13 @@
-# `claude` in fish: Claude Code with experimental Code Mode -HTTPS_PROXY-> teamclaude's MITM
-# (localhost:3456) -> Anthropic. `claude-plain` is stock Claude Code: no teamclaude, no Code
-# Mode. The 400K auto-compact window is autoCompactWindow in ~/.claude/settings.json.
 { pkgs, ... }:
 let
   curl = "${pkgs.curl}/bin/curl";
   grep = "${pkgs.gnugrep}/bin/grep";
 in
 {
-  # teamclaude for any claude started outside these functions. ~/.claude/settings.json does not
-  # set it: its env block overrides the launch env, which would turn Code Mode off in `claude`.
   environment.sessionVariables.ANTHROPIC_BASE_URL = "http://localhost:3456";
 
-  # In /etc/fish for the same reason as shells.nix. `env` and `command` run the real claude
-  # binary (fish functions are invisible to them), so neither function recurses.
-  # HTTPS_PROXY, not the base URL, because Claude Code disables its experimental Code Mode
-  # whenever ANTHROPIC_BASE_URL is custom (hence `env -u`). Claude Code must trust teamclaude's
-  # MITM root CA (user accepted that risk), loaded only at startup via NODE_EXTRA_CA_CERTS.
-  # teamclaude writes that CA (teamclaude-ca.pem in its own $XDG_CONFIG_HOME or ~/.config; the
-  # service's environment may differ from the shell's, so both are tried) only on its first
-  # MITM CONNECT after each start, so every launch first requests its built-in
-  # www.example.org test host, which it answers itself with no credentials and no upstream
-  # request (-k: the CA may not be trusted yet). It writes the file atomically, so the PEM end
-  # marker means a complete file. The CA survives restarts; teamclaude replaces it only when its
-  # leaf has under 30 days left or the intercept hosts change, and open sessions then need a
-  # relaunch. Only api.anthropic.com (and the test host) is intercepted; every other CONNECT is
-  # a blind tunnel, so subprocess tools (git, curl, MCP servers) keep normal TLS.
-  # A pre-set NODE_EXTRA_CA_CERTS is merged into a bundle at a fixed runtime path that is never
-  # deleted: processes the session starts (claude-mem worker, background jobs) inherit the path
-  # and may outlive the session. A nested `claude` inherits that bundle or the CA itself and
-  # reuses it instead of merging again. NO_PROXY keeps loopback traffic off the proxy; pre-set
-  # values are kept.
-  # teamclaude down: stop with a hint rather than silently going direct. CA still missing: run
-  # through teamclaude's base URL instead (no Code Mode).
   environment.etc."fish/functions/claude.fish".text = ''
     function claude --wraps claude --description 'claude with Code Mode via teamclaude (MITM)'
-        # Probe the port, not the unit: teamclaude may be started by hand, and the user bus may be
-        # unreachable (ssh without linger, sudo -u). Any HTTP answer counts as up. Its own status
-        # endpoint, not /: teamclaude relays unknown paths to api.anthropic.com, so a slow upstream
-        # would time the probe out and report a running proxy as down.
         if not ${curl} -s -o /dev/null -m 2 http://127.0.0.1:3456/teamclaude/status
             echo "claude: teamclaude is not answering on 127.0.0.1:3456. Start it with `systemctl --user start teamclaude`, or use claude-plain to go direct." >&2
             return 1
@@ -66,8 +36,6 @@ in
                 claude $argv
             return
         end
-        # The host's own name too: NixOS maps it to a loopback address, which teamclaude's tunnel
-        # refuses (403), so local HTTPS from Bash-tool commands would break.
         set -l np localhost,.localhost,127.0.0.1,::1,$hostname
         # A bare `*` would exempt api.anthropic.com too and bypass teamclaude, so it is dropped.
         for v in $NO_PROXY $no_proxy

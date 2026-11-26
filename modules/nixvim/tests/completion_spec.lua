@@ -49,9 +49,6 @@ end
 
 -- blink config
 local cfg = require("blink.cmp.config")
--- blink.cmp 1.10 normalizes boolean|function config fields (e.g. preselect)
--- to always-callable functions internally, even when a plain boolean was
--- configured; resolve before comparing.
 local function resolve(v)
 	if type(v) == "function" then
 		return v()

@@ -1,5 +1,3 @@
--- colors.json is deliberately ignored: it is written ~330 ms earlier by a
--- different generator and disagrees with the scss.
 local M = {}
 
 local REQUIRED = {

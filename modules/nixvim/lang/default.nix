@@ -27,11 +27,6 @@
     settings = {
       default_format_opts.lsp_format = "fallback";
       # Toggled by <leader>uf / <leader>uF (keymaps.nix).
-      # prettierd and shfmt run on save only when the project has their config
-      # (found upward from the buffer); manual <leader>cf always formats. Gating
-      # Gating here rather than with conform `condition`, which would also block
-      # manual formatting. A buffer whose formatters are all gated off is not
-      # formatted on save at all (no LSP fallback either).
       format_on_save.__raw = ''
         (function()
           local prettier_files = {
@@ -66,8 +61,6 @@
             local dir = vim.fs.dirname(vim.api.nvim_buf_get_name(bufnr))
             return vim.fs.find(gates[formatter], { upward = true, path = dir })[1] ~= nil
           end
-          -- A timed-out format still saves, unformatted, with only a notification.
-          -- nvim-specs raises this (vim.g.format_on_save_timeout_ms) so a loaded CI runner can't flip a format assertion.
           local function timeout_ms()
             return vim.g.format_on_save_timeout_ms or 500
           end

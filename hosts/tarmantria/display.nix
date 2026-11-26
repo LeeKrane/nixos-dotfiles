@@ -1,7 +1,5 @@
 { ... }:
 let
-  # The panel is eDP-1 on the Intel iGPU in hybrid mode and eDP-2 on the NVIDIA dGPU once
-  # gpu-mux.nix's MUX is set to dgpu. A rule for the absent name matches nothing.
   internalOutputs = [
     "eDP-1"
     "eDP-2"
@@ -15,8 +13,6 @@ in
     monitors = [
       # Positions are GUI-owned (ii-settings.json, settings app > Displays); re-drag them after
       # changing a scale here.
-      # External MSI MAG322CQRV, to the left of the internal panel. EDID advertises
-      # 143.97 Hz over HDMI; Hyprland otherwise picks the 59.95 Hz preferred mode.
       {
         output = "HDMI-A-1";
         mode = "2560x1440@144";

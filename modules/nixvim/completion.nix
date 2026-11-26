@@ -34,10 +34,6 @@
       ];
       keymap = {
         preset = "none";
-        # cmp.accept() (blink.cmp 1.10.2, lua/blink/cmp/init.lua) already
-        # returns nil/falsy when nothing is selected: `if item == nil then
-        # return end`, checked *before* scheduling the accept. No need to
-        # duplicate that check with cmp.get_selected_item() here.
         "<CR>" = [
           "accept"
           "fallback"

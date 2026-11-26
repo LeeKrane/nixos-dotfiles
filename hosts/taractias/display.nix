@@ -1,6 +1,3 @@
-# VERIFY ON TARGET: the IdeaPad 330S ships in more than one panel resolution. Some units are
-# 1366x768, not the 1920x1080 `mode = "preferred"` would pick on a Full HD panel. Check
-# `hyprctl monitors -j` after first login and adjust `scale` if text is illegible.
 { ... }:
 {
   krane.hypr = {

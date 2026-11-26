@@ -97,8 +97,6 @@ on_failed() {
             close_issue "$created"
         fi
     fi
-    # Close issues of older cycles: only those whose SHA is an ancestor of this one, so a late
-    # failure report for an older SHA never closes the issue of a newer one.
     local old old_sha rc cmp
     while read -r old old_sha; do
         rc=0

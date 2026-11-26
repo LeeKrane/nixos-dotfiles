@@ -34,8 +34,6 @@
       inputs.quickshell.follows = "quickshell";
     };
 
-    # Pinned past soymou's May 2026 quickshell, which fails to build against Qt 6.12
-    # (MOC "Meta Types must be fully defined"). Fixed upstream in 5d5d498 / 1c1cc91.
     quickshell = {
       url = "git+https://git.outfoxxed.me/outfoxxed/quickshell?rev=9b0f339b19057f4731bf3b48293307d7ef241671";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -206,8 +204,6 @@
         // {
           inherit nvim nvim-stable;
           image-installer-rpi4 = inputs.nixos-raspberrypi.installerImages.rpi4;
-          # rpi5 with root's authorized keys from lib/ssh-keys.nix, so nixos-anywhere reaches it
-          # headless (the stock image has no keys and an empty root password: console only).
           image-installer-rpi5 =
             (inputs.nixos-raspberrypi.nixosConfigurations.rpi5-installer.extendModules {
               modules = [
@@ -597,9 +593,6 @@
                 what = "desktop SSH is not limited to wg0 and the other wg0.desktopSsh hosts";
               }
               {
-                # tariognatha suspends instead of powering off, so Wake-on-LAN (its USB adapter,
-                # set up by a udev rule) can bring it back. A program, not an alias: ii's search
-                # runs commands with `bash -c`, which ignores aliases. No other host changes poweroff.
                 ok =
                   let
                     c = self.nixosConfigurations.tariognatha.config;

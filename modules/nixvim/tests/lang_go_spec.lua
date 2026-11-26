@@ -33,9 +33,6 @@ assert(vim.lsp.config.gopls.settings.gopls.gofumpt == true, "gopls gofumpt")
 ft_formatters("go", { "goimports", "gofumpt" })
 assert(table.concat(require("lint").linters_by_ft.go or {}, ",") == "golangcilint", "golangci-lint linter")
 
--- Disable gopls before opening a .go buffer below: its root_dir handler shells
--- out to `go env` synchronously (nvim-lspconfig lsp/gopls.lua, identify_go_dir),
--- and the sandbox has no `go` on PATH by design, so autostart would crash the spec.
 vim.lsp.enable("gopls", false)
 formats("go", "package main\nfunc main(){}", "package main\n\nfunc main() {}", { "gofumpt" })
 

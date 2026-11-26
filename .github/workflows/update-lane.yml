@@ -1,11 +1,5 @@
 name: update-lane
 
-# One lane of the weekly update (docs/superpowers/specs/2026-11-23-update-lanes-design.md),
-# called by update.yml once per selected lane: bump the lane's inputs on
-# ci/flake-update-<lane>, gate it with check.yml, report CVEs and local builds for the hosts
-# whose closure changed, then create or edit the lane's pull request. No concurrency group
-# here: update.yml's calling job holds the per-lane group, and a called workflow sharing the
-# caller's group deadlocks.
 on:
   workflow_call:
     inputs:
@@ -172,7 +166,6 @@ jobs:
           HOSTS_JSON: ${{ needs.update.outputs.hosts }}
         run: |
           apply='cfgs: import ./scripts/host-drvs.nix cfgs (builtins.fromJSON (builtins.getEnv "HOSTS_JSON"))'
-          # `git restore --worktree` deletes a path missing at <ref> (e.g. a newly added pkgs/claude-code); `git checkout <ref> -- <path>` would not.
           git restore --source=HEAD~1 --worktree -- flake.lock pkgs/claude-code
           nix eval --json --impure '.#nixosConfigurations' --apply "$apply" > "$RUNNER_TEMP/drvs-before.json"
           git restore --source=HEAD --worktree -- flake.lock pkgs/claude-code
@@ -193,7 +186,6 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/security"
           scan() {
-            # vulnix exits 0 (no CVEs), 1 (only whitelisted CVEs) or 2 (active CVEs): all completed scans; only other codes are fatal.
             set +e
             nix run --inputs-from . nixpkgs#vulnix -- --json "$1" > "$2"
             rc=$?

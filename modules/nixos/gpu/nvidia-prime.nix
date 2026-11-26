@@ -21,7 +21,6 @@
     # PM below are inert.
     services.xserver.videoDrivers = [ "nvidia" ];
 
-    # No default on this nixpkgs rev, must be set explicitly.
     hardware.nvidia.open = true;
     hardware.nvidia.powerManagement.enable = true;
 
@@ -47,7 +46,6 @@
       };
     };
 
-    # latest, not stable: stable 595 offers NVENC API 13.0, gpu-screen-recorder needs 13.1.
     hardware.nvidia.package = config.boot.kernelPackages.nvidiaPackages.latest;
 
     # glxinfo, used by the install.sh VERIFY check `nvidia-offload glxinfo`.

@@ -21,12 +21,8 @@
       kb_variant = "nodeadkeys";
     };
 
-    # Hyprland has no primary monitor: the cursor, focus and workspace 1 start on the lowest
-    # monitor ID, which is DP-1 here. Pin them to DP-2 so the lock screen and startup land there.
     settings.cursor.default_monitor = "DP-2";
 
-    # Auto-HDR modesets DP-2 whenever a fullscreen window asks for HDR, which blanks the
-    # 4K240 panel for seconds and warns about 8-bit output. Keep SDR.
     settings.render.cm_auto_hdr = 0;
 
     idleTimeouts = false;
@@ -35,8 +31,6 @@
     '';
 
     devices = [
-      # VERIFY ON TARGET: name must match `hyprctl devices` exactly (Hyprland lowercases and
-      # dash-joins libinput's name). -0.4 flat-profile sensitivity carried over from the previous setup.
       {
         name = "logitech-gaming-mouse-g502";
         settings = {

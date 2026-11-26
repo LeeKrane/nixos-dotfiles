@@ -282,10 +282,7 @@ let
       ];
       text = ''
         ${env}
-        # Reported needed: Proton's Xalia accessibility layer hangs the launcher.
         export PROTON_USE_XALIA=0
-        # The menu's TV videos (TUE_Main_Menu_Video) loop for the whole session, in raids too;
-        # Wine decodes them in software on 3-4 threads at 100% each. No H.264 decoder, no videos.
         export WINEDLLOVERRIDES="msmpeg2vdec=d''${WINEDLLOVERRIDES:+;$WINEDLLOVERRIDES}"
         ${common.exclusion}
         ${common.gamePids}
@@ -434,8 +431,6 @@ let
     text = ''
       ${env}
       export PROTON_USE_XALIA=0
-      # Under X11 Greed dies on XI_BadDevice from X_GetDeviceButtonMapping when an input
-      # device comes or goes; Wine's Wayland driver has no XInput.
       export PROTON_ENABLE_WAYLAND=1
       cd "${sptDir}"
       if [ ! -e Greed.exe ]; then

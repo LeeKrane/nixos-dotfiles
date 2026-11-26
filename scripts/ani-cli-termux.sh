@@ -15,7 +15,6 @@ auth=/run/secrets/ani-cli/curl-auth
   exit 1
 }
 
-# Same ani-cli commit as the desktops: Termux's package lags behind the working provider.
 rev="$(grep -oP 'rev = "\K[0-9a-f]{40}' "$repo/overlays/ani-cli.nix")"
 upstream="https://raw.githubusercontent.com/pystardust/ani-cli/$rev/ani-cli"
 
@@ -27,20 +26,14 @@ wrapper="$(
   command cat "$repo/scripts/ani-cli-sync.sh"
 )"
 
-# full-upgrade first: installing onto a stale Termux mixes library versions (curl then fails
-# with "cannot locate symbol ... libcurl.so").
 ssh -p "$port" "$host" "
   set -e
   export DEBIAN_FRONTEND=noninteractive
   o='-o Dpkg::Options::=--force-confnew -o Dpkg::Options::=--force-confdef'
   apt-get update -q >/dev/null
   apt-get full-upgrade -y -q \$o >/dev/null
-  # No recommends: ffmpeg pulls python, whose python-pip recommends a ~340 MB clang toolchain.
   apt-get install -y -q --no-install-recommends \$o aria2 ffmpeg fzf grep sed wget curl jq gawk diffutils >/dev/null
   mkdir -p \$PREFIX/libexec ~/.config/ani-cli-sync ~/.shortcuts
-  # Termux:Widget scripts, always dubbed. ~/.shortcuts feeds the widgets; dynamic_shortcuts
-  # becomes app shortcuts (long-press the Termux:Widget icon, launcher search) once
-  # CREATE SHORTCUTS is pressed in the Termux:Widget app.
   d=~/.termux/widget/dynamic_shortcuts
   mkdir -p \$d
   rm -f ~/.shortcuts/ani-cli* \$d/ani-cli*
