@@ -15,9 +15,10 @@ Drop when Hyprland counts layer-surface inhibitors regardless of alpha.
  1 file changed, 13 insertions(+)
 
 diff --git a/dots/.config/quickshell/ii/services/Idle.qml b/dots/.config/quickshell/ii/services/Idle.qml
+index eff8bcaf..9719582b 100644
 --- a/dots/.config/quickshell/ii/services/Idle.qml
 +++ b/dots/.config/quickshell/ii/services/Idle.qml
-@@ -2,6 +2,7 @@
+@@ -2,6 +2,7 @@ pragma Singleton
  import qs.modules.common
  import QtQuick
  import Quickshell
@@ -25,7 +26,7 @@ diff --git a/dots/.config/quickshell/ii/services/Idle.qml b/dots/.config/quicksh
  import Quickshell.Wayland
  
  /**
-@@ -45,6 +46,18 @@
+@@ -43,6 +44,18 @@ Singleton {
          }
      }
  
@@ -44,5 +45,3 @@ diff --git a/dots/.config/quickshell/ii/services/Idle.qml b/dots/.config/quicksh
      IdleInhibitor {
          id: idleInhibitor
          window: PanelWindow {
---
-2.55.0

@@ -4,12 +4,12 @@ Date: Thu, 22 Oct 2026 12:25:12 +0200
 Subject: [PATCH] idle: keep awake by default and across reboots
 
 ---
- .../quickshell/ii/modules/common/Persistent.qml        |  2 +-
- dots/.config/quickshell/ii/services/Idle.qml           | 10 ++++------
- 2 files changed, 5 insertions(+), 7 deletions(-)
+ dots/.config/quickshell/ii/modules/common/Persistent.qml | 2 +-
+ dots/.config/quickshell/ii/services/Idle.qml             | 8 ++------
+ 2 files changed, 3 insertions(+), 7 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/common/Persistent.qml b/dots/.config/quickshell/ii/modules/common/Persistent.qml
-index 8367692..7176e21 100644
+index 8367692e..7176e212 100644
 --- a/dots/.config/quickshell/ii/modules/common/Persistent.qml
 +++ b/dots/.config/quickshell/ii/modules/common/Persistent.qml
 @@ -80,7 +80,7 @@ Singleton {
@@ -22,18 +22,16 @@ index 8367692..7176e21 100644
  
              property JsonObject overlay: JsonObject {
 diff --git a/dots/.config/quickshell/ii/services/Idle.qml b/dots/.config/quickshell/ii/services/Idle.qml
-index a2b8047..fb50471 100644
+index a2b80477..22f059ec 100644
 --- a/dots/.config/quickshell/ii/services/Idle.qml
 +++ b/dots/.config/quickshell/ii/services/Idle.qml
-@@ -11,16 +11,14 @@ Singleton {
+@@ -11,16 +11,12 @@ Singleton {
      id: root
  
      property alias inhibit: idleInhibitor.enabled
 -    inhibit: false
 +    inhibit: true
  
-+    // Restore the saved state on every start, including the first after a
-+    // reboot, so the toggle survives reboots.
      Connections {
          target: Persistent
          function onReadyChanged() {
@@ -46,6 +44,3 @@ index a2b8047..fb50471 100644
          }
      }
  
--- 
-2.55.0
-
