@@ -157,3 +157,7 @@ For each: keep, trim, or delete. This file is deleted before `doc-cleanup` merge
 - `pkgs/skillspector/package.nix:81` Remaining tests want unpackaged `dev` extras. Upstream suite.
 - `pkgs/ani-cli-launcher/package.nix:49` Keystore in $XDG_DATA_HOME; new key means phone must uninstall. Android signing.
 - `pkgs/krane-ii-settings/tests/test_displays.py:209` DP-3 Nix-declared when position remembered. Historical scenario.
+
+## rest
+
+- none

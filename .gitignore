@@ -3,8 +3,6 @@ result-*
 .direnv/
 *.hm-bak
 secrets/*.key
-# krane-ii-settings pre-login lock fallback (next to hosts/<host>/ii-settings.json)
 hosts/*/.ii-settings.lock
 
-# Claude Code session state and worktrees
 .claude/
