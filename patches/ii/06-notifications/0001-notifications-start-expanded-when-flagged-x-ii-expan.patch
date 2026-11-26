@@ -9,7 +9,7 @@ Subject: [PATCH] notifications: start expanded when flagged x-ii-expanded
  2 files changed, 2 insertions(+), 1 deletion(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/common/widgets/NotificationGroup.qml b/dots/.config/quickshell/ii/modules/common/widgets/NotificationGroup.qml
-index 9f572a52..e9684cd6 100644
+index 4641b02e..8a7b7026 100644
 --- a/dots/.config/quickshell/ii/modules/common/widgets/NotificationGroup.qml
 +++ b/dots/.config/quickshell/ii/modules/common/widgets/NotificationGroup.qml
 @@ -16,7 +16,7 @@ MouseArea { // Notification group area
@@ -22,7 +22,7 @@ index 9f572a52..e9684cd6 100644
      property real padding: 10
      implicitHeight: background.implicitHeight
 diff --git a/dots/.config/quickshell/ii/services/Notifications.qml b/dots/.config/quickshell/ii/services/Notifications.qml
-index c290e091..1ce5298f 100644
+index f9cf1136..a51c0ded 100644
 --- a/dots/.config/quickshell/ii/services/Notifications.qml
 +++ b/dots/.config/quickshell/ii/services/Notifications.qml
 @@ -26,6 +26,7 @@ Singleton {
