@@ -64,7 +64,7 @@ in
                       scale = external and 1.6 or 1.25,
                   }
                   -- Carry over GUI-set fields (color management, HDR, transform, vrr, ...) so a
-                  -- reload does not clobber them; output, mode, scale and position stay Nix's.
+                  -- reload does not clobber them; output, mode and scale stay Nix's; position was chosen above.
                   if gui then
                       for k, v in pairs(gui) do
                           if k ~= "output" and k ~= "mode" and k ~= "position" and k ~= "scale" then

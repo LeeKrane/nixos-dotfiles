@@ -1,4 +1,7 @@
 # GUI applications. flameshot is absent: ii ships hyprshot, already wired into its keybinds.
+# Out of scope: jetbrains-toolbox, kate, android-studio, audacity, brave, thunderbird,
+# notesnook, alpaca, gnome-clocks, super-productivity, Hytale Launcher, DaVinci Resolve,
+# VirtualBox.
 {
   inputs,
   lib,
@@ -7,6 +10,8 @@
 }:
 let
   awakened-poe-trade = pkgs.awakened-poe-trade.override {
+    # Electron 44+ makes clipboard calls async, which breaks APT's price check; 43 is the
+    # newest that keeps them synchronous. APT's overlay is X11-only, hence XWayland.
     electron = pkgs.electron_43-bin;
     commandLineArgs = [ "--ozone-platform=x11" ];
   };

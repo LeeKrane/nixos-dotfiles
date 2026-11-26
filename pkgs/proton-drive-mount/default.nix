@@ -19,6 +19,7 @@ writeShellApplication {
     coreutils
   ];
 
+  # The script handles rclone failures itself (retry, 2FA prompts); errexit would abort them.
   bashOptions = [ ];
 
   # SC2034: only `$?` of `yad_response=$(yad ...)` is used.

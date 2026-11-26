@@ -4,6 +4,23 @@ Branch `doc-cleanup`. Stage 1 (code comments) is done; rules in
 `docs/superpowers/specs/2026-11-26-comment-cleanup-design.md` apply to both stages below.
 Unverifiable notes go to a review list for the user, never edited silently.
 
+Next session: write one spec per stage (brainstorming, then writing-plans), starting with stage 2.
+
+## Cross-reference check (both stages)
+
+Stage 1 broke references: docs and comments pointed at comments it deleted (host install
+headers, apps.nix out-of-scope list, "see its own comment" pointers). Each spec must include:
+
+- Before deleting a comment, grep the repo (code, docs, patches, commit-message tables) for
+  pointers to it ("see ... comment", "header", file:line, quoted phrases). Keep it or move the
+  pointer target.
+- After cleaning, re-scan: every file:line, path, section name and "see X" in code, docs and
+  patch commit messages still resolves. Patch numbers/names cited in `docs/II-INTEGRATION.md`
+  must match the re-exported series.
+- Grep for removed comment text that code reads (markers like `GENERATED FILE` grepped by
+  `install.sh`, template placeholders, golden files).
+- Stage 3 runs last and must re-verify references created or broken by stages 1 and 2.
+
 ## Stage 2: comments in `patches/`
 
 - Scope: comments in `+` lines of all 66 `patches/ii/*/*.patch` (all authored in this repo)

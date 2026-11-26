@@ -60,7 +60,8 @@ in
                 echo "claude: $bundle lacks teamclaude's current CA, using the CA alone" >&2
             end
         else if test -n "$XDG_RUNTIME_DIR"; and test "$NODE_EXTRA_CA_CERTS" = $XDG_RUNTIME_DIR/claude-ca.pem; or string match -q -- '*/billion-context/*' "$NODE_EXTRA_CA_CERTS"
-            # That MITM's root must not be merged; the CA alone is used.
+            # The retired billion-context route's bundle holds that MITM's root, which must not be
+            # merged; the CA alone is used.
             echo "claude: ignoring the old billion-context bundle $NODE_EXTRA_CA_CERTS, using teamclaude's CA alone" >&2
         else if test -r "$NODE_EXTRA_CA_CERTS"; and test "$NODE_EXTRA_CA_CERTS" != $ca
             # Write a unique temp file, then rename: a running session never reads a half-written
@@ -82,8 +83,8 @@ in
     end
   '';
 
-  # Variables a surrounding `claude` session exports are dropped too, so a
-  # claude-plain started inside one does not inherit Code Mode or the teamclaude proxy. A user's
+  # Variables a surrounding `claude` session exports are dropped, so a claude-plain
+  # started inside one does not inherit Code Mode or the teamclaude proxy. A user's
   # own HTTPS_PROXY (any other value) is kept.
   environment.etc."fish/functions/claude-plain.fish".text = ''
     function claude-plain --wraps claude --description 'plain claude: no teamclaude, no Code Mode'
