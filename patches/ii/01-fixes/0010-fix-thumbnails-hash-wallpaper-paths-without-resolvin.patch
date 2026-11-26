@@ -13,7 +13,7 @@ Drop when: the pinned thumbnail scripts hash the listed path, not its realpath.
  1 file changed, 2 insertions(+), 1 deletion(-)
 
 diff --git a/dots/.config/quickshell/ii/scripts/thumbnails/generate-thumbnails-magick.sh b/dots/.config/quickshell/ii/scripts/thumbnails/generate-thumbnails-magick.sh
-index 3c464601..8571c24d 100755
+index 3c464601..9c59fd1c 100755
 --- a/dots/.config/quickshell/ii/scripts/thumbnails/generate-thumbnails-magick.sh
 +++ b/dots/.config/quickshell/ii/scripts/thumbnails/generate-thumbnails-magick.sh
 @@ -46,7 +46,8 @@ urlencode() {
@@ -21,7 +21,7 @@ index 3c464601..8571c24d 100755
      local src="$1"
      local abs_path
 -    abs_path="$(realpath "$src")"
-+    # -s/--no-symlinks: the selector's ThumbnailImage hashes the path as listed, not its symlink target
++    # -s: ThumbnailImage hashes the path as listed, not its symlink target
 +    abs_path="$(realpath -s "$src")"
      # Skip files with multiple frames (GIFs, videos, etc.)
      case "${abs_path,,}" in

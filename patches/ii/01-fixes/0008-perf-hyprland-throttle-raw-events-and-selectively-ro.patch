@@ -11,39 +11,25 @@ Problem: every raw Hyprland event ran all five hyprctl queries; dragging a windo
 Port: hand-ported. Dropped the fork's WM.compositor guards (no compositor abstraction at the pin). Added a configreloaded branch that refreshes monitors and workspaces; 204f22f itself only changes a fork-only settings component. Widened the fork's routing so workspace and activespecial events also refresh monitors, fullscreen refreshes workspaces, and openlayer/closelayer refresh layers, since consumers read those. Also refreshes clients on moveworkspace and monitor hotplug, and matches Hyprland's minimized event name. Coalesces events into at most one round of queries every 60ms (leading-edge throttle) rather than debouncing until the stream goes quiet, so a continuous stream of events (a drag, a spinner title) cannot starve refreshes indefinitely.
 Drop when: the pinned services/HyprlandData.qml throttles onRawEvent.
 ---
- .../quickshell/ii/services/HyprlandData.qml   | 118 ++++++++++++++++--
- 1 file changed, 106 insertions(+), 12 deletions(-)
+ .../quickshell/ii/services/HyprlandData.qml   | 101 +++++++++++++++---
+ 1 file changed, 89 insertions(+), 12 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/services/HyprlandData.qml b/dots/.config/quickshell/ii/services/HyprlandData.qml
-index 5dfedab6..b9b49711 100644
+index 5dfedab6..d7ddb83c 100644
 --- a/dots/.config/quickshell/ii/services/HyprlandData.qml
 +++ b/dots/.config/quickshell/ii/services/HyprlandData.qml
-@@ -46,28 +46,87 @@ Singleton {
+@@ -46,28 +46,71 @@ Singleton {
  
      // Internals
  
-+    // Leading-edge throttle for bursts of raw Hyprland events (e.g. dragging
-+    // a window fires dozens of "movewindow" events per second): the first
-+    // event runs its hyprctl queries immediately, and any events that follow
-+    // are coalesced into at most one more round every 60ms, instead of
-+    // debouncing until the stream goes quiet (which a continuous stream,
-+    // like a drag or a spinner title, would starve indefinitely). A query
-+    // still in flight is never killed - if its Process (or, for workspaces,
-+    // either Process) is still running when the 60ms timer ticks, the
-+    // pending flag is left set and retried on the next tick, instead of
-+    // restarting a running query and truncating its output. Only the
-+    // queries an event can actually affect are re-run, instead of all five
-+    // on every event.
++    // Leading-edge throttle, 60ms: debouncing would starve under a continuous stream (drag, spinner title).
++    // A running query is never restarted (it would truncate its output): its flag stays set and retries next tick.
 +    property bool _pendingClients: false
 +    property bool _pendingMonitors: false
 +    property bool _pendingLayers: false
 +    property bool _pendingWorkspaces: false
 +
-+    // Table of { flag, procs } instead of four copy-pasted blocks: a flag
-+    // flushes once none of its procs are running, restarting all of them
-+    // together (relevant for workspaces, which is two queries in lockstep).
-+    // Built once as a property: QML resolves the Process ids below in
-+    // bindings regardless of declaration order.
++    // A flag flushes once none of its procs run; all of them restart together (workspaces is two queries).
 +    readonly property var _pendingTable: [
 +        { flag: "_pendingClients", procs: [getClients] },
 +        { flag: "_pendingMonitors", procs: [getMonitors] },
@@ -53,9 +39,9 @@ index 5dfedab6..b9b49711 100644
 +
 +    function flushPending() {
 +        for (const entry of root._pendingTable) {
-+            if (!root[entry.flag]) continue; // Nothing pending for this entry
-+            if (entry.procs.some(proc => proc.running)) continue; // Still running: leave the flag set and retry next flush
-+            for (const proc of entry.procs) proc.running = true; // Fresh start: none of the procs are running
++            if (!root[entry.flag]) continue;
++            if (entry.procs.some(proc => proc.running)) continue;
++            for (const proc of entry.procs) proc.running = true;
 +            root[entry.flag] = false;
 +        }
 +    }
@@ -66,8 +52,6 @@ index 5dfedab6..b9b49711 100644
 +        repeat: false
 +        onTriggered: {
 +            root.flushPending();
-+            // A retry left pending above, or events that arrived during this
-+            // window, need another round.
 +            if (root._pendingClients || root._pendingMonitors || root._pendingLayers || root._pendingWorkspaces) {
 +                eventThrottleTimer.start();
 +            }
@@ -80,7 +64,7 @@ index 5dfedab6..b9b49711 100644
 +        if (monitors) root._pendingMonitors = true;
 +        if (layers) root._pendingLayers = true;
 +        if (!eventThrottleTimer.running) {
-+            root.flushPending(); // Leading edge: run the first event immediately
++            root.flushPending();
 +            eventThrottleTimer.start();
 +        }
 +    }
@@ -115,7 +99,7 @@ index 5dfedab6..b9b49711 100644
      }
  
      function biggestWindowForWorkspace(workspaceId) {
-@@ -80,7 +139,11 @@ Singleton {
+@@ -80,7 +123,11 @@ Singleton {
      }
  
      Component.onCompleted: {
@@ -128,7 +112,7 @@ index 5dfedab6..b9b49711 100644
      }
  
      Connections {
-@@ -88,8 +151,39 @@ Singleton {
+@@ -88,8 +135,38 @@ Singleton {
  
          function onRawEvent(event) {
              // console.log("Hyprland raw event:", event.name);
@@ -140,8 +124,7 @@ index 5dfedab6..b9b49711 100644
 +            if (name === "openlayer" || name === "closelayer") {
 +                root.queueUpdate(false, false, false, true);
 +            } else if (name.startsWith("moveworkspace")) {
-+                // Background.qml filters its window list by win.monitor, so a
-+                // workspace moving to another monitor needs fresh clients too.
++                // Background.qml filters windows by monitor, so clients refresh too.
 +                root.queueUpdate(true, true, true, false);
 +            } else if (name.startsWith("workspace") || name.startsWith("createworkspace") || name.startsWith("destroyworkspace") || name === "renameworkspace") {
 +                root.queueUpdate(false, true, true, false);

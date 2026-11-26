@@ -8,20 +8,18 @@ Problem: pair() alone leaves the device untrusted, so BlueZ asks the agent to au
 Port: local
 Drop when: the pinned BluetoothDeviceItem.qml trusts devices it pairs.
 ---
- .../ii/sidebarRight/bluetoothDevices/BluetoothDeviceItem.qml  | 4 ++++
- 1 file changed, 4 insertions(+)
+ .../ii/sidebarRight/bluetoothDevices/BluetoothDeviceItem.qml    | 2 ++
+ 1 file changed, 2 insertions(+)
 
 diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarRight/bluetoothDevices/BluetoothDeviceItem.qml b/dots/.config/quickshell/ii/modules/ii/sidebarRight/bluetoothDevices/BluetoothDeviceItem.qml
-index 7292212d..5372f671 100644
+index 7292212d..a7cb8de2 100644
 --- a/dots/.config/quickshell/ii/modules/ii/sidebarRight/bluetoothDevices/BluetoothDeviceItem.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/sidebarRight/bluetoothDevices/BluetoothDeviceItem.qml
-@@ -95,7 +95,11 @@ DialogListItem {
+@@ -95,7 +95,9 @@ DialogListItem {
                      if (root.device?.paired) {
                          root.device?.forget();
                      } else {
-+                        // ii registers no BlueZ agent, so a device paired here is Paired but
-+                        // not Trusted, and every later profile connection needs the agent to
-+                        // authorize it. Trust it too so reconnects don't need that agent.
++                        // No BlueZ agent is registered, so trust the device for reconnects.
                          root.device?.pair();
 +                        root.device.trusted = true;
                      }

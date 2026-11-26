@@ -14,7 +14,7 @@ Drop when: the pinned services/Notifications.qml attemptInvokeAction checks the 
  1 file changed, 5 insertions(+), 1 deletion(-)
 
 diff --git a/dots/.config/quickshell/ii/services/Notifications.qml b/dots/.config/quickshell/ii/services/Notifications.qml
-index 1e020bc4..c290e091 100644
+index dad8ab64..f9cf1136 100644
 --- a/dots/.config/quickshell/ii/services/Notifications.qml
 +++ b/dots/.config/quickshell/ii/services/Notifications.qml
 @@ -250,7 +250,11 @@ Singleton {

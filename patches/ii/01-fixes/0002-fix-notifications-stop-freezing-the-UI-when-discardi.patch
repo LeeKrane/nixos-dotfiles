@@ -9,15 +9,15 @@ Problem: discardNotification() used list.splice(), which emits listChanged per s
 Port: clean
 Drop when: the pinned services/Notifications.qml no longer removes notifications with root.list.splice().
 ---
- .../common/widgets/NotificationGroup.qml      |  9 +++----
+ .../common/widgets/NotificationGroup.qml      |  8 +++---
  .../quickshell/ii/services/Notifications.qml  | 26 ++++++++++++-------
- 2 files changed, 20 insertions(+), 15 deletions(-)
+ 2 files changed, 19 insertions(+), 15 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/common/widgets/NotificationGroup.qml b/dots/.config/quickshell/ii/modules/common/widgets/NotificationGroup.qml
-index e3d64027..9f572a52 100644
+index e3d64027..4641b02e 100644
 --- a/dots/.config/quickshell/ii/modules/common/widgets/NotificationGroup.qml
 +++ b/dots/.config/quickshell/ii/modules/common/widgets/NotificationGroup.qml
-@@ -64,11 +64,10 @@ MouseArea { // Notification group area
+@@ -64,11 +64,9 @@ MouseArea { // Notification group area
              easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
          }
          onFinished: () => {
@@ -26,15 +26,14 @@ index e3d64027..9f572a52 100644
 -                    Notifications.discardNotification(notif.notificationId);
 -                });
 -            });
-+            // One call for the whole group, so the list is rewritten and the file
-+            // saved once instead of once per notification.
++            // One call for the group: the list is rewritten and saved once.
 +            const ids = root.notifications.map((notif) => notif.notificationId);
 +            Qt.callLater(() => Notifications.discardNotifications(ids));
          }
      }
  
 diff --git a/dots/.config/quickshell/ii/services/Notifications.qml b/dots/.config/quickshell/ii/services/Notifications.qml
-index a45b8600..9e520ef8 100644
+index a45b8600..4264a892 100644
 --- a/dots/.config/quickshell/ii/services/Notifications.qml
 +++ b/dots/.config/quickshell/ii/services/Notifications.qml
 @@ -190,18 +190,24 @@ Singleton {
@@ -68,7 +67,7 @@ index a45b8600..9e520ef8 100644
 +        notifServer.trackedNotifications.values
 +            .filter((notif) => idSet.has(notif.id + root.idOffset))
 +            .forEach((notif) => notif.dismiss());
-+        ids.forEach((id) => root.discard(id)); // Emit signal
++        ids.forEach((id) => root.discard(id));
      }
  
      function discardAllNotifications() {

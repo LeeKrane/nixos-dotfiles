@@ -10,14 +10,14 @@ Problem: a truncated or invalid ~/.cache/notifications/notifications.json made l
 Port: clean
 Drop when: the pinned services/Notifications.qml wraps the notifications-file JSON.parse in try/catch.
 ---
- .../quickshell/ii/services/Notifications.qml  | 50 +++++++++++--------
- 1 file changed, 29 insertions(+), 21 deletions(-)
+ .../quickshell/ii/services/Notifications.qml  | 49 +++++++++++--------
+ 1 file changed, 28 insertions(+), 21 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/services/Notifications.qml b/dots/.config/quickshell/ii/services/Notifications.qml
-index 9e520ef8..420fd11d 100644
+index 4264a892..f2c451ab 100644
 --- a/dots/.config/quickshell/ii/services/Notifications.qml
 +++ b/dots/.config/quickshell/ii/services/Notifications.qml
-@@ -274,29 +274,37 @@ Singleton {
+@@ -274,29 +274,36 @@ Singleton {
          id: notifFileView
          path: Qt.resolvedUrl(filePath)
          onLoaded: {
@@ -38,7 +38,7 @@ index 9e520ef8..420fd11d 100644
 +                root.list = JSON.parse(fileContents).map((notif) => {
 +                    return notifComponent.createObject(root, {
 +                        "notificationId": notif.notificationId,
-+                        "actions": [], // Notification actions are meaningless if they're not tracked by the server or the sender is dead
++                        "actions": [], // no live sender to act on
 +                        "appIcon": notif.appIcon,
 +                        "appName": notif.appName,
 +                        "body": notif.body,
@@ -54,7 +54,6 @@ index 9e520ef8..420fd11d 100644
 -            root.list.forEach((notif) => {
 -                maxId = Math.max(maxId, notif.notificationId)
 -            })
-+                // Find largest notificationId
 +                let maxId = 0
 +                root.list.forEach((notif) => {
 +                    maxId = Math.max(maxId, notif.notificationId)

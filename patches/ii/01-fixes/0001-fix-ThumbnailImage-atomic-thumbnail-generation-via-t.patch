@@ -10,14 +10,14 @@ Problem: concurrent magick processes wrote the same cache file, clobbering each 
 Port: clean, except the shell variable $tmp, which the fork wrote as ${tmp} inside the QML template literal so QML evaluated it as JavaScript (ReferenceError, no thumbnails).
 Drop when: the pinned modules/common/widgets/ThumbnailImage.qml writes thumbnails to a temp file before moving them into place.
 ---
- .../ii/modules/common/widgets/ThumbnailImage.qml          | 8 ++++++--
- 1 file changed, 6 insertions(+), 2 deletions(-)
+ .../quickshell/ii/modules/common/widgets/ThumbnailImage.qml | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/common/widgets/ThumbnailImage.qml b/dots/.config/quickshell/ii/modules/common/widgets/ThumbnailImage.qml
-index 50315b2b..b97afbeb 100644
+index 50315b2b..d3a72e30 100644
 --- a/dots/.config/quickshell/ii/modules/common/widgets/ThumbnailImage.qml
 +++ b/dots/.config/quickshell/ii/modules/common/widgets/ThumbnailImage.qml
-@@ -42,8 +42,12 @@ StyledImage {
+@@ -42,8 +42,10 @@ StyledImage {
          id: thumbnailGeneration
          command: {
              const maxSize = Images.thumbnailSizes[root.thumbnailSizeName];
@@ -25,9 +25,7 @@ index 50315b2b..b97afbeb 100644
 -                `[ -f '${FileUtils.trimFileProtocol(root.thumbnailPath)}' ] && exit 0 || { magick '${root.sourcePath}' -resize ${maxSize}x${maxSize} '${FileUtils.trimFileProtocol(root.thumbnailPath)}' && exit 1; }`
 +            const thumbPath = FileUtils.trimFileProtocol(root.thumbnailPath);
 +            return ["bash", "-c",
-+                // Generate to a unique temporary file first, then atomically move it into place.
-+                // This avoids concurrent generations of the same thumbnail clobbering each other
-+                // and half-written cache files when the popup closes mid-generation.
++                // Temp file + mv: concurrent runs or a mid-generation close cannot leave a half-written thumbnail.
 +                `[ -f '${thumbPath}' ] && exit 0 || { tmp='${thumbPath}.$$.tmp.png'; magick '${root.sourcePath}' -resize ${maxSize}x${maxSize} "$tmp" && mv "$tmp" '${thumbPath}' && exit 1; exit 2; }`
              ]
          }
