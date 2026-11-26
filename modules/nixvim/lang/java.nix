@@ -1,12 +1,5 @@
-# Java via nvim-jdtls; one workspace per project under the nvim cache dir.
-#
-# Not using nixvim's `plugins.jdtls` module: its `settings.cmd`/`root_dir` are
-# rendered as plain `vim.lsp.config(...)` values, evaluated once at startup
-# rather than per buffer (confirmed via nixvim-print-init), and the module
-# also unconditionally enables its own `lsp.servers.jdtls` start hook even
-# with empty settings. Instead: install the plugin/server manually and start
-# jdtls per buffer from an explicit FileType autocmd, as the phase 2 plan's
-# fallback describes.
+# Not nixvim's `plugins.jdtls`: it renders `settings.cmd`/`root_dir` once at startup, not per
+# buffer, and enables its own `lsp.servers.jdtls`. jdtls starts per buffer from a FileType autocmd instead.
 { pkgs, ... }:
 {
   extraPlugins = [ pkgs.vimPlugins.nvim-jdtls ];

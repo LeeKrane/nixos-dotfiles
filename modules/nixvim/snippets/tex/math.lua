@@ -202,20 +202,4 @@ return {
 		{ condition = math }
 	),
 
-	-- s(
-	-- 	{
-	-- 		trig="([%a%)%]%}])00",
-	-- 		dscr="lower number",
-	-- 		wordTrig="false",
-	-- 		regTrig="true",
-	-- 		snippetType="autosnippet",
-	-- 	},
-	-- 	fmta(
-	-- 		"<>_{<>}",
-	-- 		{
-	-- 			f( function(_, snip) return snip.captures[1] end ),
-	-- 			t("0")
-	-- 		},
-	-- 	)
-	-- ),
 }

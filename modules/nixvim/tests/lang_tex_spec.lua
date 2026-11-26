@@ -22,9 +22,7 @@ local function ft_formatters(ft, want)
 	assert(got == table.concat(want, ","), ft .. " formatters: " .. got)
 end
 
--- LaTeX (spec: Languages, tex row).
 on_path({ "texlab" })
--- latexindent runs from an absolute store path: its TeX env must not leak onto PATH
 local li = require("conform").get_formatter_info("latexindent")
 assert(li.available, "latexindent available: " .. tostring(li.available_msg))
 assert(vim.startswith(li.command, "/nix/store/"), "latexindent absolute store path: " .. li.command)
@@ -34,7 +32,6 @@ servers({ "texlab" })
 ft_formatters("tex", { "latexindent" })
 assert(vim.g.loaded_vimtex == 1, "vimtex loaded (not lazy)")
 
--- vimtex syntax drives math-zone detection, so treesitter highlight is off for latex
 local path = vim.fn.tempname() .. ".tex"
 vim.fn.writefile({ "\\documentclass{article}", "\\begin{document}", "a $x + y$ b", "\\end{document}" }, path)
 vim.cmd.edit(path)
@@ -47,7 +44,6 @@ assert(util.in_mathzone() == true, "in_mathzone inside $...$")
 vim.api.nvim_win_set_cursor(0, { 3, 0 }) -- the leading "a"
 assert(util.in_mathzone() == false, "not in math outside $...$")
 
--- latexindent writes indent.log into its cwd unless -g redirects it
 local dir = vim.fn.tempname()
 vim.fn.mkdir(dir, "p")
 vim.cmd.cd(dir)

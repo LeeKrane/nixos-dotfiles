@@ -1,4 +1,3 @@
-# Markdown: marksman, prettierd, in-buffer rendering and browser preview.
 { pkgs, ... }:
 {
   lsp.servers.marksman.enable = true;

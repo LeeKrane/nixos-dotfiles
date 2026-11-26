@@ -1,4 +1,3 @@
-# TypeScript/JavaScript, Tailwind, HTML and CSS.
 { lib, pkgs, ... }:
 {
   lsp.servers = {
@@ -7,7 +6,7 @@
     html.enable = true;
     cssls = {
       enable = true;
-      # Tailwind's @tailwind/@apply/@layer are unknown at-rules to plain CSS.
+      # Tailwind at-rules are unknown to plain CSS.
       config.settings = lib.genAttrs [ "css" "scss" "less" ] (_: {
         lint.unknownAtRules = "ignore";
       });

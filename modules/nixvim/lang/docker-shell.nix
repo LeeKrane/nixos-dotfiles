@@ -1,4 +1,4 @@
-# Dockerfiles and shell scripts. bashls runs shellcheck itself when it is on PATH.
+# bashls runs shellcheck itself when it is on PATH.
 { pkgs, ... }:
 {
   lsp.servers = {

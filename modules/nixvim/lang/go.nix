@@ -1,4 +1,3 @@
-# Go. The go toolchain is in modules/home/desktop/dev.nix; gopls finds it on PATH.
 { pkgs, ... }:
 {
   lsp.servers.gopls = {
@@ -11,8 +10,7 @@
     };
   };
 
-  # Keep go off the editor's PATH (user decision: gopls uses the user's go from
-  # dev.nix, not one bundled here).
+  # gopls uses the go from modules/home/desktop/dev.nix, not one bundled here.
   dependencies.go.enable = false;
 
   plugins.conform-nvim.settings = {
@@ -20,8 +18,8 @@
       "goimports"
       "gofumpt"
     ];
-    # Absolute path, not extraPackages: gotools ships ~20 other binaries
-    # (stringer, gonew, ...) that must not land on the editor's PATH. Its
+    # Absolute path, not extraPackages: gotools ships many other binaries
+    # (stringer, gonew, ...) that would land on the editor's PATH. Its
     # goimports wrapper references nixpkgs' go internally, so go is in the
     # editor's closure (not its PATH) regardless.
     formatters.goimports.command = "${pkgs.gotools}/bin/goimports";

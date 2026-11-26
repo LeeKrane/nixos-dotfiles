@@ -22,7 +22,6 @@ local function ft_formatters(ft, want)
 	assert(got == table.concat(want, ","), ft .. " formatters: " .. got)
 end
 
--- TS/JS, Tailwind, HTML, CSS (spec: Languages, web row).
 on_path({
 	"typescript-language-server",
 	"tailwindcss-language-server",
@@ -31,7 +30,6 @@ on_path({
 	"prettierd",
 })
 servers({ "ts_ls", "tailwindcss", "html", "cssls" })
--- tailwind's @tailwind/@apply are unknown at-rules to cssls
 local css = vim.lsp.config.cssls.settings or {}
 for _, lang in ipairs({ "css", "scss", "less" }) do
 	local rule = vim.tbl_get(css, lang, "lint", "unknownAtRules")
@@ -46,7 +44,6 @@ assert(pcall(require, "nvim-ts-autotag"), "ts-autotag loads")
 
 formats("ts", "const a={b:1}", "const a = { b: 1 };")
 
--- format on save runs prettierd only when a prettier config is found upward (spec: Formatting and linting)
 local function saves(ext, input, expected, config_file)
 	local dir = vim.fn.tempname()
 	vim.fn.mkdir(dir, "p")
@@ -62,7 +59,6 @@ local function saves(ext, input, expected, config_file)
 end
 saves("ts", "const a={b:1}", "const a={b:1}", nil)
 saves("ts", "const a={b:1}", "const a = { b: 1 };", ".prettierrc")
--- a package.json "prettier" key counts as config; a package.json without it does not
 local dir = vim.fn.tempname()
 vim.fn.mkdir(dir, "p")
 vim.fn.writefile({ '{ "name": "x" }' }, dir .. "/package.json")

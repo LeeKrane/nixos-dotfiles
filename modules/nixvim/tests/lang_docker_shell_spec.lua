@@ -22,7 +22,6 @@ local function ft_formatters(ft, want)
 	assert(got == table.concat(want, ","), ft .. " formatters: " .. got)
 end
 
--- Docker and shell (spec: Languages, docker/shell row).
 on_path({ "docker-langserver", "hadolint", "bash-language-server", "shellcheck", "shfmt" })
 servers({ "dockerls", "bashls" })
 ft_formatters("sh", { "shfmt" })
@@ -30,7 +29,6 @@ ft_formatters("bash", { "shfmt" })
 assert(table.concat(require("lint").linters_by_ft.dockerfile or {}, ",") == "hadolint", "hadolint linter")
 formats("sh", "if true;then echo;fi", "if true; then echo; fi")
 
--- format on save runs shfmt only when an .editorconfig is found upward (spec: Formatting and linting)
 local function saves(ext, input, expected, config_file)
 	local dir = vim.fn.tempname()
 	vim.fn.mkdir(dir, "p")

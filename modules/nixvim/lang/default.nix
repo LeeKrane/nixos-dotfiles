@@ -1,4 +1,3 @@
-# Language plumbing shared by lang/*.nix: LSP, formatting, linting, treesitter.
 { config, ... }:
 {
   imports = [
@@ -15,7 +14,6 @@
     ./docker-shell.nix
   ];
 
-  # Upstream server defaults for the top-level `lsp` module (vim.lsp.config/enable).
   plugins.lspconfig.enable = true;
 
   diagnostic.settings = {
@@ -31,7 +29,7 @@
       # Toggled by <leader>uf / <leader>uF (keymaps.nix).
       # prettierd and shfmt run on save only when the project has their config
       # (found upward from the buffer); manual <leader>cf always formats. Gating
-      # here rather than with conform `condition`, which would also block
+      # Gating here rather than with conform `condition`, which would also block
       # manual formatting. A buffer whose formatters are all gated off is not
       # formatted on save at all (no LSP fallback either).
       format_on_save.__raw = ''
@@ -69,8 +67,7 @@
             return vim.fs.find(gates[formatter], { upward = true, path = dir })[1] ~= nil
           end
           -- A timed-out format still saves, unformatted, with only a notification.
-          -- nvim-specs raises this budget so a loaded CI runner can't flip a
-          -- formatting assertion; interactive saves keep the 500 ms default.
+          -- nvim-specs raises this (vim.g.format_on_save_timeout_ms) so a loaded CI runner can't flip a format assertion.
           local function timeout_ms()
             return vim.g.format_on_save_timeout_ms or 500
           end
@@ -104,7 +101,6 @@
     };
   };
 
-  # This module has no `settings`; linters go in lintersByFt (phase 2).
   plugins.lint.enable = true;
   autoGroups.nixvim_lint.clear = true;
   autoCmd = [
@@ -129,10 +125,9 @@
 
   plugins.treesitter = {
     enable = true;
-    # Top-level options drive the main branch's FileType autocmd (settings.* is the legacy API).
+    # Top-level options drive the main branch's FileType autocmd; settings.* is legacy.
     highlight.enable = true;
     indent.enable = true;
-    # All phase 1 and phase 2 grammars, so highlighting never regresses.
     grammarPackages = with config.plugins.treesitter.package.builtGrammars; [
       nix
       lua

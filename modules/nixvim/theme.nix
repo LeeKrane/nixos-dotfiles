@@ -1,4 +1,3 @@
-# Wallpaper-driven colorscheme, see lua/dynamic-theme.lua.
 let
   # catppuccin-frappe base16, used until a valid material_colors.scss is read.
   fallback = {
@@ -21,7 +20,6 @@ let
   };
 in
 {
-  # mini.base16 ships in mini.nvim; setup() is called at runtime, not here.
   plugins.mini.enable = true;
 
   globals.dynamic_theme_fallback = fallback;
@@ -31,7 +29,7 @@ in
     "colors/dynamic.lua".source = ./colors/dynamic.lua;
   };
 
-  # Post: runs after every plugin's setup, so ColorScheme reaches them all.
+  # Post: runs after every plugin's setup.
   extraConfigLuaPost = ''
     require("dynamic-theme").setup()
   '';

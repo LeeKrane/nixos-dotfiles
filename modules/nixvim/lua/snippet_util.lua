@@ -1,5 +1,3 @@
--- vimtex-backed snippet conditions that return false instead of erroring
--- when vimtex is not installed or not loaded for the buffer.
 local M = {}
 
 function M.in_mathzone()

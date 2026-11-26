@@ -1,4 +1,3 @@
-# LazyVim-compatible core keymaps for the kept plugins, plus which-key groups.
 let
   lua = code: { __raw = code; };
   map = mode: key: action: desc: {
@@ -19,8 +18,6 @@ let
           vim.diagnostic.open_float({ bufnr = bufnr, scope = "cursor", focus = false })
         end,
       })'';
-  # Pass the key through raw inside floating windows (e.g. a lazygit float),
-  # matching LazyVim; otherwise run the window-nav wincmd.
   termWinMap = key: dir: desc: {
     mode = "t";
     inherit key;
@@ -40,7 +37,6 @@ let
   };
 in
 {
-  # Root for "root" pickers: git root, else cwd (replaces LazyVim.root()).
   extraConfigLuaPre = ''
     function _G.nixvim_root()
       return (Snacks and Snacks.git.get_root()) or vim.uv.cwd()
@@ -109,7 +105,7 @@ in
     (map "n" "<leader>bo" (fn "Snacks.bufdelete.other()") "Delete Other Buffers")
     (map "n" "<leader>bb" "<cmd>e #<cr>" "Switch to Other Buffer")
 
-    # windows (normal + terminal only; insert <C-j>/<C-k>/<C-l> belong to blink)
+    # windows (insert <C-j>/<C-k>/<C-l> belong to blink)
     (map "n" "<C-h>" "<C-w>h" "Go to Left Window")
     (map "n" "<C-j>" "<C-w>j" "Go to Lower Window")
     (map "n" "<C-k>" "<C-w>k" "Go to Upper Window")
@@ -152,7 +148,7 @@ in
     (map [ "o" "x" ] "R" (fn ''require("flash").treesitter_search()'') "Treesitter Search")
     (map "c" "<c-s>" (fn ''require("flash").toggle()'') "Toggle Flash Search")
 
-    # move by display line over wrapped lines (LazyVim default; user sets wrap = true)
+    # display-line j/k
     {
       mode = [
         "n"
@@ -223,8 +219,7 @@ in
             vim.keymap.set(mode, lhs, rhs, vim.tbl_extend("force", { buffer = event.buf, desc = desc }, opts or {}))
           end
           map("n", "gd", function() Snacks.picker.lsp_definitions() end, "Goto Definition")
-          -- nowait: nvim 0.12's global grr/gra/grn/gri/grt would otherwise make
-          -- plain `gr` wait on timeoutlen for a longer mapping.
+          -- nowait: global grr/gra/grn/gri/grt would make `gr` wait on timeoutlen.
           map("n", "gr", function() Snacks.picker.lsp_references() end, "References", { nowait = true })
           map("n", "gI", function() Snacks.picker.lsp_implementations() end, "Goto Implementation")
           map("n", "gy", function() Snacks.picker.lsp_type_definitions() end, "Goto Type Definition")

@@ -1,4 +1,3 @@
-# nix and lua: this repo's own languages.
 { pkgs, ... }:
 {
   lsp.servers = {

@@ -1,4 +1,3 @@
--- Pure parsing and palette math of dynamic-theme (spec: Dynamic theme).
 local T = require("dynamic-theme")
 
 local function fixture(name)

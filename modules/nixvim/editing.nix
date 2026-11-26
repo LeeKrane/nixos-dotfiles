@@ -1,4 +1,3 @@
-# Motions, text objects, pairs, surround, comments and directory editing.
 {
   plugins.flash.enable = true;
 

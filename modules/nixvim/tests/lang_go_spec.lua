@@ -22,13 +22,10 @@ local function ft_formatters(ft, want)
 	assert(got == table.concat(want, ","), ft .. " formatters: " .. got)
 end
 
--- Go (spec: Languages, go row). The go toolchain itself comes from dev.nix, not the editor.
 on_path({ "gopls", "gofumpt", "golangci-lint" })
--- goimports runs from an absolute store path; gotools' other binaries (bundle, ...) stay off PATH
 local gi = require("conform").get_formatter_info("goimports")
 assert(gi.available, "goimports available: " .. tostring(gi.available_msg))
 assert(vim.startswith(gi.command, "/nix/store/"), "goimports absolute store path: " .. gi.command)
--- ("bundle" is not a usable probe: the ruby provider env also ships one)
 assert(vim.fn.executable("goimports") == 0 and vim.fn.executable("stringer") == 0, "gotools must not be on PATH")
 assert(vim.fn.executable("go") == 0, "go must not be on PATH")
 servers({ "gopls" })
@@ -42,7 +39,6 @@ assert(table.concat(require("lint").linters_by_ft.go or {}, ",") == "golangcilin
 vim.lsp.enable("gopls", false)
 formats("go", "package main\nfunc main(){}", "package main\n\nfunc main() {}", { "gofumpt" })
 
--- golangci-lint is slow: lint go only on save, other filetypes on read/insert-leave too
 local lint = require("lint")
 local calls = 0
 local real = lint.try_lint

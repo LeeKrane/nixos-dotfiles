@@ -22,7 +22,6 @@ local function ft_formatters(ft, want)
 	assert(got == table.concat(want, ","), ft .. " formatters: " .. got)
 end
 
--- Rust (spec: Languages, rust row). rust-analyzer must NOT come from the editor.
 assert(vim.fn.executable("rust-analyzer") == 0, "rust-analyzer must not be bundled (sandbox has no rustup)")
 assert(type(vim.g.rustaceanvim) == "table" or type(vim.g.rustaceanvim) == "function", "rustaceanvim configured")
 local cfg = type(vim.g.rustaceanvim) == "function" and vim.g.rustaceanvim() or vim.g.rustaceanvim
@@ -30,7 +29,6 @@ assert(cfg.server == nil or cfg.server.cmd == nil, "server.cmd unset: rustaceanv
 local ra = cfg.server.default_settings["rust-analyzer"]
 assert(ra.check.command == "clippy", "clippy on save")
 
--- crates.nvim loads for Cargo.toml
 local path = vim.fn.tempname() .. "/Cargo.toml"
 vim.fn.mkdir(vim.fs.dirname(path), "p")
 vim.fn.writefile({ "[package]", 'name = "x"' }, path)

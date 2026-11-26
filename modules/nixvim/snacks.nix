@@ -1,4 +1,3 @@
-# snacks.nvim: picker, explorer, dashboard, notifier, lazygit and small helpers.
 { pkgs, ... }:
 {
   plugins.snacks = {
@@ -14,8 +13,7 @@
       lazygit.enabled = true;
       explorer = {
         enabled = true;
-        # oil owns directory buffers (`-` opens Oil); snacks explorer stays
-        # the <leader>e sidebar only, so the two don't race for netrw.
+        # oil owns directory buffers, so snacks explorer leaves netrw alone.
         replace_netrw = false;
       };
       picker = {
@@ -27,8 +25,7 @@
       };
       dashboard = {
         enabled = true;
-        # The default layout adds a "startup" section, which reads lazy.nvim's
-        # stats and errors without lazy.nvim.
+        # The default "startup" section needs lazy.nvim's stats.
         sections = [
           { section = "header"; }
           {

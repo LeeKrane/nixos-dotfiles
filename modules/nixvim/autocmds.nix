@@ -1,4 +1,3 @@
-# LazyVim's default autocmds (lua/lazyvim/config/autocmds.lua), ported.
 { lib, ... }:
 {
   autoGroups =

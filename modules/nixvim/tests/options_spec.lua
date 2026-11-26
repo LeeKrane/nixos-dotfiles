@@ -1,4 +1,3 @@
--- User options from the old options.lua plus the LazyVim baseline (spec: Options).
 local o, g = vim.o, vim.g
 
 assert(g.mapleader == " ", "mapleader")
@@ -47,10 +46,8 @@ for name, want in pairs(expected) do
 end
 assert(o.sessionoptions:find("folds", 1, true), "sessionoptions includes folds")
 assert(o.listchars:find("trail:", 1, true), "listchars sets trail")
--- no system clipboard over SSH (OSC 52 reads block); "unnamedplus" otherwise.
--- SSH_TTY is unset in this test run, so the assertion below only exercises
--- the non-SSH branch; the SSH branch is exercised for real underneath it,
--- in a subprocess that actually has SSH_TTY set.
+-- No system clipboard over SSH (OSC 52 reads block). SSH_TTY is unset here, so this covers the
+-- non-SSH branch; the SSH branch runs in a subprocess below.
 assert(
 	o.clipboard == (vim.env.SSH_TTY and "" or "unnamedplus"),
 	"clipboard: want " .. (vim.env.SSH_TTY and "" or "unnamedplus") .. ", got " .. o.clipboard
@@ -83,11 +80,8 @@ do
 	assert(res.stdout == "", "clipboard over SSH: want empty, got [" .. tostring(res.stdout) .. "]")
 end
 
--- Control: the exact same subprocess machinery, without SSH_TTY, must print
--- "unnamedplus" -- otherwise a broken env/spawn (e.g. SSH_TTY silently not
--- taking effect, or vim.o.clipboard reading some other default) could make
--- the SSH-branch assertion above pass vacuously by both branches printing
--- the same (wrong) thing.
+-- Control: the same subprocess without SSH_TTY must print "unnamedplus", so a broken spawn
+-- cannot make the SSH assertion pass vacuously.
 do
 	local res = clipboard_subprocess(nil)
 	assert(res.code == 0, "control subprocess exited " .. res.code .. ": " .. (res.stderr or ""))

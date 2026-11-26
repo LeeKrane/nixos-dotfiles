@@ -1,4 +1,3 @@
-# Tabline, statusline, key hints and icons.
 {
   plugins.mini = {
     enable = true;
@@ -41,6 +40,5 @@
     };
   };
 
-  # Group names live in keymaps.nix.
   plugins.which-key.enable = true;
 }

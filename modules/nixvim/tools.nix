@@ -1,4 +1,3 @@
-# Git hunks, diagnostics lists, search/replace and sessions.
 { pkgs, lib, ... }:
 {
   plugins.lz-n.enable = true;
@@ -24,7 +23,6 @@
     '';
   };
 
-  # lz-n lazy loading is experimental in nixvim; drop lazyLoad if either misbehaves.
   plugins.trouble = {
     enable = true;
     lazyLoad.settings.cmd = "Trouble";

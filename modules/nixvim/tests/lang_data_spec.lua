@@ -22,7 +22,6 @@ local function ft_formatters(ft, want)
 	assert(got == table.concat(want, ","), ft .. " formatters: " .. got)
 end
 
--- JSON, YAML, TOML (spec: Languages, data row).
 on_path({ "vscode-json-language-server", "yaml-language-server", "taplo", "prettierd" })
 servers({ "jsonls", "yamlls", "taplo" })
 

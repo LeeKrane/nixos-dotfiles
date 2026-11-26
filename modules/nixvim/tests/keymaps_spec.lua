@@ -1,4 +1,3 @@
--- LazyVim-compatible keymaps (spec: Keymaps).
 local function has(lhs, mode)
 	return vim.fn.maparg(lhs, mode) ~= ""
 end
@@ -22,8 +21,6 @@ for _, lhs in ipairs(normal) do
 end
 for _, lhs in ipairs({ "<C-h>", "<C-j>", "<C-k>", "<C-l>" }) do
 	assert(has(lhs, "t"), "missing terminal map " .. lhs)
-	-- expr maps let the key pass through raw inside floating terminals
-	-- (e.g. lazygit), matching LazyVim's behavior there.
 	assert(vim.fn.maparg(lhs, "t", false, true).expr == 1, "terminal map " .. lhs .. " must be expr")
 end
 assert(not has("<C-h>", "i"), "window nav must not map insert mode")
@@ -31,13 +28,11 @@ assert(has("<leader>sw", "x") and has("<leader>cf", "x"), "visual variants")
 assert(has("<", "v") and has(">", "v"), "indent keeps selection")
 assert(has("<C-s>", "i"), "save in insert")
 
--- j/k move by display line over wrapped lines (LazyVim default; user sets wrap=true)
 assert(has("j", "n"), "missing normal map j")
 assert(has("k", "x"), "missing visual map k")
 
 assert(type(_G.nixvim_root) == "function" and type(nixvim_root()) == "string", "nixvim_root")
 
--- format toggles flip the flags conform reads
 vim.fn.maparg("<leader>uF", "n", false, true).callback()
 assert(vim.g.disable_autoformat == true, "<leader>uF disables globally")
 vim.fn.maparg("<leader>uF", "n", false, true).callback()
@@ -54,6 +49,5 @@ vim.api.nvim_exec_autocmds("LspAttach", { group = "nixvim_lsp_keymaps", buffer =
 for _, lhs in ipairs({ "gd", "gr", "gI", "gy", "gD", "K", "gK", "<leader>ca", "<leader>cr" }) do
 	assert(vim.fn.maparg(lhs, "n", false, true).buffer == 1, "buffer-local LSP map " .. lhs)
 end
--- nvim 0.12's global grr/gra/grn/gri/grt make plain `gr` wait on timeoutlen
--- unless it opts out.
+-- gr must be nowait: nvim 0.12's global grr/gra/grn/gri/grt would make it wait on timeoutlen.
 assert(vim.fn.maparg("gr", "n", false, true).nowait == 1, "gr must be nowait")

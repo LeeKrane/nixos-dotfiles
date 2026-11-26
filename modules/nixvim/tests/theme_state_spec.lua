@@ -1,4 +1,3 @@
--- Runtime behaviour: fallback, reload, keep-last-good, warnings, manual scheme.
 local T = require("dynamic-theme")
 
 local function fixture(name)
@@ -63,22 +62,15 @@ write(fixture("material_colors_dark.scss"))
 assert(T.reload(true) == true)
 assert(vim.g.colors_name == "habamax", "manual scheme kept: " .. tostring(vim.g.colors_name))
 
--- 7. latch reset: a successful reload (case 6's trailing reload, above)
--- clears the module's `warned` latch, so a later persistent error in the
--- same session still gets its own warning. Case 4 already tripped the
--- latch once; without the reset this would be silently swallowed.
+-- 7. latch reset: a successful reload clears `warned`, so a later persistent error warns again.
 local before_latch = #notified
 write(fixture("material_colors_truncated.scss"))
 assert(T.reload(true) == false)
 assert(#notified == before_latch + 1, "latch reset: new warning after prior success: " .. vim.inspect(notified))
 
--- 8. stale retry cancelled: reload(false) failure schedules a single
--- retry timer; a second reload(false) before it fires must cancel the
--- stale one rather than leave it to race the state the second call
--- already applied. Fresh module instance so "zero warnings" is literal.
--- Case 6 above left colors_name = "habamax" (manual scheme survives a
--- wallpaper change); reset it here so a successful reload actually
--- re-renders and normal_bg() reflects it.
+-- 8. stale retry cancelled: a second reload(false) must cancel the retry timer the first one scheduled.
+-- Fresh module instance so "zero warnings" is literal. Case 6 left colors_name = "habamax"; reset it
+-- so a successful reload re-renders.
 vim.cmd.colorscheme("dynamic")
 package.loaded["dynamic-theme"] = nil
 local T3 = require("dynamic-theme")
@@ -91,10 +83,7 @@ assert(T3.reload(false) == false, "first reload(false) fails on truncated file")
 vim.wait(100)
 write(fixture("material_colors_dark.scss"))
 assert(T3.reload(false) == true, "second reload(false) succeeds on dark file")
--- Direct check of the mechanism itself: the first call's timer must be
--- gone, not merely harmless (the scenario above can't otherwise tell a
--- cancelled retry from an uncancelled one that just rereads the same
--- now-valid file).
+-- The first call's timer must be gone, not merely harmless.
 assert(T3._retry == nil, "stale retry timer was cancelled, not left pending")
 assert(
 	vim.wait(1200, function()
@@ -105,14 +94,9 @@ assert(
 assert(normal_bg() == "#131214", "bg = term0: " .. normal_bg())
 assert(#notified3 == 0, "no warnings from a cancelled stale retry: " .. vim.inspect(notified3))
 
--- 9. startup retry: an empty file at setup time (mid-write) is caught by
--- the deferred retry once the writer finishes, without a manual reload.
--- Fresh, freshly-*registered* module: `:colorscheme dynamic` (colors/
--- dynamic.lua) resolves via require("dynamic-theme"), i.e. through
--- package.loaded -- calling setup() on the stale top-of-file `T` here
--- would still make that command resolve to case 8's T3, whose state was
--- already the dark palette applied there. The final wait would then pass
--- immediately without the retry ever running, testing nothing.
+-- 9. startup retry: an empty file at setup time is picked up by the deferred retry, without a manual reload.
+-- Fresh module: `:colorscheme dynamic` resolves via package.loaded, so setup() on the stale `T` would hit
+-- case 8's T3 and the final wait would pass without the retry running.
 package.loaded["dynamic-theme"] = nil
 local T4 = require("dynamic-theme")
 vim.g.colors_name = "dynamic"
@@ -128,13 +112,9 @@ assert(
 )
 assert(T4._retry == nil, "startup retry timer cleared itself, nothing left pending for later cases")
 
--- 10. setup() must not warn immediately on a non-missing, non-empty read
--- failure either (e.g. a truncated file mid-write past the $darkmode
--- line): it retries once, silently, like the empty-file case, and only
--- warns if the retry also fails. Case 4 above already tripped the
--- module's module-level `warned` latch, which would mask this assertion
--- (warn_once no-ops once warned), so re-require a fresh module instance
--- via package.loaded rather than reusing `T`.
+-- 10. setup() must not warn at once on a non-missing, non-empty read failure (e.g. truncated mid-write):
+-- it retries once silently and warns only if the retry fails. Re-require a fresh module; case 4 already
+-- tripped the `warned` latch.
 package.loaded["dynamic-theme"] = nil
 local T2 = require("dynamic-theme")
 local notified2 = {}
@@ -153,9 +133,8 @@ assert(
 )
 assert(#notified2 == 0, "retry succeeded silently: " .. vim.inspect(notified2))
 
--- 11. fs_event watch: a wallpaper change is picked up without a manual
--- reload call. M.watch() no-ops headless (nvim_list_uis() is empty), so
--- stub it to a non-empty list to actually arm the watcher for this test.
+-- 11. fs_event watch: a wallpaper change is picked up without a manual reload.
+-- M.watch() no-ops headless, so stub nvim_list_uis to a non-empty list.
 do
 	package.loaded["dynamic-theme"] = nil
 	local T5 = require("dynamic-theme")
@@ -188,10 +167,8 @@ do
 	end
 end
 
--- 12. fs_event watch survives the watched directory being deleted and
--- recreated at the same path (inotify watches an inode, not a path; see
--- M.watch()'s lost-detection logic). Proves the item 1 fix: without it,
--- the watcher would go dead and this case would time out.
+-- 12. fs_event watch survives the directory being deleted and recreated
+-- (inotify watches an inode, see M.watch()).
 do
 	package.loaded["dynamic-theme"] = nil
 	local T6 = require("dynamic-theme")
@@ -207,11 +184,8 @@ do
 	assert(T6._watcher ~= nil, "watch armed with a stubbed UI")
 	local w0 = T6._watcher
 
-	-- Delete and recreate synchronously, before control returns to the
-	-- event loop: by the time the fs_event callback actually runs, the
-	-- directory that's there already has a fresh inode, so the
-	-- lost-detection heuristic fires deterministically regardless of what
-	-- the raw fs_event args happened to report for the delete itself.
+	-- Delete and recreate synchronously: the directory already has a fresh inode when the callback runs,
+	-- so lost-detection fires deterministically.
 	vim.fn.delete(dir, "rf")
 	write(fixture("material_colors_dark.scss"))
 
@@ -222,15 +196,9 @@ do
 		"fs_event re-armed after the directory was deleted and recreated"
 	)
 
-	-- The assertion above is not discriminating on its own: the pre-fix
-	-- watcher (dead, never re-armed) also still had its *old* fs_event
-	-- handle receiving the IN_DELETE for material_colors.scss inside the
-	-- doomed directory, which was enough to trigger one last reload(false)
-	-- that reads the (by-then-already-recreated) file by path -- so the bg
-	-- goes dark either way, even though the watch itself is dead from then
-	-- on. Prove the watch, not just this one read, actually recovered: a
-	-- fresh handle replaced the old one, the old one is closed, and a
-	-- second write after the recreation is still picked up.
+	-- The assertion above does not discriminate alone: a dead watcher's old handle still sees IN_DELETE and
+	-- triggers one reload. Prove the watch recovered: a fresh handle replaced the old one, the old one is
+	-- closed, and a second write after the recreation is still picked up.
 	assert(
 		vim.wait(1000, function()
 			return T6._watcher ~= nil and T6._watcher ~= w0
@@ -256,10 +224,7 @@ do
 	end
 end
 
--- 13. reload(false) on a wholly missing file must not schedule a retry:
--- nothing changes until the file is created, which the fs_event watcher
--- (or poll_for_dir) already covers. Retrying every 500ms for a file that
--- isn't there at all is pointless busywork.
+-- 13. reload(false) on a missing file must not schedule a retry: the watcher or poll_for_dir covers creation.
 do
 	package.loaded["dynamic-theme"] = nil
 	local T7 = require("dynamic-theme")
@@ -271,17 +236,13 @@ do
 	assert(T7._retry == nil, "still no retry after waiting")
 end
 
--- 14. setup() symmetry with reload(): on failure, the fallback colorscheme
--- is only applied when nothing has already claimed colors_name -- a manual
--- :colorscheme before setup() runs must survive setup() the same way it
--- survives reload().
+-- 14. setup() mirrors reload(): on failure the fallback scheme applies only when nothing claimed
+-- colors_name, so a manual :colorscheme survives.
 do
 	package.loaded["dynamic-theme"] = nil
 	local T8 = require("dynamic-theme")
 	vim.cmd.colorscheme("habamax")
-	-- Missing (not just invalid), so this exercises only the colors_name
-	-- check, without also incidentally leaving a retry timer armed for
-	-- later cases to trip over (see case 13: a missing file schedules none).
+	-- Missing, not invalid: exercises only the colors_name check, with no retry timer left armed (see case 13).
 	vim.fn.delete(dir, "rf")
 	T8.setup()
 	assert(vim.g.colors_name == "habamax", "manual scheme survives setup() failure: " .. tostring(vim.g.colors_name))

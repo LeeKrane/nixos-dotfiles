@@ -22,14 +22,12 @@ local function ft_formatters(ft, want)
 	assert(got == table.concat(want, ","), ft .. " formatters: " .. got)
 end
 
--- Markdown (spec: Languages, markdown row).
 on_path({ "marksman", "prettierd" })
 servers({ "marksman" })
 ft_formatters("markdown", { "prettierd" })
 assert(pcall(require, "render-markdown"), "render-markdown loads")
 assert(vim.fn.exists(":MarkdownPreviewToggle") == 2, ":MarkdownPreviewToggle command")
 formats("md", "#  Title", "# Title")
--- <leader>cp is buffer-local to markdown buffers
 assert(vim.fn.maparg("<leader>cp", "n", false, true).buffer == 1, "<leader>cp buffer-local in markdown")
 vim.cmd.enew()
 vim.bo.filetype = "lua"

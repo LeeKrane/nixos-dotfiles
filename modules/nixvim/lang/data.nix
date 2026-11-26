@@ -1,7 +1,5 @@
-# JSON, YAML and TOML.
 { pkgs, ... }:
 {
-  # Schemas set explicitly: nixvim's plugins.schemastore wires only legacy plugins.lsp servers.
   extraPlugins = [ pkgs.vimPlugins.SchemaStore-nvim ];
 
   # nixpkgs has no jsonc treesitter grammar; use the json parser for jsonc buffers.

@@ -22,18 +22,14 @@ local function ft_formatters(ft, want)
 	assert(got == table.concat(want, ","), ft .. " formatters: " .. got)
 end
 
--- Java via nvim-jdtls (spec: Languages, java row). Formatting is LSP formatting.
 on_path({ "jdtls" })
 assert(pcall(require, "jdtls"), "nvim-jdtls loads")
 ft_formatters("java", {})
 
--- the module starts jdtls from a java FileType hook
 local hooks = vim.api.nvim_get_autocmds({ event = "FileType", pattern = "java" })
 assert(#hooks > 0, "java FileType hook for jdtls")
 
--- the hook starts jdtls for the event's buffer, with one workspace per project
--- root (not per basename) and blink's capabilities. Stub start_or_attach so the
--- sandbox never launches a JVM.
+-- Stub start_or_attach so the sandbox never launches a JVM.
 local jdtls = require("jdtls")
 local real = jdtls.start_or_attach
 local seen = {}

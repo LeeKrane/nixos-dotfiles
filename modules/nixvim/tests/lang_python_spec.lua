@@ -22,7 +22,6 @@ local function ft_formatters(ft, want)
 	assert(got == table.concat(want, ","), ft .. " formatters: " .. got)
 end
 
--- Python (spec: Languages, python row).
 on_path({ "basedpyright-langserver", "ruff" })
 servers({ "basedpyright", "ruff" })
 local bp = vim.lsp.config.basedpyright.settings or {}
@@ -36,7 +35,6 @@ ft_formatters("python", { "ruff_organize_imports", "ruff_format" })
 formats("py", "x=1", "x = 1")
 
 assert(vim.fn.exists(":VenvSelect") == 2, ":VenvSelect command")
--- <leader>cv is buffer-local to python buffers (formats() above left a .py buffer current)
 assert(vim.bo.filetype == "python", "python buffer current")
 assert(vim.fn.maparg("<leader>cv", "n", false, true).buffer == 1, "<leader>cv buffer-local in python")
 vim.cmd.enew()

@@ -14,7 +14,6 @@ local function ft_formatters(ft, want)
 	assert(got == table.concat(want, ","), ft .. " formatters: " .. got)
 end
 
--- Scala (spec: Languages, scala row).
 on_path({ "metals", "scalafmt" })
 servers({ "metals" })
 ft_formatters("scala", { "scalafmt" })

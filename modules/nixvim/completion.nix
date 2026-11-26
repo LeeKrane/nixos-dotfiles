@@ -1,13 +1,10 @@
-# blink.cmp completion with LuaSnip (custom library in ./snippets + friendly-snippets).
 {
   plugins.friendly-snippets.enable = true;
 
   plugins.luasnip = {
     enable = true;
     settings.enable_autosnippets = true;
-    # plugins.friendly-snippets.enable already injects fromVscode = [{}] into
-    # this module; setting it again here made lazy_load run twice and
-    # doubled every friendly-snippets entry.
+    # friendly-snippets already injects fromVscode = [{}]; setting it again doubles entries.
     fromLua = [
       {
         paths = ./snippets;
@@ -21,7 +18,6 @@
   plugins.blink-cmp = {
     enable = true;
     settings = {
-      # Upstream option, passed through nixvim's freeform settings. Default is vim.snippet.
       snippets.preset = "luasnip";
       completion = {
         list.selection = {
@@ -36,7 +32,6 @@
         "snippets"
         "buffer"
       ];
-      # Ports the intent of the old (dead) nvim-cmp.lua mappings.
       keymap = {
         preset = "none";
         # cmp.accept() (blink.cmp 1.10.2, lua/blink/cmp/init.lua) already
@@ -79,14 +74,7 @@
           }
           "fallback"
         ];
-        # <C-k> is vim's built-in digraph key. Only take it over when there's
-        # something to act on: accept a visible selection, or open the menu
-        # after a keyword character; otherwise fall back to digraph entry
-        # (e.g. right after whitespace or at the start of a line). In Select
-        # mode (e.g. inside a LuaSnip placeholder, after jumping into a
-        # choice/insert node), <C-k> is left alone entirely -- it must not
-        # be swallowed by menu-accept/show, even if a menu happens to be
-        # visible.
+        # <C-k> is the digraph key: take it over only when there is something to act on.
         "<C-k>" = [
           {
             __raw = ''
@@ -98,9 +86,7 @@
                   return cmp.select_and_accept()
                 end
                 local col = vim.fn.col(".") - 1
-                -- \k (keyword chars, 'iskeyword') rather than Lua's %w:
-                -- covers "_" and multibyte identifier characters, not just
-                -- ASCII letters/digits.
+                -- \k covers "_" and multibyte characters, unlike %w.
                 if col > 0 and vim.regex([[\k$]]):match_str(vim.fn.getline("."):sub(1, col)) then
                   return cmp.show()
                 end

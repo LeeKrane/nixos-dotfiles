@@ -49,3 +49,24 @@ For each: keep, trim, or delete. This file is deleted before `doc-cleanup` merge
 - `desktop/recording.nix:165-167` Power plug events arrive as `power_supply` change uevents; 30 s read timeout. Kernel.
 - `desktop/recording.nix:226-229` gsr-ui rewrites config_ui when settings page closes. Upstream source.
 - `desktop/illogical-impulse.nix:31-32` Hardcoded `$HOME/.config` must match soymou module's `targetPath` (also a keep-in-sync rule). External flake input.
+
+## modules/nixvim
+
+- `completion.nix:42` cmp.accept() (blink.cmp 1.10.2) returns nil when nothing selected. blink.cmp ships bytecode only.
+- `lang/data.nix:7` nixpkgs has no jsonc treesitter grammar; json parser for jsonc. nixpkgs grammar set.
+- `lang/default.nix:34` Gating here, not conform condition, which would block manual formatting. conform behaviour.
+- `lang/default.nix:71` Timed-out format still saves unformatted, with notification. conform behaviour.
+- `lang/go.nix:25` goimports wrapper references nixpkgs go, so go is in editor closure. Package internals.
+- `lang/python.nix:44` venv-selector v2 API (nixvim example shows v1 keys). nixvim example.
+- `lang/rust.nix:9` rustaceanvim 9.2.2 busted suite fails under neovim 0.12.6. Not reproducible here.
+- `lang/rust.nix:25` completion.crates feeds LSP completion (crates.nvim common.lua). Bytecode only.
+- `options.nix:27` No system clipboard over SSH (OSC 52 reads block). Terminal behaviour.
+- `options.nix:55` Theme sets GUI colours only; force on where truecolor detection fails. Terminal behaviour.
+- `tools.nix:35` UI tests time out under qemu (aarch64 via binfmt). Build timing.
+- `lua/dynamic-theme.lua:4` colors.json ignored: written ~330 ms earlier by other generator, disagrees with scss. External generator timing.
+- `tests/keymaps_spec.lua:48` Other plugins' global handlers (nvim-jdtls) would fail on fake id. Plugin internals.
+- `tests/completion_spec.lua:63` blink.cmp 1.10 normalizes boolean|function fields to functions. Bytecode only.
+- `tests/lang_go_spec.lua:39` gopls root_dir shells out to go env synchronously. lspconfig source not local.
+- `tests/lang_rust_spec.lua:42` crates.nvim 0.7.x keeps config in crates.state.cfg. Bytecode only.
+- `tests/options_spec.lua:59` vim.v.progpath is unwrapped binary (missing lz.n); use nvim on PATH. Runtime.
+- `lang/default.nix:30` (lead-in restored for the :34 note above).

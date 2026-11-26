@@ -1,4 +1,3 @@
-# Scala: metals for LSP (it drives sbt through BSP), scalafmt for formatting.
 { pkgs, ... }:
 {
   lsp.servers.metals.enable = true;

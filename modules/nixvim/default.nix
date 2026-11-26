@@ -1,4 +1,3 @@
-# Standalone NixVim config, built as packages.x86_64-linux.nvim in flake.nix.
 {
   imports = [
     ./options.nix
@@ -16,7 +15,7 @@
   viAlias = true;
   vimAlias = true;
 
-  # No plugin here uses Ruby; the provider only added a Ruby env to the PATH.
+  # No plugin here uses Ruby.
   withRuby = false;
 
   performance.byteCompileLua = {

@@ -1,10 +1,8 @@
-# Python: basedpyright for types, ruff for lint and format.
 { pkgs, ... }:
 {
   lsp.servers = {
     basedpyright = {
       enable = true;
-      # LazyVim's defaults: "standard" checking; ruff organizes imports.
       config.settings.basedpyright = {
         analysis.typeCheckingMode = "standard";
         disableOrganizeImports = true;
@@ -13,7 +11,7 @@
     ruff.enable = true;
   };
 
-  # ruff's hover is minimal; leave hover to basedpyright (LazyVim does the same).
+  # ruff's hover is minimal; basedpyright handles hover.
   autoGroups.nixvim_ruff_hover.clear = true;
   autoGroups.nixvim_python_keymaps.clear = true;
   autoCmd = [

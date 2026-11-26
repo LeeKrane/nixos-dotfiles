@@ -1,6 +1,3 @@
--- Wallpaper-driven colorscheme. Reads illogical-impulse's material_colors.scss
--- (written last by switchwall.sh, holds M3 roles, term0-15 and $darkmode),
--- builds a mini.base16 palette and exposes it as `:colorscheme dynamic`.
 -- colors.json is deliberately ignored: it is written ~330 ms earlier by a
 -- different generator and disagrees with the scss.
 local M = {}
@@ -19,7 +16,6 @@ for i = 0, 15 do
 	REQUIRED[#REQUIRED + 1] = "term" .. i
 end
 
--- Canonical OKLCH hues per base16 accent slot.
 M.HUES = {
 	base08 = 25,
 	base09 = 55,
@@ -69,7 +65,6 @@ function M.parse(text)
 	return { dark = dark, colors = colors }
 end
 
--- sRGB helpers for luminance/contrast (WCAG has no equivalent in mini.colors).
 local function hex_to_rgb(hex)
 	return tonumber(hex:sub(2, 3), 16) / 255, tonumber(hex:sub(4, 5), 16) / 255, tonumber(hex:sub(6, 7), 16) / 255
 end
@@ -78,20 +73,13 @@ local function to_linear(c)
 	return c <= 0.04045 and c / 12.92 or ((c + 0.055) / 1.055) ^ 2.4
 end
 
--- mini.colors' oklab/oklch use l on 0-100 and a/b/c on a roughly-matching
--- 100x scale (see :h MiniColors-color-spaces: "Adjust accordingly by
--- dividing/multiplying output by 100"); hex_to_oklch/oklch_to_hex keep their
--- previous public contract of l in [0, 1] and c around 0.12, so convert at
--- the boundary. adjust_lightness = false keeps the raw (non-"Intermission")
--- Oklab math the previous hand-rolled matrices used, so existing thresholds
--- (contrast, oklab distance, hue gap) keep meaning unchanged.
+-- mini.colors uses l and a/b/c on a 0-100 scale; convert so callers see l in [0, 1] and c around 0.12.
+-- adjust_lightness = false keeps the raw Oklab math.
 function M.hex_to_oklch(hex)
 	local ok = require("mini.colors").convert(hex, "oklch", { adjust_lightness = false })
 	return (ok.l or 0) / 100, (ok.c or 0) / 100, ok.h or 0
 end
 
--- Reduces chroma until the colour fits sRGB, keeping lightness and hue
--- (mini.colors' default gamut_clip = "chroma" does this for us).
 function M.oklch_to_hex(L, C, h)
 	return require("mini.colors").convert(
 		{ l = L * 100, c = C * 100, h = h },
@@ -105,7 +93,6 @@ local function luminance(hex)
 	return 0.2126 * to_linear(r) + 0.7152 * to_linear(g) + 0.0722 * to_linear(b)
 end
 
--- WCAG contrast ratio.
 function M.contrast(a, b)
 	local la, lb = luminance(a), luminance(b)
 	if la < lb then
@@ -127,8 +114,7 @@ local function hue_diff(from, to)
 	return ((to - from + 540) % 360) - 180
 end
 
--- One rotation for the whole hue wheel, so accent spacing never shrinks:
--- the canonical hue nearest the wallpaper primary moves onto it, capped at 15°.
+-- One rotation for the whole hue wheel keeps accent spacing; capped at 15°.
 function M.rotation(primary_hex)
 	local _, c, ph = M.hex_to_oklch(primary_hex)
 	if c < 0.03 then
@@ -191,7 +177,7 @@ function M.build_palette(parsed)
 	return p, term
 end
 
--- Runtime state -------------------------------------------------------------
+-- Runtime state
 
 M.state = nil
 local warned = false
@@ -211,7 +197,6 @@ function M.read()
 	return { dark = parsed.dark, palette = palette, term = term }
 end
 
--- Missing or empty files are normal (no illogical-impulse, or mid-write): silent.
 local function warn_once(err)
 	if warned or err == "missing" or err == "empty" then
 		return
@@ -220,7 +205,6 @@ local function warn_once(err)
 	vim.notify("dynamic-theme: " .. err .. " in " .. M.scss_path(), vim.log.levels.WARN)
 end
 
--- Called by colors/dynamic.lua.
 function M.apply()
 	local s = M.state or { dark = true, palette = vim.g.dynamic_theme_fallback }
 	vim.cmd("highlight clear")
@@ -239,7 +223,6 @@ function M.apply()
 	vim.g.colors_name = "dynamic"
 end
 
--- Cancels the single pending retry timer, if any.
 local function cancel_retry()
 	if M._retry then
 		if not M._retry:is_closing() then
@@ -250,9 +233,6 @@ local function cancel_retry()
 	end
 end
 
--- Schedules exactly one retry of reload(true) 500ms out. Only one retry is
--- ever in flight: cancel_retry() (called from reload(false)) clears a stale
--- one before this schedules a fresh one.
 local function schedule_retry()
 	local timer = vim.uv.new_timer()
 	if not timer then
@@ -263,12 +243,7 @@ local function schedule_retry()
 		500,
 		0,
 		vim.schedule_wrap(function()
-			-- The raw libuv timer already fired by the time this
-			-- vim.schedule_wrap callback actually runs on the main loop;
-			-- cancel_retry() may have stopped+closed it and cleared
-			-- M._retry (or even armed a *new* retry) in that window. A
-			-- stale callback must not still call reload(true) once it's
-			-- been superseded.
+			-- A stale callback (timer superseded by cancel_retry) must not reload.
 			if M._retry ~= timer then
 				return
 			end
@@ -282,20 +257,12 @@ local function schedule_retry()
 	)
 end
 
--- Keeps the last good palette on failure; a manual :colorscheme wins.
--- is_retry = false means "a new file event/call": cancel any stale pending
--- retry before doing our own work, and schedule a fresh one on failure.
--- is_retry = true is the retry itself (or a caller forcing an immediate,
--- non-retrying attempt): failure goes straight to warn_once.
 function M.reload(is_retry)
 	if not is_retry then
 		cancel_retry()
 	end
 	local s, err = M.read()
 	if s then
-		-- Reset the warning latch on every successful read, so a later
-		-- persistent error in the same session still gets its own warning
-		-- (still at most one warning per failure streak).
 		warned = false
 		M.state = s
 		local name = vim.g.colors_name
@@ -305,12 +272,7 @@ function M.reload(is_retry)
 		return true
 	end
 	if not is_retry then
-		-- "missing" means the file doesn't exist at all (no
-		-- illogical-impulse, or its generator directory not written yet):
-		-- nothing changes until it's created, which the fs_event watcher
-		-- (or poll_for_dir, if the directory itself is missing) already
-		-- covers. Retrying every 500ms for a file that isn't there is
-		-- pointless busywork.
+		-- "missing": nothing changes until the file appears, which the watcher covers.
 		if err ~= "missing" then
 			schedule_retry()
 		end
@@ -320,7 +282,6 @@ function M.reload(is_retry)
 	return false
 end
 
--- Polls every 10s for `dir` to (re)appear, then re-arms watch() and reloads.
 local function poll_for_dir(dir)
 	local poll = vim.uv.new_timer()
 	if not poll then
@@ -353,12 +314,7 @@ local function poll_for_dir(dir)
 	})
 end
 
--- Watches the directory once. Files are rewritten in place, so the fs_event
--- itself is never re-armed for a normal write; if the directory is removed
--- and recreated out from under the watch (e.g. illogical-impulse's
--- generator directory gets recreated), the watch goes stale -- inotify
--- watches an inode, not a path, so a fresh directory at the same path needs
--- a fresh watch. Detect that and re-arm.
+-- inotify watches an inode, so a recreated directory needs a fresh watch; detect and re-arm.
 function M.watch()
 	if M._watcher or #vim.api.nvim_list_uis() == 0 then
 		return
@@ -366,8 +322,6 @@ function M.watch()
 	local dir = vim.fs.dirname(M.scss_path())
 	local dir_stat = vim.uv.fs_stat(dir)
 	if not dir_stat then
-		-- Directory doesn't exist yet (illogical-impulse not started): poll
-		-- for it instead of never watching at all.
 		poll_for_dir(dir)
 		return
 	end
@@ -387,9 +341,7 @@ function M.watch()
 		end
 	end
 	local ok = ev:start(dir, {}, function(err, fname)
-		-- vim.uv.* is fast-context safe; vim.api/vim.fn/vim.cmd (inside
-		-- poll_for_dir/M.watch/M.reload, via nvim_create_autocmd) are not,
-		-- hence schedule_wrap below.
+		-- vim.uv.* is fast-context safe; vim.api/vim.fn/vim.cmd are not, hence schedule_wrap.
 		local now_stat = vim.uv.fs_stat(dir)
 		local lost = err ~= nil or now_stat == nil or now_stat.ino ~= dir_ino or fname == vim.fs.basename(dir)
 		if lost then
@@ -397,10 +349,6 @@ function M.watch()
 			M._watcher = nil
 			vim.schedule_wrap(function()
 				if vim.uv.fs_stat(dir) then
-					-- The directory (or a fresh one at the same path)
-					-- exists right now: re-arm immediately and reload,
-					-- rather than falling through to the 10s poll and
-					-- waiting out its first interval for nothing.
 					M.watch()
 					M.reload(false)
 				else
@@ -435,13 +383,7 @@ end
 
 function M.setup()
 	M.state = nil
-	-- reload(false) applies on success and schedules the silent single
-	-- retry on failure ("missing" stays silent, see warn_once); on failure
-	-- we still need to install the "dynamic" scheme once, using the
-	-- fallback palette, since M.state is nil -- but only when nothing else
-	-- has claimed colors_name already, matching reload()'s own manual-scheme
-	-- check (a manual :colorscheme before setup() runs, e.g. from init.lua
-	-- ordering, must not be clobbered by the fallback either).
+	-- On failure, install "dynamic" with the fallback palette unless a manual scheme already claimed colors_name.
 	if not M.reload(false) then
 		local name = vim.g.colors_name
 		if name == nil or name == "dynamic" then

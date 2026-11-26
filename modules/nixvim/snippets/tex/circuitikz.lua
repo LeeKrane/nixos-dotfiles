@@ -19,8 +19,6 @@ local math = make_condition(util.in_mathzone)
 local circuitikz = make_condition(function()
 	return env("circuitikz")
 end)
--- TODO: move make_condition kind of syntax to all snippet files
--- TODO: show_condition (all snippets with conditions)
 
 return {
 	s(

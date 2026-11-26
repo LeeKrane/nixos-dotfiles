@@ -1,4 +1,3 @@
--- Every kept plugin loads with the configured options (spec: Plugins).
 local function loads(mod)
 	local ok, err = pcall(require, mod)
 	assert(ok, "require " .. mod .. ": " .. tostring(err))
@@ -13,10 +12,8 @@ for _, name in ipairs({ "notifier", "lazygit", "bigfile", "quickfile", "words", 
 	assert(sc[name] and sc[name].enabled == true, "snacks." .. name .. " enabled")
 end
 assert(not (sc.scroll and sc.scroll.enabled), "snacks.scroll disabled")
--- oil owns directory buffers (spec); snacks explorer stays the <leader>e sidebar only
 assert(sc.explorer.replace_netrw == false, "snacks explorer must not replace netrw")
--- The dashboard opens on UIEnter, which headless runs never fire; open it by hand.
--- Guards against sections that need lazy.nvim (the default "startup" section).
+-- UIEnter never fires headless, so open the dashboard by hand (guards against sections needing lazy.nvim).
 local dash_ok, dash_err = pcall(Snacks.dashboard.open, { buf = vim.api.nvim_create_buf(false, true) })
 assert(dash_ok, "dashboard opens: " .. tostring(dash_err))
 assert(vim.fn.executable("lazygit") == 1, "lazygit on PATH")
