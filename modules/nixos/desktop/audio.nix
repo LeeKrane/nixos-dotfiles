@@ -1,4 +1,3 @@
-# PipeWire audio stack, replaces PulseAudio with a compatibility shim.
 { ... }:
 {
   security.rtkit.enable = true;

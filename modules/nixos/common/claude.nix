@@ -49,7 +49,6 @@ in
         # intercept hosts), so reading the file before that could pin a CA about to be replaced.
         # -m 10: minting a fresh CA and leaf on a slow host (Pi) can take seconds.
         ${curl} -sk -o /dev/null -m 10 --noproxy "" --proxy http://127.0.0.1:3456 https://www.example.org/
-        # Newest complete candidate wins, so a stale copy in the other location never does.
         set -l ca
         for c in $cas
             if ${grep} -qs -e '-----END CERTIFICATE-----' $c
@@ -81,7 +80,6 @@ in
             set runtime (set -q XDG_CACHE_HOME; and test -n "$XDG_CACHE_HOME"; and echo $XDG_CACHE_HOME; or echo $HOME/.cache)
             command mkdir -p $runtime
         end
-        # Not the bili-era claude-ca.pem, so a bundle left by that route is never taken as current.
         set -l bundle $runtime/claude-teamclaude-ca.pem
         set -l certs $ca
         if test "$NODE_EXTRA_CA_CERTS" = $bundle
@@ -94,8 +92,7 @@ in
                 echo "claude: $bundle lacks teamclaude's current CA, using the CA alone" >&2
             end
         else if test -n "$XDG_RUNTIME_DIR"; and test "$NODE_EXTRA_CA_CERTS" = $XDG_RUNTIME_DIR/claude-ca.pem; or string match -q -- '*/billion-context/*' "$NODE_EXTRA_CA_CERTS"
-            # The retired billion-context route's bundle or bare root CA: never merged, since it
-            # holds that MITM's root; the certs it was built from are unknown, so the CA alone is used.
+            # That MITM's root must not be merged; the CA alone is used.
             echo "claude: ignoring the old billion-context bundle $NODE_EXTRA_CA_CERTS, using teamclaude's CA alone" >&2
         else if test -r "$NODE_EXTRA_CA_CERTS"; and test "$NODE_EXTRA_CA_CERTS" != $ca
             # Write a unique temp file, then rename: a running session never reads a half-written
@@ -117,7 +114,7 @@ in
     end
   '';
 
-  # Stock settings. Variables a surrounding `claude` session exports are dropped too, so a
+  # Variables a surrounding `claude` session exports are dropped too, so a
   # claude-plain started inside one does not inherit Code Mode or the teamclaude proxy. A user's
   # own HTTPS_PROXY (any other value) is kept.
   environment.etc."fish/functions/claude-plain.fish".text = ''

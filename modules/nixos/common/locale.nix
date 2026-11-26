@@ -1,9 +1,7 @@
-# Time zone, locale and keyboard layout.
 { config, ... }:
 {
   time.timeZone = "Europe/Vienna";
 
-  # Austrian formats, English UI strings.
   i18n.defaultLocale = "en_US.UTF-8";
   i18n.extraLocaleSettings = {
     LC_ADDRESS = "de_AT.UTF-8";
@@ -17,12 +15,11 @@
     LC_TIME = "de_AT.UTF-8";
   };
 
-  # NixOS derives the TTY keymap from the xkb settings below; kbd ships no at-* console maps.
+  # NixOS derives the TTY keymap from the xkb settings; kbd ships no at-* console maps.
   console.useXkbConfig = true;
   console.font = "eurlatgr";
 
-  # Hyprland reads this even without an X server. Per-host layout/variant:
-  # modules/nixos/common/keyboard.nix.
+  # Hyprland reads this even without an X server.
   services.xserver.xkb = {
     layout = config.krane.keyboard.layout;
     variant = config.krane.keyboard.variant;

@@ -1,12 +1,6 @@
-# Automatic upgrades of every role = "server" host to the latest gated `main` commit: the
-# `deploy` branch that .github/workflows/promote.yml moves after its gate passes. Upstream
-# system.autoUpgrade supplies the timer and the reboot window; the hooks (pkgs/server-upgrade,
-# scripts/server-upgrade-hooks.sh) skip runs that have nothing to do, health check the new
-# system, roll back and queue failure messages for ntfy and GitHub. See
-# docs/superpowers/specs/2026-11-23-server-auto-upgrade-design.md.
-#
-# Secrets (declared only when the host's secrets file has the section, like every sops
-# declaration here): server-upgrade/github-token, ntfy/publish-token.
+# Upgrades every server host to the latest gated `main` commit: the `deploy` branch that
+# .github/workflows/promote.yml moves after its gate passes. Hooks: pkgs/server-upgrade,
+# scripts/server-upgrade-hooks.sh. See docs/superpowers/specs/2026-11-23-server-auto-upgrade-design.md.
 {
   config,
   lib,
@@ -26,7 +20,6 @@ let
   hooks = "${pkgs.server-upgrade}/bin/server-upgrade-hooks";
   stateDirectory = "server-upgrade";
 
-  # A spoke whose wg0 is configured must still reach the hub after an upgrade.
   hubReachable = lib.optional (
     config.krane.wireguard.enable
     && config.krane.wireguard.wg0PrivateKeyFile != null
@@ -34,7 +27,7 @@ let
   ) "${lib.getExe' pkgs.iputils "ping"} -c 3 -W 5 ${wg0.hub.ip}";
   healthChecks = hubReachable ++ cfg.healthChecks;
 
-  # One command per line; each must exit 0. Written as a script so the hooks only see one path.
+  # Written as a script so the hooks only see one path.
   healthScript = pkgs.writeShellScript "server-upgrade-health-checks" ''
     ${lib.concatMapStringsSep "\n" (c: ''
       (${c}) || { echo ${lib.escapeShellArg "health check failed: ${c}"} >&2; exit 1; }
@@ -174,12 +167,10 @@ in
           StateDirectory = stateDirectory;
           ExecStart = "${hooks} boot-health";
           # A hanging HEALTH_CHECK must not block upgrades (condition skips while this is active).
-          # Budget: settle 5m + check 15m + rollback/queue/reboot headroom.
           RuntimeMaxSec = "30min";
         };
       };
 
-      # Delivers queued messages; retried every 5 minutes until both channels took them.
       server-upgrade-notify = lib.recursiveUpdate inert {
         description = "Deliver server upgrade notifications";
         wantedBy = [ "multi-user.target" ];

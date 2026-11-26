@@ -1,5 +1,3 @@
-# Flatpak and the flathub remote only. Nothing is pre-installed: install
-# via `flatpak install flathub <app-id>` on the running system.
 { pkgs, ... }:
 {
   services.flatpak.enable = true;

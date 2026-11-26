@@ -1,5 +1,3 @@
-# krane.backup: one services.restic.backups job with this repo's defaults, off until a host
-# enables it. Secrets are plain paths here; hosts point them at sops secrets.
 { config, lib, ... }:
 let
   inherit (lib) mkOption mkEnableOption types;
@@ -88,8 +86,7 @@ in
         backupCleanupCommand
         ;
       initialize = true;
-      # A prune holds an exclusive repository lock now and then (other backups take shared
-      # ones, which do not block); wait for it instead of failing the run (restic >= 0.16).
+      # A prune holds an exclusive lock; wait for it instead of failing the run (restic >= 0.16).
       extraBackupArgs = [ "--retry-lock ${cfg.retryLock}" ];
     };
   };

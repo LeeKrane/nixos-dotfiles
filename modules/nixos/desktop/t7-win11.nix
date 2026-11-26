@@ -1,10 +1,8 @@
-# Boot menu entry for the portable Windows 11 install on a Samsung T7 USB SSD.
 { pkgs, ... }:
 {
-  # systemd-boot can't chainload from another disk, and
-  # the shell's fsN/HDn handles shift with port and other attached drives, so a dedicated EDK2
-  # shell runs startup.nsh (searched next to shell.efi) and boots whichever filesystem carries
-  # the marker file put on the T7's ESP.
+  # systemd-boot can't chainload from another disk and the shell's fsN handles shift with port
+  # and attached drives, so an EDK2 shell runs startup.nsh and boots the filesystem carrying the
+  # marker file on the T7's ESP.
   boot.loader.systemd-boot = {
     extraFiles = {
       "efi/t7-win11/shell.efi" = "${pkgs.edk2-uefi-shell}/shell.efi";

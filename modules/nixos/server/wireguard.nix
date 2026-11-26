@@ -1,19 +1,12 @@
-# WireGuard on servers, from the peer table in lib/wireguard.nix.
-#   hub (taragarmr): wg0 server for every peer, forwarding between them; wg1 for the Fika/SPT
-#     players, defined but never started at boot (`systemctl start wg-quick-wg1`).
-#   spoke (any other host in the table): wg0 client of the hub, at its LAN address for spokes in
-#     lib/lan.nix, else at wg0.endpoint.
+# Hub (taragarmr): wg0 server for every peer, forwarding between them; wg1 for the Fika/SPT
+# players, never started at boot. Spoke: wg0 client of the hub.
 #
-# Backend: networking.wg-quick for both interfaces, not systemd-networkd netdevs. wg1 must not
-# autostart and only wg-quick has `autostart = false`; networkd netdevs come up whenever their
-# .netdev file exists. One mechanism for both interfaces also matches the desktops' wg0
-# (modules/nixos/desktop/networking.nix), and a wg-quick unit can retry when the hub's
-# hostname does not resolve yet at boot, which a networkd netdev does not. networkd leaves
-# the interfaces alone: its only .network matches en*/eth* (networking.nix).
+# wg-quick for both interfaces, not networkd netdevs: wg1 must not autostart (only wg-quick has
+# `autostart = false`), and a wg-quick unit can retry when the hub's hostname does not resolve
+# at boot.
 #
-# Private keys come from sops (secrets/<host>.yaml, section `wireguard`: wg0-private-key and,
-# on the hub, wg1-private-key), declared only when that section exists. Without it no
-# interface is configured, so the config evaluates before the host's secrets are created.
+# Private keys come from sops, declared only when the host's secrets have a `wireguard` section;
+# without it no interface is configured, so the config evaluates before the secrets exist.
 {
   config,
   lib,
@@ -41,7 +34,7 @@ let
 
   secretPath = name: config.sops.secrets."wireguard/${name}".path;
   iptables = lib.getExe' pkgs.iptables "iptables";
-  # The old host's whole forwarding policy: accept everything in and out of the interface, no NAT.
+  # Accept everything in and out of the interface, no NAT.
   forwardRules = action: iface: ''
     ${iptables} -${action} FORWARD -i ${iface} -j ACCEPT
     ${iptables} -${action} FORWARD -o ${iface} -j ACCEPT
@@ -144,10 +137,8 @@ in
         networking.firewall = {
           allowedUDPPorts = [
             wg0.hub.listenPort
-            # Open while wg1 is down; nothing listens then.
             wg1.hub.listenPort
           ];
-          # Peers may reach every port on the hub, as on the old host.
           trustedInterfaces = [ wg0.interface ];
         };
       })

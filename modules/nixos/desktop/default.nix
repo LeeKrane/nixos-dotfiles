@@ -1,4 +1,3 @@
-# NixOS modules for role "desktop" (Hyprland, audio, gaming, ...).
 { ... }:
 {
   imports = [

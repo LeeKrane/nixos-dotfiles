@@ -1,4 +1,3 @@
-# Core `nix.conf` / nix daemon settings shared by every host.
 { config, inputs, ... }:
 {
   nix = {
@@ -10,10 +9,8 @@
       auto-optimise-store = true;
       trusted-users = [ config.krane.user.name ];
 
-      # cache.nixos.org plus nixos-raspberrypi's cache (Pi kernels, firmware and images, which
-      # the desktops build Pis' images from and the Pis themselves pull). The CUDA cache is
-      # scoped to the CUDA host in modules/nixos/gpu/nvidia-desktop.nix (nix.settings lists
-      # merge across modules).
+      # nixos-raspberrypi cache: Pi kernels, firmware and images. The CUDA cache is in
+      # gpu/nvidia-desktop.nix.
       substituters = [
         "https://cache.nixos.org/"
         "https://nixos-raspberrypi.cachix.org"
@@ -24,7 +21,6 @@
       ];
     };
 
-    # Pins the `nixpkgs` registry entry to this flake's own input.
     registry.nixpkgs.flake = inputs.nixpkgs;
 
     gc = {

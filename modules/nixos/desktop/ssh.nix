@@ -1,7 +1,6 @@
-# SSH between the desktops listed in wg0.desktopSsh (lib/wireguard.nix), over wg0 only.
-# sshd already runs on every host (modules/nixos/common/users.nix) with port 22 closed. Here
-# port 22 opens on the wg0 interface alone, and each authorized key carries a from= option
-# with the other desktop's wg0 address, so a stolen key is useless from anywhere else.
+# SSH between the wg0.desktopSsh desktops over wg0 only: port 22 opens on wg0 alone, and each
+# authorized key carries from= with the other desktop's wg0 address, so a stolen key is useless
+# elsewhere.
 {
   config,
   lib,

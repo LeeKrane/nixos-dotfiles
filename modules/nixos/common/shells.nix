@@ -1,20 +1,14 @@
-# Fish, its aliases and direnv for every host: users.nix sets fish as the login shell. The CLI
-# tools the aliases call (eza, bat, zoxide, fzf, lazygit, btop, nvim) come from
-# modules/home/common/{cli,neovim,git}.nix. Desktop-only shell bits: ../desktop/shells.nix.
 { pkgs, lib, ... }:
 {
-  # /etc/fish, not ~/.config/fish: soymou's dotfiles-copy step wipes that
-  # every switch. This is the only place fish config survives.
+  # /etc/fish, not ~/.config/fish: soymou's dotfiles-copy step wipes that every switch.
   programs.fish.enable = true;
 
   # Valid shell for modules/home/common/zsh-fallback.nix's HM fallback via chsh.
   programs.zsh.enable = true;
 
-  # mkDefault: the desktop's soymou module already inits its own starship prompt, so
-  # ../desktop/shells.nix turns this off there. A second init would double up.
+  # mkDefault: the soymou module already inits starship; ../desktop/shells.nix turns this off.
   programs.starship.enable = lib.mkDefault true;
 
-  # Ported from the old dotfiles' aliases/main.sh. rebos aliases dropped.
   programs.fish.shellAliases = {
     c = "clear";
     ls = "eza -h";
@@ -38,8 +32,7 @@
   # Fish functions, not shellAliases: `$argv` needs an explicit join
   # since fish won't expand `(cmd)` substitution inside double quotes.
   environment.etc."fish/functions/__krane_rf_impl.fish".text = ''
-    # Shared by rf/rfnv, not meant to be called directly. $argv[1] is the
-    # query. $argv[2..] are extra fzf args, such as rfnv's --bind.
+    # $argv[1] is the query, $argv[2..] extra fzf args.
     function __krane_rf_impl --description 'shared rf/rfnv implementation'
         set -l query $argv[1]
         set -l extra_args $argv[2..]
@@ -55,41 +48,32 @@
   '';
 
   environment.etc."fish/functions/rf.fish".text = ''
-    # ripgrep + fzf live grep, reloaded on every keystroke.
     function rf --description 'ripgrep + fzf live grep'
         __krane_rf_impl "$argv"
     end
   '';
 
   environment.etc."fish/functions/rfnv.fish".text = ''
-    # Same as rf, but enter opens the match in nvim.
     function rfnv --description 'rf, open the match in nvim at the matched line'
         __krane_rf_impl "$argv" --bind "enter:become:nvim {1} +{2}"
     end
   '';
 
-  # zoxide/fzf/direnv/pay-respects hook fish only here, not via their HM
-  # `programs.*` modules: those would write to the wiped
-  # ~/.config/fish/config.fish instead. Full store paths, not bare names.
+  # Hooks fish here, not via HM `programs.*`, which write to the wiped ~/.config/fish/config.fish.
   programs.fish.interactiveShellInit = ''
     set -gx EDITOR nvim
     ${pkgs.zoxide}/bin/zoxide init fish | source
     ${pkgs.fzf}/bin/fzf --fish | source
     ${pkgs.pay-respects}/bin/pay-respects fish --alias fuck | source
-    # Also clear the scrollback (\e[3J), which plain `clear` leaves in kitty. The desktops get
-    # the same alias from ii's fish config; servers have no ii.
+    # Also clears the scrollback (\e[3J), which plain `clear` leaves in kitty.
     alias clear "printf '\e[2J\e[3J\e[1;1H'"
   '';
 
-  # NixOS-level `programs.direnv`, not modules/home/common/cli.nix. Hooks fish
-  # via enableFishIntegration.
   programs.direnv = {
     enable = true;
     nix-direnv.enable = true;
-    # Drop the "export +AR +AS ..." dump printed on every directory change.
     settings.global.hide_env_diff = true;
-    # Also drop the "direnv: loading/using flake" chatter. Note: this hides
-    # "direnv: error .envrc is blocked" too; run `direnv allow` if a shell seems stale.
+    # Also hides "direnv: error .envrc is blocked".
     silent = true;
   };
 }

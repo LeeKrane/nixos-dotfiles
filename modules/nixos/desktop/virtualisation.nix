@@ -1,4 +1,3 @@
-# Containers and VMs. VirtualBox is out of scope, libvirt/QEMU only.
 {
   config,
   lib,
@@ -17,7 +16,6 @@
   config = {
     virtualisation.docker = {
       enable = true;
-      # Starts on demand, not at boot.
       enableOnBoot = false;
     };
 
@@ -26,7 +24,6 @@
     programs.virt-manager.enable = true;
     virtualisation.libvirtd = {
       enable = true;
-      # OVMF now ships with QEMU. swtpm is the only submodule still needed.
       qemu.swtpm.enable = true;
     };
     virtualisation.spiceUSBRedirection.enable = true;

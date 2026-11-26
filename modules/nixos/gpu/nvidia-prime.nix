@@ -1,6 +1,3 @@
-# tarmantria, the laptop: Intel iGPU and NVIDIA dGPU, PRIME offload.
-# Imported by hosts/tarmantria/default.nix and by hosts scaffolded with
-# templates/host/profiles/intel-nvidia-prime.nix.in.
 {
   config,
   lib,
@@ -20,15 +17,14 @@
   };
 
   config = {
-    # hardware.nvidia is entirely gated on "nvidia" being in this list.
-    # Without it, offload and finegrained PM below are silently inert.
+    # hardware.nvidia is gated on "nvidia" being in this list; without it offload and finegrained
+    # PM below are inert.
     services.xserver.videoDrivers = [ "nvidia" ];
 
     # No default on this nixpkgs rev, must be set explicitly.
     hardware.nvidia.open = true;
     hardware.nvidia.powerManagement.enable = true;
 
-    # nouveau must never load alongside the nvidia kernel module.
     boot.blacklistedKernelModules = [ "nouveau" ];
 
     hardware.graphics = {
@@ -60,7 +56,5 @@
     environment.sessionVariables = {
       LIBVA_DRIVER_NAME = "iHD";
     };
-
-    # power-profiles-daemon: set once in desktop.nix, common to every host.
   };
 }

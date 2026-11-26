@@ -1,9 +1,6 @@
-# Server network baseline: systemd-networkd + systemd-resolved, DHCP on wired ethernet.
-# Per-host static addressing or extra interfaces (wg0, bridges) are added in the host's module.
 { lib, ... }:
 {
   networking.useNetworkd = true;
-  # The scripted dhcpcd path stays off; networkd owns addressing below.
   networking.useDHCP = lib.mkDefault false;
   networking.firewall.enable = true;
 
@@ -16,7 +13,7 @@
       Name = "en* eth*";
     };
     networkConfig.DHCP = "yes";
-    # Identify by MAC like the old OSes did, so the Fritzbox's pinned leases keep matching.
+    # MAC identifier so the Fritzbox's pinned leases keep matching.
     dhcpV4Config.ClientIdentifier = "mac";
     # DNS from DHCPv4 only (the Fritzbox's 192.168.178.1). Its IPv6 DNS address, learned from
     # router advertisements and DHCPv6, did not answer on taragarmr (2026-11-14), and resolved

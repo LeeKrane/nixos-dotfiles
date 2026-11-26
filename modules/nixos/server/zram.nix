@@ -1,6 +1,4 @@
-# Compressed swap in RAM. Kept on servers: the Pis have little RAM and no swap partition, and
-# zram costs nothing when idle. Half of RAM (the desktop uses 100% plus sysctl tuning); hosts
-# override memoryPercent.
+# The Pis have little RAM and no swap partition.
 { lib, ... }:
 {
   zramSwap = {

@@ -1,8 +1,3 @@
-# Per-host keyboard layout/variant. Read by locale.nix (xkb, and via
-# console.useXkbConfig the TTY/tuigreet keymap) and by display.nix
-# (home-manager, via osConfig) for Hyprland's kb_layout/kb_variant. Defaults
-# match the three original hosts' literal display.nix values. install.sh's
-# new-host flow writes a `krane.keyboard` block into hosts/<name>/default.nix.
 { lib, ... }:
 let
   inherit (lib) mkOption types;
