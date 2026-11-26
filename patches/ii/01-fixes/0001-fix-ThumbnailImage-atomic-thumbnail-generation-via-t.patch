@@ -7,7 +7,7 @@ Subject: [PATCH] fix(ThumbnailImage): atomic thumbnail generation via temp
 Backport of pctrade/end4-pC 05b50d9
 https://github.com/pctrade/end4-pC/commit/05b50d9
 Problem: concurrent magick processes wrote the same cache file, clobbering each other and regenerating thumbnails on every open (up to ~290% CPU).
-Port: clean, except the shell variable $tmp, which the fork wrote as ${tmp} inside the QML template literal so QML evaluated it as JavaScript (ReferenceError, no thumbnails).
+Port: clean, comments trimmed, except the shell variable $tmp, which the fork wrote as ${tmp} inside the QML template literal so QML evaluated it as JavaScript (ReferenceError, no thumbnails).
 Drop when: the pinned modules/common/widgets/ThumbnailImage.qml writes thumbnails to a temp file before moving them into place.
 ---
  .../quickshell/ii/modules/common/widgets/ThumbnailImage.qml | 6 ++++--

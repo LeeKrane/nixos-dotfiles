@@ -6,20 +6,21 @@ Subject: [PATCH] fix(settings): review findings: spin box keeps value
  when the command ends, idle spin box capped at 86400 s
 
 ---
- .../modules/common/widgets/StyledSpinBox.qml  | 38 +++++++------------
+ .../modules/common/widgets/StyledSpinBox.qml  | 39 +++++++------------
  .../ii/modules/settings/HyprlandConfig.qml    |  8 ++--
  .../quickshell/ii/services/KraneSettings.qml  | 10 +++--
- 3 files changed, 23 insertions(+), 33 deletions(-)
+ 3 files changed, 24 insertions(+), 33 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/common/widgets/StyledSpinBox.qml b/dots/.config/quickshell/ii/modules/common/widgets/StyledSpinBox.qml
-index 0ae56fa0..b7db23aa 100644
+index 0ae56fa0..76bd5825 100644
 --- a/dots/.config/quickshell/ii/modules/common/widgets/StyledSpinBox.qml
 +++ b/dots/.config/quickshell/ii/modules/common/widgets/StyledSpinBox.qml
-@@ -21,32 +21,20 @@ SpinBox {
+@@ -21,32 +21,21 @@ SpinBox {
          radius: root.radius
      }
  
 -    contentItem: Item {
++    // TextInput as contentItem: Qt's commit path applies typed values, so no `root.value = ...` breaks a caller's `value:` binding.
 +    contentItem: StyledTextInput {
          implicitHeight: root.baseHeight
 -        implicitWidth: Math.max(labelText.implicitWidth, 40)
@@ -49,7 +50,7 @@ index 0ae56fa0..b7db23aa 100644
 +        implicitWidth: Math.max(contentWidth, 40)
 +        horizontalAlignment: TextInput.AlignHCenter
 +        verticalAlignment: TextInput.AlignVCenter
-+        text: root.value
++        text: root.value // not displayText, which formats 1000 as 1,000
 +        color: Appearance.colors.colOnLayer2
 +        font.family: Appearance.font.family.numbers
 +        font.variableAxes: Appearance.font.variableAxes.numbers

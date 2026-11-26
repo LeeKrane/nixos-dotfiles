@@ -7,11 +7,11 @@ Problem: the swap button swapped only the languages, so the input kept the old s
 Port: new. Swap also moves the output into the input and the input into the output; while a translation is pending the swap waits for it (a second press cancels), and the swap button shows the queued state.
 Drop when: the pinned modules/ii/sidebarLeft/Translator.qml swap exchanges the texts.
 ---
- .../ii/modules/ii/sidebarLeft/Translator.qml  | 47 ++++++++++++++++++-
- 1 file changed, 45 insertions(+), 2 deletions(-)
+ .../ii/modules/ii/sidebarLeft/Translator.qml  | 48 ++++++++++++++++++-
+ 1 file changed, 46 insertions(+), 2 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
-index 348b7b2f..37297dc4 100644
+index 348b7b2f..558c56a1 100644
 --- a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
 @@ -33,6 +33,7 @@ Item {
@@ -78,7 +78,7 @@ index 348b7b2f..37297dc4 100644
              }
          }
      }
-@@ -80,14 +109,27 @@ Item {
+@@ -80,14 +109,28 @@ Item {
              + ` -target '${StringUtils.shellSingleQuoteEscape(root.targetLanguage)}'`
              + ` '${StringUtils.shellSingleQuoteEscape((root.inputField?.text ?? "").trim())}'`]
          property string buffer: ""
@@ -89,10 +89,11 @@ index 348b7b2f..37297dc4 100644
              }
          }
          onExited: (exitCode, exitStatus) => {
++            // Quickshell clears `process` before exited, so translateProc.running is always false here.
 +            if (translateProc.stale) {
 +                translateProc.stale = false;
 +                translateProc.buffer = "";
-+                // The stale kill may be the empty-input branch, not a restart: resolve a pending swap too.
++                // The stale kill may be the empty-input branch: resolve a pending swap once nothing newer is in flight.
 +                if (root.swapPending && !translateTimer.running
 +                    && root.inputField.text.trim().length === 0) root.doSwap();
 +                return;
@@ -106,7 +107,7 @@ index 348b7b2f..37297dc4 100644
          }
      }
  
-@@ -180,6 +222,7 @@ Item {
+@@ -180,6 +223,7 @@ Item {
                  id: swapButton
                  implicitHeight: contentItem.implicitHeight + verticalPadding * 2
                  Layout.preferredWidth: height
@@ -114,7 +115,7 @@ index 348b7b2f..37297dc4 100644
                  colBackground: Appearance.colors.colTertiaryContainer
                  colBackgroundHover: Appearance.colors.colTertiaryContainerHover
                  buttonRadius: Appearance.rounding.full
-@@ -188,7 +231,7 @@ Item {
+@@ -188,7 +232,7 @@ Item {
                      horizontalAlignment: Text.AlignHCenter
                      iconSize: Appearance.font.pixelSize.larger
                      text: "autorenew"

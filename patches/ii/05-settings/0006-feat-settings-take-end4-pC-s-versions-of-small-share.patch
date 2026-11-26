@@ -7,7 +7,7 @@ Subject: [PATCH] feat(settings): take end4-pC's versions of small shared
 Port of pctrade/end4-pC dc2ca2600ee6: modules/common/widgets/ConfigSwitch.qml, modules/common/widgets/ConfigSlider.qml, modules/common/widgets/NoticeBox.qml, modules/common/widgets/ContentSubsection.qml, modules/common/widgets/StyledComboBox.qml, modules/common/widgets/RippleButton.qml, modules/common/widgets/MaterialShapeWrappedMaterialSymbol.qml, modules/common/widgets/MaterialTextArea.qml, modules/common/widgets/MaterialLoadingIndicator.qml, modules/common/widgets/SelectionGroupButton.qml, modules/common/widgets/ToolbarPairedFab.qml
 https://github.com/pctrade/end4-pC/tree/dc2ca2600ee6d7852bf0ac91361db8e510f90a74
 Problem: the ported pages set properties (for example ConfigSlider.showLabel, ConfigSwitch colBackgroundHover) these widgets lack at the pin.
-Port: clean
+Port: clean, comments trimmed
 Drop when: the pinned widgets have the properties the pages set, checked by running forkcheck and the page smoke tests with this commit reverted.
 ---
  .../modules/common/widgets/ConfigSlider.qml   |  3 ++-

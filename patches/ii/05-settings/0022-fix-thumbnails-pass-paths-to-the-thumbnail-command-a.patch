@@ -10,15 +10,18 @@ Problem: ThumbnailImage spliced file paths into a bash -c string, so a path with
 Port: krane-only
 Drop when: the pinned ThumbnailImage.qml passes paths to its command safely.
 ---
- .../quickshell/ii/modules/common/widgets/ThumbnailImage.qml    | 3 ++-
- 1 file changed, 2 insertions(+), 1 deletion(-)
+ .../quickshell/ii/modules/common/widgets/ThumbnailImage.qml   | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/common/widgets/ThumbnailImage.qml b/dots/.config/quickshell/ii/modules/common/widgets/ThumbnailImage.qml
-index d3a72e30..a376c32b 100644
+index d3a72e30..6d81f584 100644
 --- a/dots/.config/quickshell/ii/modules/common/widgets/ThumbnailImage.qml
 +++ b/dots/.config/quickshell/ii/modules/common/widgets/ThumbnailImage.qml
-@@ -45,7 +45,8 @@ StyledImage {
+@@ -43,9 +43,11 @@ StyledImage {
+         command: {
+             const maxSize = Images.thumbnailSizes[root.thumbnailSizeName];
              const thumbPath = FileUtils.trimFileProtocol(root.thumbnailPath);
++            // Paths go in as $1/$2, never into the script text (shell injection).
              return ["bash", "-c",
                  // Temp file + mv: concurrent runs or a mid-generation close cannot leave a half-written thumbnail.
 -                `[ -f '${thumbPath}' ] && exit 0 || { tmp='${thumbPath}.$$.tmp.png'; magick '${root.sourcePath}' -resize ${maxSize}x${maxSize} "$tmp" && mv "$tmp" '${thumbPath}' && exit 1; exit 2; }`

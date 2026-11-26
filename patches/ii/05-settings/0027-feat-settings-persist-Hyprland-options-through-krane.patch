@@ -16,7 +16,7 @@ Drop when: the dotfiles repo drops krane-ii-settings.
  create mode 100644 dots/.config/quickshell/ii/services/KraneSettings.qml
 
 diff --git a/dots/.config/quickshell/ii/modules/common/models/hyprland/HyprlandConfigOption.qml b/dots/.config/quickshell/ii/modules/common/models/hyprland/HyprlandConfigOption.qml
-index 0422aab0..3efcb71f 100644
+index 0422aab0..241e57f4 100644
 --- a/dots/.config/quickshell/ii/modules/common/models/hyprland/HyprlandConfigOption.qml
 +++ b/dots/.config/quickshell/ii/modules/common/models/hyprland/HyprlandConfigOption.qml
 @@ -11,7 +11,15 @@ NestableObject {
@@ -29,7 +29,7 @@ index 0422aab0..3efcb71f 100644
      property var value
 +    readonly property bool locked: KraneSettings.isLocked("hyprland", root.key)
 +    readonly property string lockedReason: KraneSettings.nixReason
-+    // hyprctl reports gaps_in/gaps_out as a "top right bottom left" string.
++    // hyprctl reports gaps_in/gaps_out as a "top right bottom left" string and bools as true/false.
 +    readonly property real number: typeof root.value === "string" ? Number(root.value.split(" ")[0]) : Number(root.value ?? 0)
 +    readonly property bool boolean: root.value === true || Number(root.value) === 1
  

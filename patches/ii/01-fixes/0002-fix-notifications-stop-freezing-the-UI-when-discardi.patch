@@ -6,7 +6,7 @@ Subject: [PATCH] fix(notifications): stop freezing the UI when discarding
 Backport of pctrade/end4-pC 6f1dc5f
 https://github.com/pctrade/end4-pC/commit/6f1dc5f
 Problem: discardNotification() used list.splice(), which emits listChanged per shifted element and re-ran grouping for each, freezing the shell for seconds.
-Port: clean
+Port: clean, comments trimmed
 Drop when: the pinned services/Notifications.qml no longer removes notifications with root.list.splice().
 ---
  .../common/widgets/NotificationGroup.qml      |  8 +++----

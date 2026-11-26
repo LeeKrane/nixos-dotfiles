@@ -7,7 +7,7 @@ Subject: [PATCH] fix(notifications): guard JSON.parse against corrupt
 Backport of pctrade/end4-pC 2cf76f8
 https://github.com/pctrade/end4-pC/commit/2cf76f8
 Problem: a truncated or invalid ~/.cache/notifications/notifications.json made loading throw.
-Port: clean
+Port: clean, comments trimmed
 Drop when: the pinned services/Notifications.qml wraps the notifications-file JSON.parse in try/catch.
 ---
  .../quickshell/ii/services/Notifications.qml  | 49 +++++++++++--------

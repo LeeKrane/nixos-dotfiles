@@ -10,10 +10,10 @@ Subject: [PATCH] fix(settings): spin box sizes from its background; About
  2 files changed, 17 insertions(+), 3 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/common/widgets/StyledSpinBox.qml b/dots/.config/quickshell/ii/modules/common/widgets/StyledSpinBox.qml
-index b7db23aa..99eb864a 100644
+index 76bd5825..f1e1ca5c 100644
 --- a/dots/.config/quickshell/ii/modules/common/widgets/StyledSpinBox.qml
 +++ b/dots/.config/quickshell/ii/modules/common/widgets/StyledSpinBox.qml
-@@ -19,11 +19,11 @@ SpinBox {
+@@ -19,12 +19,12 @@ SpinBox {
      background: Rectangle {
          color: Appearance.colors.colLayer2
          radius: root.radius
@@ -21,12 +21,13 @@ index b7db23aa..99eb864a 100644
 +        implicitHeight: root.baseHeight
      }
  
+     // TextInput as contentItem: Qt's commit path applies typed values, so no `root.value = ...` breaks a caller's `value:` binding.
      contentItem: StyledTextInput {
 -        implicitHeight: root.baseHeight
 -        implicitWidth: Math.max(contentWidth, 40)
          horizontalAlignment: TextInput.AlignHCenter
          verticalAlignment: TextInput.AlignVCenter
-         text: root.value
+         text: root.value // not displayText, which formats 1000 as 1,000
 diff --git a/dots/.config/quickshell/ii/modules/settings/About.qml b/dots/.config/quickshell/ii/modules/settings/About.qml
 index 946714c3..33a196fb 100644
 --- a/dots/.config/quickshell/ii/modules/settings/About.qml

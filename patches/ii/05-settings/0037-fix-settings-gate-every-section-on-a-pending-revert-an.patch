@@ -19,7 +19,7 @@ Drop when: the Hyprland page is dropped.
  2 files changed, 96 insertions(+), 72 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/common/models/hyprland/HyprlandConfigOption.qml b/dots/.config/quickshell/ii/modules/common/models/hyprland/HyprlandConfigOption.qml
-index 3efcb71f..f4188a59 100644
+index 241e57f4..20d656a4 100644
 --- a/dots/.config/quickshell/ii/modules/common/models/hyprland/HyprlandConfigOption.qml
 +++ b/dots/.config/quickshell/ii/modules/common/models/hyprland/HyprlandConfigOption.qml
 @@ -14,6 +14,7 @@ NestableObject {
