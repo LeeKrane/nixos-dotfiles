@@ -8,10 +8,10 @@ Port: new (no fork origin). services/ClaudeAgents.qml polls scripts/claude/agent
 Drop when: the pinned ii ships an equivalent agents tab, or `claude agents --json` is removed.
 ---
  .../quickshell/ii/modules/common/Config.qml   |   3 +
- .../quickshell/ii/scripts/claude/agents.sh    |  46 ++++++
- .../quickshell/ii/services/ClaudeAgents.qml   | 135 ++++++++++++++++
- .../quickshell/ii/services/claude-agents.js   | 145 ++++++++++++++++++
- 4 files changed, 329 insertions(+)
+ .../quickshell/ii/scripts/claude/agents.sh    |  42 ++++++
+ .../quickshell/ii/services/ClaudeAgents.qml   | 126 +++++++++++++++++
+ .../quickshell/ii/services/claude-agents.js   | 133 ++++++++++++++++++
+ 4 files changed, 304 insertions(+)
  create mode 100755 dots/.config/quickshell/ii/scripts/claude/agents.sh
  create mode 100644 dots/.config/quickshell/ii/services/ClaudeAgents.qml
  create mode 100644 dots/.config/quickshell/ii/services/claude-agents.js
@@ -32,17 +32,14 @@ index 30e87439..ac0851f3 100644
                      property string defaultProvider: "yandere"
 diff --git a/dots/.config/quickshell/ii/scripts/claude/agents.sh b/dots/.config/quickshell/ii/scripts/claude/agents.sh
 new file mode 100755
-index 00000000..115e09bd
+index 00000000..317bbf04
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/scripts/claude/agents.sh
-@@ -0,0 +1,46 @@
+@@ -0,0 +1,42 @@
 +#!/usr/bin/env bash
-+# Prints `claude agents --json` as one JSON array, each entry unchanged plus:
 +#   ancestors     interactive sessions: pid chain from the session up to,
 +#                 not including, init; [] for background sessions, whose
 +#                 ancestry leads to the daemon supervisor, not a terminal
-+#   lastActivity  transcript mtime in seconds, or null
-+# Reads no transcript content. Exits 3 when claude is not on PATH.
 +set -euo pipefail
 +
 +command -v claude >/dev/null 2>&1 || { echo "claude not found on PATH" >&2; exit 3; }
@@ -50,8 +47,7 @@ index 00000000..115e09bd
 +raw=$(timeout 10 claude agents --json)
 +jq -e 'type == "array"' >/dev/null <<<"$raw" || { echo "claude agents --json did not print an array" >&2; exit 2; }
 +
-+# --argjson would put $raw on jq's argv, hitting MAX_ARG_STRLEN with many
-+# sessions; a temp file plus --slurpfile keeps it off argv.
++# A temp file with --slurpfile keeps $raw off jq's argv (MAX_ARG_STRLEN).
 +rawfile=$(mktemp)
 +trap 'rm -f "$rawfile"' EXIT
 +printf '%s' "$raw" >"$rawfile"
@@ -84,10 +80,10 @@ index 00000000..115e09bd
 +    jq -c -s --slurpfile raw "$rawfile" '[$raw[0], .] | transpose | map(.[0] + .[1])'
 diff --git a/dots/.config/quickshell/ii/services/ClaudeAgents.qml b/dots/.config/quickshell/ii/services/ClaudeAgents.qml
 new file mode 100644
-index 00000000..b60d46bb
+index 00000000..e2533bf0
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/services/ClaudeAgents.qml
-@@ -0,0 +1,135 @@
+@@ -0,0 +1,126 @@
 +pragma Singleton
 +pragma ComponentBehavior: Bound
 +
@@ -99,12 +95,6 @@ index 00000000..b60d46bb
 +import Quickshell.Hyprland
 +import "claude-agents.js" as AgentsLogic
 +
-+/**
-+ * Claude Code sessions on this machine, read from `claude agents --json`
-+ * through scripts/claude/agents.sh. Polls only while `active` is true, which
-+ * the left sidebar sets while its Agents tab is visible. Read-only: it never
-+ * sends input to, approves, stops or deletes a session.
-+ */
 +Singleton {
 +    id: root
 +
@@ -149,7 +139,6 @@ index 00000000..b60d46bb
 +            root.error = result.message;
 +            root.stopped = true;
 +        } else {
-+            // The script ran, so claude is on PATH; keep the last list visible.
 +            root.available = true;
 +            root.failures += 1;
 +            root.error = result.message;
@@ -175,7 +164,6 @@ index 00000000..b60d46bb
 +    }
 +
 +    // Window titles change with the session spinner; re-match without re-running the script.
-+    // Only while visible: a closed tab does no work, and the first tick on reopen re-matches.
 +    Connections {
 +        target: HyprlandData
 +        function onWindowListChanged() {
@@ -199,8 +187,7 @@ index 00000000..b60d46bb
 +
 +    Process {
 +        id: agentsProc
-+        // stdout closing and the exit can arrive in either order; handle the run once both are in.
-+        // stderr is only used for the error line, so it is read as far as it has arrived.
++        // stdout close and exit arrive in either order; handle the run once both are in.
 +        property int pendingParts: 0
 +        property int exitCode: 0
 +        property real startedAt: 0
@@ -225,20 +212,16 @@ index 00000000..b60d46bb
 +}
 diff --git a/dots/.config/quickshell/ii/services/claude-agents.js b/dots/.config/quickshell/ii/services/claude-agents.js
 new file mode 100644
-index 00000000..67c88a1e
+index 00000000..3aa35a11
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/services/claude-agents.js
-@@ -0,0 +1,145 @@
-+// Pure helpers for services/ClaudeAgents.qml, kept free of QML types so
-+// they can be tested with plain node (see the dotfiles repo's
-+// scripts/ii-agents/test-logic.mjs).
+@@ -0,0 +1,133 @@
 +
 +const BASE_INTERVAL = 3000;
 +const MAX_INTERVAL = 15000;
 +const SLOW_RUN_MS = 1000;
 +const MAX_FAILURES = 3;
-+// agents.sh's own `command -v claude` guard; a bare 127 is now an ordinary
-+// shell "not found" (e.g. from `timeout`) and no longer special-cased.
++// agents.sh exits 3 when claude is not on PATH.
 +const MISSING_EXIT_CODE = 3;
 +
 +// Claude Code sets the terminal title to "<spinner> <session name>":
@@ -255,9 +238,7 @@ index 00000000..67c88a1e
 +    return wins.slice().sort((a, b) => (a.focusHistoryID ?? 1e9) - (b.focusHistoryID ?? 1e9))[0] ?? null;
 +}
 +
-+// Returns the Hyprland client for a session, or null. nameIsUnique is false
-+// when another listed session has the same name: a background session then
-+// never matches by title, so it cannot land in the other session's window.
++// A non-unique name never matches a background session by title, so it can't land in another session's window.
 +function matchWindow(session, windows, nameIsUnique = true) {
 +    const wins = windows ?? [];
 +    if (session?.kind === "interactive") {
@@ -276,7 +257,6 @@ index 00000000..67c88a1e
 +    return titled.length === 1 ? titled[0] : null;
 +}
 +
-+// "waiting" | "busy" | "idle" | "done" | <raw unknown value> | "unknown"
 +function effectiveStatus(session) {
 +    if (session?.status) return session.status;
 +    switch (session?.state) {
@@ -297,16 +277,13 @@ index 00000000..67c88a1e
 +    return s === "waiting" ? 0 : s === "busy" ? 1 : 2;
 +}
 +
-+// Stable, unique-per-row key for ScriptModel identity in Agents.qml.
-+// sessionId is not always present or unique for background sessions (it can
-+// be missing or "-"), so fall back to their attach id, then to kind+pid+index.
++// sessionId can be missing or "-" for background sessions, so fall back to their attach id, then kind+pid+index.
 +function computeRowKey(e, index) {
 +    if (e?.sessionId && e.sessionId !== "-") return e.sessionId;
 +    if (e?.id) return e.id;
 +    return `${e?.kind ?? "?"}:${e?.pid ?? "?"}:${index}`;
 +}
 +
-+// entries: parsed agents.sh output. Returns { sessions, headlessCount }.
 +function annotate(entries, windows) {
 +    let headlessCount = 0;
 +    const sessions = [];
@@ -327,8 +304,6 @@ index 00000000..67c88a1e
 +    return { sessions: sessions, headlessCount: headlessCount };
 +}
 +
-+// Returns { kind: "ok", entries } | { kind: "missing", message }
-+//       | { kind: "error", message, stop }.
 +function classifyResult(exitCode, stdout, stderr, failuresSoFar) {
 +    if (exitCode === MISSING_EXIT_CODE) return { kind: "missing", message: "Claude Code not found" };
 +    let entries = null;

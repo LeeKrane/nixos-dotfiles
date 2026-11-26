@@ -7,27 +7,19 @@ Problem: sessions from several projects are interleaved, so it is hard to see wh
 Port: new (no fork origin). claude-agents.js groups sessions by cwd (group with the most urgent session first) and marks each group's first row; AgentRow draws a ~-relative path header above it.
 Drop when: the pinned ii ships an equivalent agents tab, or `claude agents --json` is removed.
 ---
- .../ii/sidebarLeft/agents/AgentRow.qml        | 133 +++++++++++-------
+ .../ii/sidebarLeft/agents/AgentRow.qml        | 126 +++++++++++-------
  .../quickshell/ii/services/ClaudeAgents.qml   |   2 +-
- .../quickshell/ii/services/claude-agents.js   |  77 ++++++++--
- 3 files changed, 150 insertions(+), 62 deletions(-)
+ .../quickshell/ii/services/claude-agents.js   |  59 ++++++--
+ 3 files changed, 128 insertions(+), 59 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/agents/AgentRow.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/agents/AgentRow.qml
-index d7979362..2b642148 100644
+index b896603f..d4e12e66 100644
 --- a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/agents/AgentRow.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/agents/AgentRow.qml
-@@ -5,72 +5,101 @@ import QtQuick
+@@ -4,69 +4,95 @@ import qs.modules.common.widgets
+ import QtQuick
  import QtQuick.Layouts
  
- /**
-- * One Claude Code session: status dot, name, "<cwd> · bg · <activity>", and
-- * whether a click focuses a window (open_in_new) or opens a terminal (terminal).
-+ * One Claude Code session: a directory header above the first row of its
-+ * group (Agents.qml groups sessions by cwd), then status dot, name,
-+ * "bg · <activity>", and whether a click focuses a window (open_in_new) or
-+ * opens a terminal (terminal). Click/hover stay on the row; the header above
-+ * it is not part of the button.
-  */
 -RippleButton {
 +Item {
      id: root
@@ -171,10 +163,10 @@ index d7979362..2b642148 100644
      }
  }
 diff --git a/dots/.config/quickshell/ii/services/ClaudeAgents.qml b/dots/.config/quickshell/ii/services/ClaudeAgents.qml
-index b60d46bb..bdc89435 100644
+index e2533bf0..0daa8a74 100644
 --- a/dots/.config/quickshell/ii/services/ClaudeAgents.qml
 +++ b/dots/.config/quickshell/ii/services/ClaudeAgents.qml
-@@ -40,7 +40,7 @@ Singleton {
+@@ -34,7 +34,7 @@ Singleton {
      }
  
      function applyWindows() {
@@ -184,34 +176,25 @@ index b60d46bb..bdc89435 100644
          root.headlessCount = result.headlessCount;
      }
 diff --git a/dots/.config/quickshell/ii/services/claude-agents.js b/dots/.config/quickshell/ii/services/claude-agents.js
-index 67c88a1e..935807c3 100644
+index 3aa35a11..df478976 100644
 --- a/dots/.config/quickshell/ii/services/claude-agents.js
 +++ b/dots/.config/quickshell/ii/services/claude-agents.js
-@@ -75,8 +75,55 @@ function computeRowKey(e, index) {
+@@ -66,7 +66,39 @@ function computeRowKey(e, index) {
      return `${e?.kind ?? "?"}:${e?.pid ?? "?"}:${index}`;
  }
  
--// entries: parsed agents.sh output. Returns { sessions, headlessCount }.
 -function annotate(entries, windows) {
-+// Directories.home carries a "file://" prefix; strip it so callers can pass
-+// it through unchanged.
++// Directories.home has a "file://" prefix.
 +function stripFileProtocol(path) {
 +    const s = String(path ?? "");
 +    return s.startsWith("file://") ? s.slice(7) : s;
 +}
 +
-+// Drops a trailing slash so "/x/" and "/x" group and label the same way;
-+// "/" itself is left alone.
 +function dropTrailingSlash(path) {
 +    const p = String(path ?? "");
 +    return p.length > 1 ? p.replace(/\/+$/, "") : p;
 +}
 +
-+// Replaces a leading home-directory path component with "~". Only matches a
-+// whole component ("/home/kranex" is left alone when home is "/home/krane").
-+// An empty or missing home leaves the path unchanged. A trailing slash on
-+// either path is normalized away first, so "/home/krane/src/x/" and
-+// "/home/krane/src/x" both yield "~/src/x".
 +function tildePath(path, home) {
 +    const p = dropTrailingSlash(path);
 +    const h = dropTrailingSlash(stripFileProtocol(home));
@@ -220,15 +203,11 @@ index 67c88a1e..935807c3 100644
 +    return p.startsWith(`${h}/`) ? `~${p.slice(h.length)}` : p;
 +}
 +
-+// The Agents tab groups sessions by this label; "?" for a missing cwd sorts
-+// like any other label.
 +function groupLabel(session, home) {
 +    const cwd = session?.cwd;
 +    return cwd ? tildePath(cwd, home) : "?";
 +}
 +
-+// A group's rank is the best (lowest) rank() among its sessions; ties break
-+// on the most recent activityMs of any member, then alphabetically by label.
 +function compareGroups(a, b) {
 +    const rankDiff = Math.min(...a.sessions.map(rank)) - Math.min(...b.sessions.map(rank));
 +    if (rankDiff !== 0) return rankDiff;
@@ -237,15 +216,11 @@ index 67c88a1e..935807c3 100644
 +    return a.label < b.label ? -1 : a.label > b.label ? 1 : 0;
 +}
 +
-+// entries: parsed agents.sh output. home: the user's home directory (may
-+// carry a "file://" prefix), used to shorten group headers. Returns
-+// { sessions, headlessCount }; each session gets `group` (its header label)
-+// and `groupStart` (true on the first session of its group).
 +function annotate(entries, windows, home) {
      let headlessCount = 0;
      const sessions = [];
      const nameCounts = {};
-@@ -93,7 +140,23 @@ function annotate(entries, windows) {
+@@ -83,7 +115,23 @@ function annotate(entries, windows) {
          sessions.push(s);
      });
      sessions.sort((a, b) => rank(a) - rank(b) || activityMs(b) - activityMs(a));
@@ -269,8 +244,8 @@ index 67c88a1e..935807c3 100644
 +    return { sessions: grouped, headlessCount: headlessCount };
  }
  
- // Returns { kind: "ok", entries } | { kind: "missing", message }
-@@ -119,11 +182,6 @@ function nextInterval(current, elapsedMs) {
+ function classifyResult(exitCode, stdout, stderr, failuresSoFar) {
+@@ -107,11 +155,6 @@ function nextInterval(current, elapsedMs) {
      return BASE_INTERVAL;
  }
  
@@ -282,11 +257,9 @@ index 67c88a1e..935807c3 100644
  function relativeTime(ms, nowMs) {
      const sec = Math.max(0, Math.floor((nowMs - ms) / 1000));
      if (sec < 60) return "just now";
-@@ -132,8 +190,9 @@ function relativeTime(ms, nowMs) {
-     return `${Math.floor(sec / 86400)} d ago`;
+@@ -121,7 +164,7 @@ function relativeTime(ms, nowMs) {
  }
  
-+// The group header carries the directory, so the subtitle only has the rest.
  function subtitle(session, nowMs) {
 -    const parts = [basename(session?.cwd)];
 +    const parts = [];
