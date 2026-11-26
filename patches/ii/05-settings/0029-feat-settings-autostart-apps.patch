@@ -10,9 +10,9 @@ Port: hand-ported (lock moved to $XDG_RUNTIME_DIR; venv shebang; launcher and th
 Drop when: autostart apps are configured some other way.
 ---
  .../modules/common/widgets/AutostartApps.qml  | 238 ++++++++++++++++++
- .../ii/scripts/hyprland/autostart.py          |  49 ++++
+ .../ii/scripts/hyprland/autostart.py          |  50 ++++
  dots/.config/quickshell/ii/shell.qml          |  14 ++
- 3 files changed, 301 insertions(+)
+ 3 files changed, 302 insertions(+)
  create mode 100644 dots/.config/quickshell/ii/modules/common/widgets/AutostartApps.qml
  create mode 100755 dots/.config/quickshell/ii/scripts/hyprland/autostart.py
 
@@ -263,14 +263,15 @@ index 00000000..f239cccd
 \ No newline at end of file
 diff --git a/dots/.config/quickshell/ii/scripts/hyprland/autostart.py b/dots/.config/quickshell/ii/scripts/hyprland/autostart.py
 new file mode 100755
-index 00000000..54ea2dd1
+index 00000000..fa3e1754
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/scripts/hyprland/autostart.py
-@@ -0,0 +1,49 @@
+@@ -0,0 +1,50 @@
 +#!/usr/bin/env -S\_/bin/sh\_-c\_"source\_\$(eval\_echo\_\$ILLOGICAL_IMPULSE_VIRTUAL_ENV)/bin/activate&&exec\_python\_-E\_"\$0"\_"\$@""
 +import json, subprocess, sys, time, os
 +
 +
++# hyprctl dispatch evaluates cmd as a Lua string literal, so it must be escaped.
 +def lua_str(text):
 +    escaped = text.replace("\\", "\\\\").replace('"', '\\"')
 +    escaped = escaped.replace("\n", "\\n").replace("\t", "\\t").replace("\r", "\\r")
@@ -317,14 +318,14 @@ index 00000000..54ea2dd1
 +
 +    time.sleep(delay)
 diff --git a/dots/.config/quickshell/ii/shell.qml b/dots/.config/quickshell/ii/shell.qml
-index 947e5d8f..ab16fadc 100644
+index 947e5d8f..f5ad7a58 100644
 --- a/dots/.config/quickshell/ii/shell.qml
 +++ b/dots/.config/quickshell/ii/shell.qml
 @@ -44,6 +44,20 @@ ShellRoot {
          function onReloaded() { root.syncHyprlockClock() }
      }
  
-+    // autostart.py keeps a lock in $XDG_RUNTIME_DIR: runs once per boot, not per shell restart.
++    // autostart.py keeps a lock in $XDG_RUNTIME_DIR: runs once per login, not per shell restart.
 +    Process {
 +        id: autostartProc
 +        command: [Quickshell.shellPath("scripts/hyprland/autostart.py")]

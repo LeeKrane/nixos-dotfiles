@@ -22,7 +22,7 @@ Drop when: upstream gates set_shell_config and validates preset names.
  4 files changed, 29 insertions(+), 9 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/scripts/hyprland/autostart.py b/dots/.config/quickshell/ii/scripts/hyprland/autostart.py
-index 54ea2dd1..288eebfd 100755
+index fa3e1754..64420336 100755
 --- a/dots/.config/quickshell/ii/scripts/hyprland/autostart.py
 +++ b/dots/.config/quickshell/ii/scripts/hyprland/autostart.py
 @@ -1,5 +1,5 @@
@@ -31,8 +31,8 @@ index 54ea2dd1..288eebfd 100755
 +import json, math, subprocess, sys, time, os
  
  
- def lua_str(text):
-@@ -23,9 +23,14 @@ if not autostart.get('enable', False):
+ # hyprctl dispatch evaluates cmd as a Lua string literal, so it must be escaped.
+@@ -24,9 +24,14 @@ if not autostart.get('enable', False):
      exit(0)
  
  for app in autostart.get('apps', []):
@@ -49,7 +49,7 @@ index 54ea2dd1..288eebfd 100755
  
      workspace = app.get('workspace', 1)
      if not isinstance(workspace, int) or isinstance(workspace, bool):
-@@ -33,7 +38,7 @@ for app in autostart.get('apps', []):
+@@ -34,7 +39,7 @@ for app in autostart.get('apps', []):
          continue
  
      delay = app.get('delay', 0)
@@ -59,7 +59,7 @@ index 54ea2dd1..288eebfd 100755
  
      subprocess.run(['hyprctl', 'dispatch', f'hl.dsp.focus({{workspace = {workspace}}})'])
 diff --git a/dots/.config/quickshell/ii/scripts/presets.sh b/dots/.config/quickshell/ii/scripts/presets.sh
-index 0d6ac2a3..96b12d07 100755
+index 7ad5ef15..ca744333 100755
 --- a/dots/.config/quickshell/ii/scripts/presets.sh
 +++ b/dots/.config/quickshell/ii/scripts/presets.sh
 @@ -193,7 +193,7 @@ else

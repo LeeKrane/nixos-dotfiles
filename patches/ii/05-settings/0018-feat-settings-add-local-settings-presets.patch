@@ -15,9 +15,9 @@ Drop when: the Profile page is dropped.
  .../ii/modules/common/Directories.qml         |   2 +
  .../ii/modules/common/widgets/PresetPopup.qml |  63 ++++
  .../ii/modules/common/widgets/PresetsCard.qml | 199 ++++++++++++
- dots/.config/quickshell/ii/scripts/presets.sh | 294 ++++++++++++++++++
+ dots/.config/quickshell/ii/scripts/presets.sh | 295 ++++++++++++++++++
  .../quickshell/ii/services/Presets.qml        | 128 ++++++++
- 5 files changed, 686 insertions(+)
+ 5 files changed, 687 insertions(+)
  create mode 100644 dots/.config/quickshell/ii/modules/common/widgets/PresetPopup.qml
  create mode 100644 dots/.config/quickshell/ii/modules/common/widgets/PresetsCard.qml
  create mode 100755 dots/.config/quickshell/ii/scripts/presets.sh
@@ -313,10 +313,10 @@ index 00000000..9eff5e18
 \ No newline at end of file
 diff --git a/dots/.config/quickshell/ii/scripts/presets.sh b/dots/.config/quickshell/ii/scripts/presets.sh
 new file mode 100755
-index 00000000..0d6ac2a3
+index 00000000..7ad5ef15
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/scripts/presets.sh
-@@ -0,0 +1,294 @@
+@@ -0,0 +1,295 @@
 +#!/usr/bin/env bash
 +
 +CONFIG_DIR="$HOME/.config/illogical-impulse"
@@ -543,6 +543,7 @@ index 00000000..0d6ac2a3
 +            echo "Error: preset not found: $name" >&2
 +            exit 1
 +        fi
++        # Strip .apps again: this path writes config.json and must not trust the imported cache file.
 +        tmp=$(mktemp)
 +        apply_filter="$BLACKLIST_FILTER"
 +        if $imported; then
