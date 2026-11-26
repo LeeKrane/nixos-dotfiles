@@ -1,9 +1,6 @@
 name: promote
 
-# Moves the `deploy` branch (what every server upgrades to, see
-# modules/nixos/server/auto-upgrade.nix) to a main commit whose check run passed.
-# Separate from check.yml because update.yml calls that with read-only
-# permissions, and a called job asking for write access would void the caller.
+# Separate from check.yml: update.yml calls that with read-only permissions, and a called job asking for write access would void the caller.
 on:
   workflow_run:
     workflows: [check]
@@ -30,10 +27,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      # deploy follows main, including a force-pushed main: it is moved only to the commit
-      # that is main's head right now. An older run (a re-run, or one overtaken by a newer
-      # push) skips, so deploy never moves backwards; the newer push's own run promotes.
-      # The lease fails the push if deploy changed since it was read here.
+      # deploy follows main (force-pushes included) but moves only to main's current head: older runs skip, so deploy never moves backwards.
+      # The lease fails the push if deploy changed since it was read.
       - name: Move deploy to main's head
         env:
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}

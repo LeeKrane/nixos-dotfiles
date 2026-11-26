@@ -1,12 +1,6 @@
 #!/bin/bash
-# Mounts a Proton Drive rclone remote, handling 2FA re-entry via a yad
-# dialog and retrying on failure. Configuration is environment-driven.
-#
-# Env vars, all optional, sane defaults shown:
-#   MOUNT_PATH     Where to mount the remote.        default: $HOME/ProtonDrive
-#   RCLONE_REMOTE  Name of the configured remote.    default: ProtonDrive
-#   RCLONE_CONFIG  Path to the rclone config file.   default: $HOME/.config/rclone/rclone.conf
-#   LOGO_PATH      Icon passed to notify-send -i.    default: empty
+# Env (all optional): MOUNT_PATH ($HOME/ProtonDrive), RCLONE_REMOTE (ProtonDrive),
+# RCLONE_CONFIG ($HOME/.config/rclone/rclone.conf), LOGO_PATH (notify-send icon, default none).
 
 set +m
 
@@ -65,11 +59,11 @@ for arg in "$@"; do
     esac
 done
 
-if [ -t 1 ]; then  # Only use colors if output is to a terminal
+if [ -t 1 ]; then
     COLOR_RESET='\033[0m'
-    COLOR_VERBOSE='\033[0;36m'    # Cyan
-    COLOR_COMMAND='\033[0;33m'    # Yellow
-    COLOR_DRY_RUN='\033[0;35m'    # Magenta
+    COLOR_VERBOSE='\033[0;36m'
+    COLOR_COMMAND='\033[0;33m'
+    COLOR_DRY_RUN='\033[0;35m'
 else
     COLOR_RESET=''
     COLOR_VERBOSE=''
@@ -99,7 +93,6 @@ log_command() {
     fi
 }
 
-# Desktop notification helper. Only adds -i when LOGO_PATH is set.
 send_notify() {
     local title="$1"
     local message="$2"
@@ -119,8 +112,8 @@ get_2fa_code() {
 
 	if [ "$DRY_RUN" = true ]; then
 		echo -e "${COLOR_DRY_RUN}[DRY RUN]${COLOR_RESET} Would show 2FA input dialog"
-		echo "123456" # Mock 2FA code for dry run
-		echo "0" # Mock successful exit code
+		echo "123456"
+		echo "0"
 		return
 	fi
 
@@ -129,7 +122,7 @@ get_2fa_code() {
 	yad --center --title="2FA Required" --text="Enter your new 2FA code for Proton Drive:" --entry --hide-text --undecorated --width=400 --height=100
 	local yad_exit=$?
 	log_verbose "YAD dialog closed with exit code: $yad_exit"
-	echo $yad_exit # Return exit status of yad for cancel detection
+	echo $yad_exit
 }
 
 update_rclone_config() {
@@ -141,13 +134,13 @@ update_rclone_config() {
 	if [ "$DRY_RUN" = true ]; then
 		echo -e "${COLOR_DRY_RUN}[DRY RUN]${COLOR_RESET} Would update 2FA code in $config_file to: $new_2fa_code"
 		echo -e "${COLOR_DRY_RUN}[DRY RUN]${COLOR_RESET} Would run: sed -i \"/^\[${RCLONE_REMOTE}\]/,/^\[.*\]/{s/^[[:space:]]*2fa[[:space:]]*=[[:space:]]*.*/2fa = ${new_2fa_code}/}\" \"$config_file\""
-		return 0 # Mock success
+		return 0
 	fi
 
 	if [ ! -f "$config_file" ]; then
 		log_verbose "ERROR: Rclone config file not found: $config_file"
 		send_notify "Rclone Error" "Could not find Rclone configuration file at $config_file." critical
-		return 1 # Indicate failure
+		return 1
 	fi
 
 	log_verbose "Using rclone config file: $config_file"
@@ -162,7 +155,7 @@ update_rclone_config() {
 	if [ $sed_exit -ne 0 ]; then
 		log_verbose "ERROR: sed command failed with exit code: $sed_exit"
 		send_notify "Rclone Error" "Failed to update Rclone configuration file. Check permissions or file format." critical
-		return 1 # Indicate failure
+		return 1
 	fi
 
 	log_verbose "Verifying 2FA update in config file"
@@ -170,11 +163,11 @@ update_rclone_config() {
 	if grep -q -E "^[[:space:]]*2fa[[:space:]]*=[[:space:]]*${new_2fa_code}" "$config_file"; then
 		log_verbose "2FA update verification successful"
 		echo "2FA line successfully updated in $config_file."
-		return 0 # Indicate success
+		return 0
 	else
 		log_verbose "WARNING: 2FA update verification failed"
 		send_notify "Rclone Warning" "2FA line might not have been updated correctly in config file."
-		return 1 # Indicate failure (even if sed returned 0, verify the change)
+		return 1 # verify the change even if sed returned 0
 	fi
 }
 
@@ -188,7 +181,7 @@ while true; do
 	if [ "$DRY_RUN" = true ]; then
 		echo -e "${COLOR_DRY_RUN}[DRY RUN]${COLOR_RESET} Would execute: rclone mount \"$RCLONE_REMOTE\":/ \"$MOUNT_PATH\" --daemon --vfs-cache-mode full --poll-interval 10m"
 		echo -e "${COLOR_DRY_RUN}[DRY RUN]${COLOR_RESET} Would send notification: Mounting was successful!"
-		break # Exit loop in dry run mode
+		break
 	fi
 
 	log_verbose "Executing rclone mount command"
@@ -206,7 +199,7 @@ while true; do
 	if [ $exit_status -eq 0 ]; then
 		log_verbose "Mount successful, sending success notification"
 		send_notify "$RCLONE_REMOTE Mount" "Mounting was successful!"
-		break # Exit loop on success
+		break
 	else
 		log_verbose "Mount failed with exit status: $exit_status"
 		log_verbose "Rclone output: $output"
@@ -229,14 +222,13 @@ while true; do
 				log_verbose "Sending 2FA error notification"
 				send_notify "$RCLONE_REMOTE Mount" "$local_message $local_detail. Prompting for new 2FA." critical
 
-				# get_2fa_code echoes two lines: the code, then yad's exit
-				# status. Read each separately, a combined read only fills the first.
+				# get_2fa_code echoes the code, then yad's exit status: read each separately, a combined read only fills the first.
 				{
 					read -r new_2fa_code_entered
 					read -r yad_exit_code
 				} < <(get_2fa_code)
 
-				if [ "$yad_exit_code" -ne 0 ]; then # YAD's exit code 1 is typically Cancel/No
+				if [ "$yad_exit_code" -ne 0 ]; then
 					log_verbose "User cancelled 2FA input"
 					send_notify "$RCLONE_REMOTE Mount" "2FA code input cancelled. Aborting." critical
 					exit 1
@@ -261,10 +253,9 @@ while true; do
 		else
 			log_verbose "Non-2FA mount error detected"
 			local_detail="An unexpected error occurred."
-			echo "Failed output: $output" # Log the full output for debugging
+			echo "Failed output: $output"
 		fi
 
-		# If no action was taken, ask the user what to do next.
 		if ! $local_action_taken; then
 			log_verbose "No automatic action taken, prompting user for next step"
 
@@ -281,13 +272,13 @@ while true; do
 					--button="Cancel!gtk-cancel:1" \
 					--undecorated --width=450 --height=150 >/dev/null
 
-				yad_exit_code=$? # Capture yad's exit code for button pressed
+				yad_exit_code=$?
 				log_verbose "User dialog response: exit code $yad_exit_code"
 
-				if [ "$yad_exit_code" -eq 1 ]; then # YAD's exit code for the second button (Cancel)
+				if [ "$yad_exit_code" -eq 1 ]; then
 					log_verbose "User selected Cancel, exiting script"
 					send_notify "$RCLONE_REMOTE Mount" "Mount attempt cancelled by user."
-					exit 1 # Exit the script
+					exit 1
 				fi
 				log_verbose "User selected Retry, continuing mount loop"
 			fi
@@ -296,4 +287,4 @@ while true; do
 done
 
 log_verbose "Script completed successfully"
-exit 0 # Script successfully completed
+exit 0

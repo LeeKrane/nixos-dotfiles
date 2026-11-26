@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# Bumps pkgs/claude-code/manifest.zst.json to a claude-code release,
-# newest by default, or the version given as $1. Nothing else in the
-# flake moves. Review the diff, then `just switch`.
+# Usage: update-claude-code.sh [VERSION]; bumps pkgs/claude-code/manifest.zst.json, newest by default.
 set -euo pipefail
 
 BASE_URL="https://downloads.claude.ai/claude-code-releases"
@@ -17,8 +15,6 @@ fi
 
 curl -fsSL "$BASE_URL/$VERSION/manifest.zst.json" --output "$MANIFEST"
 
-# Refuse a manifest that does not describe the version we asked for,
-# rather than leaving a mismatched file behind.
 NEW="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["version"])' "$MANIFEST")"
 if [ "$NEW" != "$VERSION" ]; then
     echo "manifest reports $NEW, expected $VERSION; reverting" >&2

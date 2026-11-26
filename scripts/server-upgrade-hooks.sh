@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Hooks of the automatic server upgrade (modules/nixos/server/auto-upgrade.nix), one subcommand
-# per systemd hook. State lives in $STATE_DIR (/var/lib/server-upgrade):
 #   target-sha     deploy SHA the current run builds (written by `condition`)
 #   pre-switch     /run/current-system before the run, what a rollback restores
 #   pre-profile    the system profile before the run
@@ -10,14 +8,6 @@
 #   failed-sha     last SHA that failed here; `condition` never retries it
 #   rolled-back    set before a boot-health rollback reboot, so that reboots at most once
 #   outbox/        queued messages, one JSON file each, removed once ntfy and GitHub took them
-#
-#   condition    nixos-upgrade ExecCondition: exit 0 to upgrade, 1 to skip the run
-#   pre          ExecStartPre: record the state a rollback restores
-#   post         ExecStartPost: health check the freshly activated system
-#   failed       OnFailure: roll back if anything changed, mark the SHA failed, queue a message
-#   boot-health  health check a generation that came up after an upgrade reboot
-#   deliver      send the queued messages to ntfy and GitHub (exit 1 while any is undelivered)
-#
 # Environment (tests override the paths; the module sets the rest):
 #   HOST_NAME           this host                                          required
 #   HEALTH_CHECK        executable that exits 0 when the host is healthy   optional
@@ -46,10 +36,8 @@ read_state() { command cat "$STATE_DIR/$1" 2>/dev/null || true; }
 resolved() { readlink -f "$1"; }
 failed_units() { systemctl --failed --plain --no-legend | awk '{ print $1 }' | sort; }
 
-# The SHA the deploy branch points at, empty if the branch does not exist.
 deploy_sha() { git ls-remote "$REMOTE_URL" refs/heads/deploy | awk 'NR == 1 { print $1 }'; }
 
-# True when the booted kernel, initrd or kernel modules differ from the running system's.
 reboot_pending() {
     local f
     for f in initrd kernel kernel-modules; do
@@ -58,8 +46,6 @@ reboot_pending() {
     return 1
 }
 
-# Healthy: no unit failed since the run started (a unit that was already failing before it
-# does not block upgrades), and the host's own HEALTH_CHECK passes.
 health() {
     local now new
     # Fail closed: a failing `systemctl --failed` is a health failure, not an empty list.
@@ -77,10 +63,8 @@ health() {
     if [ -n "$HEALTH_CHECK" ]; then timeout -k 30s "$HEALTH_TIMEOUT" "$HEALTH_CHECK"; fi
 }
 
-# Puts the previous running system back as the system profile and runs its own
-# switch-to-configuration ($1: switch, or boot when a reboot follows). Not
-# `nixos-rebuild --rollback`: the previous profile generation can be one that was built but
-# never booted.
+# Restores the previous running system as the system profile and runs its switch-to-configuration ($1: switch, or boot when a reboot
+# follows). Not `nixos-rebuild --rollback`: the previous profile generation can be one that was built but never booted.
 rollback() {
     local pre
     pre="$(read_state pre-switch)"
@@ -90,8 +74,6 @@ rollback() {
     "$pre/bin/switch-to-configuration" "$1" || return 1
 }
 
-# queue KIND SHA STAGE ROLLED_BACK: one outbox message (KIND: failed or recovered), then a
-# best-effort kick of the delivery unit.
 queue() {
     local kind="$1" sha="$2" stage="$3" rolled="$4" sha7 title priority body tmp
     sha7="${sha:0:7}"
@@ -117,7 +99,6 @@ queue() {
     systemctl start --no-block server-upgrade-notify.service || true
 }
 
-# A healthy run on SHA: tell the owner if this host had failed on an earlier SHA.
 recover() {
     local failed
     failed="$(read_state failed-sha)"
@@ -141,10 +122,8 @@ cmd_condition() {
         echo "already on $sha, nothing to do"
         exit 1
     fi
-    # Never overlap the boot-time health check of a generation that is still being judged: `pre`
-    # would overwrite the state its rollback needs and two switches could run at once.
-    # (is-active is also true while "activating".) A leftover pending-check must not skip: it would
-    # block every later run forever.
+    # Never overlap the boot-time health check of a generation still being judged: `pre` would overwrite the state its rollback needs
+    # and two switches could run at once (is-active is also true while "activating"). A leftover pending-check must not skip, or it would block every later run.
     if systemctl is-active --quiet server-upgrade-health; then
         echo "a boot health check is running, skipping"
         exit 1
@@ -154,7 +133,7 @@ cmd_condition() {
 }
 
 cmd_pre() {
-    # First: if anything below fails, `failed` must not roll back to a stale earlier run's state.
+    # First: if anything below fails, `failed` must not roll back to a stale earlier state.
     rm -f "$STATE_DIR/pre-switch" "$STATE_DIR/pre-profile"
     mkdir -p "$OUTBOX"
     resolved "$CURRENT_SYSTEM" >"$STATE_DIR/pre-switch"
@@ -193,8 +172,7 @@ cmd_failed() {
             stage=activation
         fi
     fi
-    # Only a run that moved the profile or the running system needs undoing; a build failure
-    # changed nothing.
+    # Only a run that moved the profile or the running system needs undoing; a build failure changed nothing.
     if [ -f "$STATE_DIR/pre-switch" ] \
         && { [ "$(resolved "$CURRENT_SYSTEM")" != "$(read_state pre-switch)" ] \
             || [ "$(resolved "$SYSTEM_PROFILE")" != "$(read_state pre-profile)" ]; }; then
@@ -213,7 +191,6 @@ cmd_boot_health() {
     local sha
     [ -f "$STATE_DIR/pending-check" ] || return 0
     sha="$(read_state pending-check)"
-    # Let the system settle; a degraded or timed-out answer is judged by health below.
     timeout "$BOOT_SETTLE_TIMEOUT" systemctl is-system-running --wait >/dev/null 2>&1 || true
     if health; then
         rm -f "$STATE_DIR/pending-check" "$STATE_DIR/rolled-back"
@@ -236,7 +213,7 @@ cmd_boot_health() {
     fi
 }
 
-mark_done() { # FILE KEY
+mark_done() {
     jq --arg k "$2" '.[$k] = true' "$1" >"$1.tmp" && mv "$1.tmp" "$1"
 }
 
@@ -254,8 +231,7 @@ send_github() {
         "$(jq -r .stage "$1")" "$(jq -r .rolled_back "$1")"
 }
 
-# Any non-zero exit of a channel (network, 5xx, the report command's 44) keeps the message
-# queued; it is removed only once both channels took it.
+# Any non-zero exit of a channel keeps the message queued; it is removed once both channels took it.
 cmd_deliver() {
     local f undelivered=0 github_down=0
     shopt -s nullglob

@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# Fails if any secrets/*.yaml lacks a top-level `sops:` key (an accidentally
-# decrypted file) or has a value outside that block that is not ENC[...].
-# Reports file:line only, never the value. Usage: check-secrets-encrypted.sh [SECRETS_DIR]
+# Usage: check-secrets-encrypted.sh [SECRETS_DIR]
 set -euo pipefail
 
 dir="${1:-$(dirname "$(readlink -f "$0")")/../secrets}"

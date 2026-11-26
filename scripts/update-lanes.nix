@@ -1,10 +1,6 @@
-# Weekly update lanes (docs/superpowers/specs/2026-11-23-update-lanes-design.md). Takes the
-# parsed flake.lock and returns { servers = [ input ]; desktops = [ input ]; }:
 #   nix eval --json --impure --expr 'import ./scripts/update-lanes.nix (builtins.fromJSON (builtins.readFile ./flake.lock))'
-# servers: the stable channel (nixpkgs-stable moves with nixos-raspberrypi through its follows)
-# plus the inputs both roles use. desktops: every other updatable root input, so a new input
-# lands there by default. A `follows` root input (a list in flake.lock) is in neither lane: it
-# moves with the input it follows.
+# servers: the stable channel plus the inputs both roles use. desktops: every other updatable root input.
+# A `follows` root input (a list in flake.lock) is in neither lane.
 lock:
 let
   rootInputs = lock.nodes.${lock.root}.inputs;

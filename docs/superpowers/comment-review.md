@@ -117,3 +117,26 @@ For each: keep, trim, or delete. This file is deleted before `doc-cleanup` merge
 - `overlays/ani-cli.nix:1` nixpkgs ani-cli 5.0 provider down (503); master 5.1.4 moved to hianime.at. Upstream status.
 - `overlays/dolphin-darkly-selection.nix:1` Dolphin 26.08 selection-text colour note. Upstream.
 - `overlays/gsr-ui-fractional-scale.nix:1` gsr-ui fractional-scale note. Upstream.
+
+## scripts, install.sh, justfile, .github
+
+- `install.sh:665-670` taractias live ISO DNS timed out on cache.nixos-cuda.org. Observed, unrecorded.
+- `install.sh:1403-1405` Under 24 GiB: eval heap ~5 GiB plus C++ compiles. Measured.
+- `install.sh:1555-1559` Live ISO no swap; nixos-install one job at half cores. Measured.
+- `install.sh:1864-1867` sops exits 200 on unchanged file, 128 on undecryptable (sops 3.13.3). sops binary.
+- `install.sh:1953-1954` hyprctl exits 0 on errors; stdout/stderr split. hyprctl binary.
+- `scripts/ani-cli-launcher.sh:17` Termux refuses RUN_COMMAND unless allow-external-apps. Termux.
+- `scripts/ani-cli-termux.sh:18` Termux package lags working provider. External.
+- `scripts/ani-cli-termux.sh:30` full-upgrade first; stale Termux breaks libcurl. Termux.
+- `scripts/ani-cli-termux.sh:38` No recommends: ffmpeg pulls ~340 MB clang. Termux deps.
+- `scripts/ani-cli-termux.sh:41` Termux:Widget shortcuts. Termux.
+- `scripts/docker-check.sh:20` filter-syscalls=false works around seccomp in Nix sandbox. Docker.
+- `scripts/docker-check.sh:57` libgit2 refuses unowned bind-mounted repo. libgit2.
+- `scripts/update-select-lanes.sh:6` mergeable computed lazily; UNKNOWN polled. GitHub API.
+- `.github/workflows/update-lane.yml:171` git restore --worktree deletes path missing at ref. git semantics.
+- `.github/workflows/update-lane.yml:192` vulnix exit codes 0/1/2. External.
+- `scripts/flake-update-notify.sh:55` Not up yet at login retries silently. Login timing.
+- `scripts/server-upgrade-report.sh:100` Close only issues whose SHA is ancestor. GitHub compare API.
+- `install.sh:181` LC_ALL=C keeps [@-~] a byte range under UTF-8 sed. sed locale.
+- `install.sh:1374` nixos-install resumes from copied paths; transient failure costs 10 s. Nix behaviour.
+- `.github/workflows/update-lane.yml:3` Called workflow sharing caller's concurrency group deadlocks. GitHub Actions.

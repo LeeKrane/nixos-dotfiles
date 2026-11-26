@@ -21,9 +21,7 @@ on:
         type: boolean
         default: false
 
-# Under workflow_call, github.ref is the caller's ref (main), so key on
-# inputs.ref first; otherwise update.yml's gate would cancel, or be
-# cancelled by, the push run on main.
+# workflow_call: github.ref is the caller's ref; key on inputs.ref first.
 concurrency:
   group: check-${{ inputs.ref || github.ref }}
   cancel-in-progress: true
@@ -39,8 +37,6 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
       - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
-      # nixfmt, statix, deadnix, shellcheck, actionlint and the secrets guard;
-      # the same script is the pre-push hook (.githooks/pre-push).
       - name: lint
         run: scripts/lint.sh
       - name: check-secrets-encrypted tests
@@ -60,9 +56,7 @@ jobs:
       - name: update-pr-body tests
         run: nix shell --inputs-from . nixpkgs#jq -c bash scripts/tests/update-pr-body-test.sh
 
-  # Same ref as the eval jobs: under workflow_call (update.yml calls this with
-  # ref: needs.update.outputs.sha, the exact pushed commit), github.ref is the
-  # caller's ref, not inputs.ref.
+  # Same ref as the eval jobs: under workflow_call github.ref is the caller's ref, not inputs.ref.
   hosts:
     runs-on: ubuntu-latest
     outputs:
@@ -75,8 +69,7 @@ jobs:
       - name: Compute host list
         id: hosts
         run: |
-          # scripts/hosts.nix is the one shared place for this list (x86_64 hosts: the
-          # runners cannot build the Pis, which checks.pi-eval only evaluates).
+          # x86_64 hosts only: the runners cannot build the Pis (checks.pi-eval evaluates them).
           nix eval --json --impure '.#lib.hostMeta' --apply 'import ./scripts/hosts.nix' > "$RUNNER_TEMP/hosts.json"
           echo "hosts=$(command cat "$RUNNER_TEMP/hosts.json")" >> "$GITHUB_OUTPUT"
 
@@ -92,8 +85,6 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
       - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
-      # Evaluating a host applies every patch under patches/ (applyPatches
-      # imported in lib/mk-host.nix), so upstream drift fails here.
       - name: eval ${{ matrix.host }}
         run: nix eval --raw .#nixosConfigurations.${{ matrix.host }}.config.system.build.toplevel.drvPath
 
@@ -104,9 +95,7 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
       - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
-      # lua-syntax first: building it realizes the applyPatches sources that
-      # lib/mk-host.nix imports (IFD). On a fresh runner store,
-      # `flake check --no-build` cannot build them and fails.
+      # lua-syntax first: it realizes the applyPatches sources (IFD) that `flake check --no-build` cannot build on a fresh store.
       - name: lua-syntax
         run: nix build --no-link .#checks.x86_64-linux.lua-syntax
       - name: flake check
@@ -122,8 +111,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref }}
-      # paths-filter supports only push and pull_request events; a forced run
-      # (update.yml, on schedule/workflow_dispatch) skips it entirely.
+      # paths-filter supports only push and pull_request events; forced runs skip it.
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         if: ${{ !inputs.force-nvim }}
@@ -140,9 +128,7 @@ jobs:
         if: ${{ inputs.force-nvim || steps.filter.outputs.nvim == 'true' }}
         run: nix build --no-link .#checks.x86_64-linux.nvim .#checks.x86_64-linux.nvim-stable .#checks.x86_64-linux.nvim-specs
 
-  # server-upgrade is a writeShellApplication, so it is shellchecked at build
-  # time with the stable nixpkgs' shellcheck on the servers' pkgs; the lint job
-  # shellchecks with unstable. Building it here catches findings only stable has.
+  # server-upgrade is shellchecked at build time with the stable nixpkgs' shellcheck; the lint job uses unstable.
   server-pkgs:
     runs-on: ubuntu-latest
     # paths-filter lists a pull request's files through the REST API.
@@ -153,8 +139,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref }}
-      # The servers update lane forces the build; any other run filters on changed paths
-      # (on schedule/workflow_dispatch, paths-filter compares against the last commit).
+      # The servers update lane forces the build; other runs filter on changed paths.
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         if: ${{ !inputs.force-server-pkgs }}

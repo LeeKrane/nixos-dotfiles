@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
-# Tests scripts/server-upgrade-hooks.sh with git, nix-env, systemctl, journalctl, curl and the
-# report command stubbed on PATH, and the system directories replaced by symlinks under a temp
-# dir. Run:
-#   nix shell nixpkgs#jq nixpkgs#gawk --command bash scripts/tests/server-upgrade-hooks-test.sh
+# Run: nix shell nixpkgs#jq nixpkgs#gawk --command bash scripts/tests/server-upgrade-hooks-test.sh
 set -euo pipefail
 
 SCRIPT="$(dirname "$(readlink -f "$0")")/../server-upgrade-hooks.sh"
@@ -13,13 +10,11 @@ STATE="$WORK/state"
 LOG="$WORK/log"
 mkdir -p "$WORK/bin"
 
-# git stub: `ls-remote` prints "$STUB_SHA<TAB>refs/heads/deploy", or fails with $STUB_GIT_FAIL.
 command cat >"$WORK/bin/git" <<'EOF'
 #!/usr/bin/env bash
 [ -z "${STUB_GIT_FAIL:-}" ] || exit 128
 [ -z "${STUB_SHA:-}" ] || printf '%s\trefs/heads/deploy\n' "$STUB_SHA"
 EOF
-# systemctl stub: records every call; --failed lists $STUB_FAILED_UNITS (space separated).
 command cat >"$WORK/bin/systemctl" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$LOG_DIR/systemctl"
@@ -40,7 +35,6 @@ command cat >"$WORK/bin/journalctl" <<'EOF'
 if [ -n "${STUB_JOURNAL_HUGE:-}" ]; then head -c 20000 /dev/zero | tr '\0' x; echo; fi
 echo "journal line"
 EOF
-# curl stub (ntfy): records the url and body, fails with $STUB_CURL_EXIT.
 command cat >"$WORK/bin/curl" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$LOG_DIR/curl"
@@ -59,14 +53,12 @@ EOF
 chmod +x "$WORK"/bin/* "$WORK/health"
 
 failures=0
-check() { # check NAME CONDITION...
+check() {
     local name=$1
     shift
     if "$@"; then echo "ok   $name"; else echo "FAIL $name"; failures=$((failures + 1)); fi
 }
 
-# mksystem NAME REVISION KERNEL: a fake system closure with its nixos-version, kernel link and
-# switch-to-configuration (which records its argument).
 mksystem() {
     local d="$WORK/store/$1"
     mkdir -p "$d/sw/bin" "$d/bin"
@@ -78,9 +70,8 @@ mksystem() {
     ln -sfn "$WORK/store/kernel-$3" "$d/initrd"
     ln -sfn "$WORK/store/kernel-$3" "$d/kernel-modules"
 }
-point() { ln -sfn "$WORK/store/$2" "$WORK/$1"; } # point LINK SYSTEM
+point() { ln -sfn "$WORK/store/$2" "$WORK/$1"; }
 
-# fresh: old system "old" (revision OLDREV, kernel k1) running, booted and in the profile.
 fresh() {
     rm -rf "$STATE" "$LOG" "$WORK/store"
     mkdir -p "$STATE" "$LOG" "$WORK/store"
@@ -92,7 +83,7 @@ fresh() {
     point profile old
     unset STUB_SHA STUB_GIT_FAIL STUB_FAILED_UNITS STUB_CURL_EXIT STUB_REPORT_EXIT STUB_HEALTH_EXIT STUB_SYSTEMCTL_FAIL STUB_NIXENV_EXIT STUB_HEALTH_ACTIVE STUB_HEALTH_SLEEP HEALTH_TIMEOUT || true
 }
-run() { # run SUBCOMMAND [ENV=VAL...]: sets $status
+run() {
     local sub=$1
     shift
     status=0
@@ -101,12 +92,12 @@ run() { # run SUBCOMMAND [ENV=VAL...]: sets $status
         HEALTH_CHECK="$WORK/health" BOOT_SETTLE_TIMEOUT=5 REPORT_CMD="$WORK/bin/server-upgrade-report" \
         "$@" bash "$SCRIPT" "$sub" >"$LOG/stdout" 2>"$LOG/stderr" || status=$?
 }
-logged() { grep -qF -- "$2" "$LOG/$1" 2>/dev/null; } # logged FILE TEXT
+logged() { grep -qF -- "$2" "$LOG/$1" 2>/dev/null; }
 state_is() { [ "$(command cat "$STATE/$1" 2>/dev/null)" = "$2" ]; }
 outbox_count() { find "$STATE/outbox" -maxdepth 1 -name '*.json' 2>/dev/null | wc -l; }
 only_message() { jq -r "$1" "$STATE"/outbox/*.json; }
 
-# --- condition -----------------------------------------------------------------------------
+# condition
 fresh
 run condition STUB_SHA=NEWREV
 check 'condition: new sha runs' [ "$status" -eq 0 ]
@@ -150,7 +141,7 @@ fresh
 run condition STUB_SHA=NEWER STUB_HEALTH_ACTIVE=1
 check 'condition: a running boot health check skips the run' [ "$status" -eq 1 ]
 
-# --- pre / post ----------------------------------------------------------------------------
+# pre / post
 fresh
 printf 'NEWREV\n' >"$STATE/target-sha"
 printf '%s\n' "$WORK/store/old" >"$STATE/pre-switch"
@@ -214,7 +205,7 @@ check 'post: recovery message kind' [ "$(only_message .kind)" = recovered ]
 check 'post: recovery title' [ "$(only_message .title)" = 'tarronax recovered on NEWREV' ]
 check 'post: failed sha cleared' [ ! -e "$STATE/failed-sha" ]
 
-# --- failed --------------------------------------------------------------------------------
+# failed
 fresh
 printf 'NEWREV\n' >"$STATE/target-sha"
 run pre
@@ -280,7 +271,7 @@ run failed
 run failed
 check 'queue: two messages both survive' [ "$(outbox_count)" -eq 2 ]
 
-# --- boot-health ---------------------------------------------------------------------------
+# boot-health
 fresh
 run boot-health
 check 'boot-health: nothing pending, nothing done' [ "$status" -eq 0 ]
@@ -321,7 +312,6 @@ fresh
 printf 'NEWREV\n' >"$STATE/pending-check"
 run pre
 run boot-health STUB_HEALTH_EXIT=1
-# second boot, rolled-back system still unhealthy: no further reboot
 rm -f "$LOG/systemctl" "$STATE/outbox"/*.json
 run boot-health STUB_HEALTH_EXIT=1
 check 'boot-health: a second failure does not reboot again' eval '! logged systemctl reboot'
@@ -337,7 +327,7 @@ run boot-health
 check 'boot-health: a healthy rolled-back system queues no recovery' [ "$(outbox_count)" -eq 0 ]
 check 'boot-health: and clears the markers' [ ! -e "$STATE/pending-check" ]
 
-# --- deliver -------------------------------------------------------------------------------
+# deliver
 fresh
 printf 'NEWREV\n' >"$STATE/target-sha"
 run pre
@@ -360,7 +350,6 @@ check 'deliver: ntfy topic' logged curl 'http://ntfy.test/server-upgrades'
 check 'deliver: ntfy title' logged curl 'Title: tarronax upgrade failed (NEWREV)'
 check 'deliver: ntfy priority' logged curl 'Priority: high'
 
-# GitHub down: the message stays until the report command succeeds
 fresh
 printf 'NEWREV\n' >"$STATE/target-sha"
 run pre
@@ -370,7 +359,6 @@ check 'deliver: github down keeps the message' [ "$(outbox_count)" -eq 1 ]
 run deliver "${DELIVER[@]}"
 check 'deliver: github back: message removed' [ "$(outbox_count)" -eq 0 ]
 
-# the report command exits 22 (5xx) or 44 (404/422) too, not just 1: still queued, not lost
 fresh
 printf 'NEWREV\n' >"$STATE/target-sha"
 run pre
@@ -381,7 +369,6 @@ check 'deliver: report exit 44 exits non-zero' [ "$status" -ne 0 ]
 run deliver STUB_REPORT_EXIT=22 "${DELIVER[@]}"
 check 'deliver: report exit 22 keeps the message' [ "$(outbox_count)" -eq 1 ]
 
-# a corrupt file does not block the others
 fresh
 printf 'NEWREV\n' >"$STATE/target-sha"
 run pre
@@ -392,7 +379,6 @@ check 'deliver: a corrupt file is moved to bad/' [ -e "$STATE/outbox/bad/0-corru
 check 'deliver: a corrupt file does not keep deliver failing' [ "$status" -eq 0 ]
 check 'deliver: the valid message was still delivered' logged report 'failed tarronax NEWREV'
 
-# a host without tokens treats both channels as done
 fresh
 printf 'NEWREV\n' >"$STATE/target-sha"
 run pre
@@ -400,7 +386,6 @@ run failed
 run deliver
 check 'deliver: unconfigured channels do not hold messages back' [ "$(outbox_count)" -eq 0 ]
 
-# once GitHub fails in a pass, later files skip GitHub so a recovered never overtakes its failed
 fresh
 printf 'NEWREV\n' >"$STATE/target-sha"
 run pre
@@ -410,7 +395,6 @@ run deliver STUB_REPORT_EXIT=1 "${DELIVER[@]}"
 check 'deliver: github failure skips the reporter for later files' [ "$(wc -l <"$LOG/report")" -eq 1 ]
 check 'deliver: both files stay queued' [ "$(outbox_count)" -eq 2 ]
 
-# a huge journal must not push the ntfy body over 4 KB (it would become an attachment)
 fresh
 printf 'NEWREV\n' >"$STATE/target-sha"
 run pre

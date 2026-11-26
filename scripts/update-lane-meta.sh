@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# The one table of per-lane strings for the weekly update lanes
-# (docs/superpowers/specs/2026-11-23-update-lanes-design.md). Prints key=value lines, ready for
-# $GITHUB_OUTPUT. Which inputs a lane bumps lives in scripts/update-lanes.nix.
 #   update-lane-meta.sh LANE
 set -euo pipefail
 

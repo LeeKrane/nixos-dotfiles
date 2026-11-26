@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# Runs nix flake check and nix build inside a throwaway nixos/nix
-# container, against a persistent nixstore docker volume. Never install
-# or run Nix on the host itself. Never removes the nixstore volume,
-# that only happens in the docker-clean justfile recipe.
 # Usage:
 #   scripts/docker-check.sh              full check, flake check plus all hosts' toplevel, --dry-run
 #   scripts/docker-check.sh build HOST   real build of one host's toplevel, slow
@@ -21,16 +17,13 @@ cd "$REPO_ROOT"
 IMAGE="nixos/nix:latest"
 VOLUME="nixstore"
 
-# filter-syscalls=false works around seccomp restrictions on the Nix
-# sandbox. max-jobs/cores match the cgroup limits below, so Nix backs off
-# instead of the cgroup OOM-killing it. Override with NIX_MAX_JOBS/NIX_CORES.
+# filter-syscalls=false works around seccomp restrictions on the Nix sandbox. max-jobs/cores match the cgroup limits
+# below, so Nix backs off instead of being OOM-killed.
 NIX_CONFIG_VALUE="experimental-features = nix-command flakes
 filter-syscalls = false
 max-jobs = ${NIX_MAX_JOBS:-2}
 cores = ${NIX_CORES:-3}"
 
-# Caps every docker run to a fixed slice of the host. Override per
-# invocation, for example DOCKER_CPUS=12 DOCKER_MEMORY=28g just docker-build tariognatha.
 DOCKER_RESOURCE_ARGS=(
     --cpus "${DOCKER_CPUS:-6}"
     --cpu-shares "${DOCKER_CPU_SHARES:-256}"
@@ -48,8 +41,7 @@ seed_volume_if_missing() {
     docker run --rm "${DOCKER_RESOURCE_ARGS[@]}" -v "$VOLUME:/seed" "$IMAGE" sh -c 'cp -a /nix/. /seed/'
 }
 
-# Flakes only see tracked files. Tracked edits are seen dirty without staging, so only new
-# files need intent-to-add, which records the path but does not stage its content.
+# Flakes only see tracked files: tracked edits need no staging, new files need intent-to-add (records the path without staging content).
 track_new_files() {
     git ls-files -z --others --exclude-standard | xargs -0 -r git add -N --
 }
@@ -68,10 +60,7 @@ run_in_container() {
         "
 }
 
-# The host list comes from the flake, the one source shared with CI: scripts/hosts.nix over
-# lib.hostMeta (hosts/*/host.nix), i.e. every x86_64-linux host, as the nixos/nix container
-# cannot build aarch64 toplevels. install.sh and bootstrap-sops.sh's known_hosts() glob the
-# same hosts/ directories. Called only by the modes that need it, after the volume is seeded.
+# The host list comes from the flake (scripts/hosts.nix): x86_64-linux hosts only, as the container cannot build aarch64 toplevels.
 HOSTS=()
 HOSTS_PIPE=""
 load_hosts() {
@@ -91,12 +80,10 @@ seed_volume_if_missing
 case "$mode" in
     check)
         load_hosts
-        # Only the host list is spliced in here, $h expands in the container's sh.
         # shellcheck disable=SC2016 # expands inside the container's sh, not here
         run_in_container '
             set -eu
-            # As in CI: building lua-syntax realizes the applyPatches sources
-            # lib/mk-host.nix imports (IFD), which --no-build cannot build.
+            # lua-syntax first: it realizes the applyPatches sources (IFD) that --no-build cannot build.
             nix build --no-link .#checks.x86_64-linux.lua-syntax
             nix flake check --no-build --show-trace
             for h in '"${HOSTS[*]}"'; do
@@ -126,33 +113,20 @@ case "$mode" in
         run_in_container "nix eval .#nixosConfigurations.$host.config.system.build.toplevel.drvPath"
         ;;
     fmt)
-        # nixfmt-tree (treefmt) formats the whole tree when given no paths.
         run_in_container 'nix fmt'
         ;;
     lint)
-        # Same checks as CI and the pre-push hook, scripts/lint.sh.
         run_in_container 'bash scripts/lint.sh'
         ;;
     update)
         run_in_container 'nix flake update'
         ;;
     lock)
-        # Unlike update, only adds entries missing from flake.lock.
-        # Writes it back host-side, root-owned, git add/chown it like any file.
         run_in_container 'nix flake lock'
         ;;
     install-test)
-        # install.sh's runtime tests, since it has no build-time check of
-        # its own (scripts/lint.sh shellchecks it). --self-test proves run_sh honours
-        # pipefail, the ERR trap, the disko/PRIME sed helpers and the
-        # new-host templates. The four --dry-run runs cover install mode's
-        # plain and PRIME branches, a new host's scaffold, and setup mode.
-        # The two existing hosts get their committed disk, so they take
-        # patch_disko_file's "already patched" branch; a host's disko.nix
-        # only holds /dev/CHANGE-ME before its first install. All four exit 0
-        # with no real hardware via soft_fail. Wrapped in a
-        # git-state assertion: these must not leave a staged change, a new
-        # commit or a hosts/newbox/ behind.
+        # install.sh has no build-time check. The --dry-run runs exit 0 without hardware via soft_fail; the git-state assertion fails if they
+        # leave a staged change, a new commit or hosts/newbox/. The two existing hosts take patch_disko_file's "already patched" branch.
         track_new_files
         before_status=$(git status --porcelain | sort | md5sum)
         before_head=$(git rev-parse HEAD)

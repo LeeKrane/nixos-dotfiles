@@ -1,29 +1,9 @@
-# Evaluated against the flake's nixosConfigurations attrset (not a single host) to print
-# the package versions update.yml shows in the weekly update PR body
-# (scripts/update-summary.sh). Called once before `nix flake update` and once after.
-# The host list is the second argument, as a list of names: update.yml passes every host of
-# `lib.hostMeta` (the Pis included, unlike scripts/hosts.nix's x86_64-only list), read from the
-# HOSTS_JSON environment variable (`--impure`):
 #   HOSTS_JSON='["taragarmr"]' nix eval --json --impure '.#nixosConfigurations' \
 #     --apply 'cfgs: import scripts/update-versions.nix cfgs (builtins.fromJSON (builtins.getEnv "HOSTS_JSON"))'
-#
-# Every lookup goes through attrByPath, which walks a path of attribute names through
-# nested sets using `?`/`or` and returns `default` the moment an attribute is missing, a
-# dynamic segment (e.g. `system`) isn't a string, or an intermediate value isn't an
-# attrset at all — never throwing. That alone isn't quite enough: forcing the value found
-# at the end of the path can still throw (an assertion failing somewhere inside a
-# derivation, say), and unlike missing-attribute or type errors, that kind of throw *is*
-# catchable, so tryVersion wraps the final result in tryEval as a second line of defense.
-# Either way, a renamed or removed attribute (a nixpkgs restructuring, illogical-flake
-# dropping an input, ...) drops just that one entry for that host instead of failing the
-# whole weekly update run.
+# Lookups go through attrByPath, which never throws on missing attributes or wrong shapes; tryVersion's tryEval catches throws when forcing the
+# final value (e.g. a failing assertion). A renamed or removed attribute drops only that entry instead of failing the weekly update.
 configs: hosts:
 let
-  # attrByPath PATH DEFAULT SET: walks PATH (a list of attribute names, static or
-  # dynamic) through nested attrsets, returning DEFAULT as soon as a segment is missing,
-  # isn't a string (a dynamic segment computed as null, say), or the value to descend
-  # into isn't an attrset. `?` and `or` never throw on their own, so this function never
-  # throws regardless of how wrong the shapes it's given are.
   attrByPath =
     path: default: set:
     let
@@ -51,9 +31,6 @@ let
     in
     if result.success then result.value else null;
 
-  # home-manager packages (claude-code, zen-browser) and system packages (hyprland,
-  # mesa, the nvidia driver, the kernel) are read from very different places, so each
-  # entry below picks whichever of config/pkgs/specialArgs actually carries it.
   versionsFor =
     cfg:
     let
@@ -69,9 +46,7 @@ let
       {
         "Linux kernel" = attrByPath [ "config" "boot" "kernelPackages" "kernel" "version" ] null cfg;
         Hyprland = attrByPath [ "config" "programs" "hyprland" "package" "version" ] null cfg;
-        # ii wraps quickshell in a symlinkJoin with no .version of its own, so read the
-        # underlying package straight off illogical-flake's own input instead (the same
-        # input lib/mk-host.nix hands to the patched home-module.nix as iiInputs.quickshell).
+        # ii wraps quickshell in a symlinkJoin without .version: read the package from illogical-flake's input (as lib/mk-host.nix passes iiInputs.quickshell).
         Quickshell = attrByPath [
           "illogical-flake"
           "inputs"
@@ -81,8 +56,6 @@ let
           "default"
           "version"
         ] null inputs;
-        # Same flake-input route as apps.nix's home.packages entry
-        # (inputs.zen-browser.packages.${system}.default).
         "zen-browser" = attrByPath [
           "zen-browser"
           "packages"
@@ -90,15 +63,12 @@ let
           "default"
           "version"
         ] null inputs;
-        # pkgs/default.nix overlays nixpkgs' claude-code with the vendored package, so this is
-        # the version pkgs/claude-code/manifest.zst.json pins, not the nixpkgs one.
+        # pkgs/default.nix overlays nixpkgs' claude-code, so this is the version pinned in pkgs/claude-code/manifest.zst.json.
         "claude-code" = attrByPath [ "pkgs" "claude-code" "version" ] null cfg;
         Mesa = attrByPath [ "pkgs" "mesa" "version" ] null cfg;
         NixOS = attrByPath [ "config" "system" "nixos" "version" ] null cfg;
       }
-      # Report the NVIDIA driver version only for hosts that actually use it
-      # (config.hardware.nvidia.enabled), omitting the entry entirely elsewhere rather
-      # than showing a perpetual "- -" row for hosts with no NVIDIA GPU.
+      # Only hosts using the NVIDIA driver (config.hardware.nvidia.enabled) report its version.
       // (
         if nvidiaUsed then
           {

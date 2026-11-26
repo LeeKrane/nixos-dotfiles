@@ -1,4 +1,3 @@
-// Tests for services/claude-agents.js in a dots-hyprland checkout.
 // Usage: node test-logic.mjs [<ii root>]   (default: the krane clone)
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -72,7 +71,6 @@ test("background: two sessions with one name never borrow each other's window", 
 test("computeRowKey prefers sessionId, falls back to id, then to kind+pid+index", () => {
     assert.equal(L.computeRowKey({ kind: "interactive", sessionId: "sess-a", pid: 100 }, 0), "sess-a");
     assert.equal(L.computeRowKey({ kind: "background", sessionId: "-", id: "bg-1", pid: 200 }, 1), "bg-1");
-    // No sessionId (or "-") and no id: same kind and pid, but distinct index, must stay unique.
     const a = L.computeRowKey({ kind: "background", sessionId: "-", pid: 300 }, 2);
     const b = L.computeRowKey({ kind: "background", pid: 300 }, 3);
     assert.notEqual(a, b);
@@ -138,11 +136,9 @@ test("subtitle is empty for an interactive session with no lastActivity and no s
 test("tildePath replaces only a whole leading home path component", () => {
     assert.equal(L.tildePath("/home/krane", "/home/krane"), "~");
     assert.equal(L.tildePath("/home/krane/.dotfiles", "/home/krane"), "~/.dotfiles");
-    // Prefix lookalike: "/home/kranex" is not "/home/krane" plus more.
     assert.equal(L.tildePath("/home/kranex/foo", "/home/krane"), "/home/kranex/foo");
     assert.equal(L.tildePath("/home/krane/foo", ""), "/home/krane/foo");
     assert.equal(L.tildePath("/home/krane/foo", undefined), "/home/krane/foo");
-    // Directories.home carries a "file://" prefix and may have a trailing slash.
     assert.equal(L.tildePath("/home/krane/foo", "file:///home/krane"), "~/foo");
     assert.equal(L.tildePath("/home/krane/foo", "/home/krane/"), "~/foo");
 });
@@ -153,7 +149,6 @@ test("tildePath normalizes repeated slashes, \".\" segments, and a trailing slas
     assert.equal(L.tildePath("/home/krane/src//x", "/home/krane"), "~/src/x");
     assert.equal(L.tildePath("/home/krane/./src/x", "/home/krane"), "~/src/x");
     assert.equal(L.tildePath("/home/krane/", "/home/krane"), "~");
-    // "/" itself is left alone, not turned into "".
     assert.equal(L.tildePath("/", "/home/krane"), "/");
 });
 
@@ -163,8 +158,6 @@ test("normalizePath collapses all-slash input to \"/\" and never resolves \"..\"
     assert.equal(L.normalizePath("///"), "/");
     assert.equal(L.normalizePath(""), "");
     assert.equal(L.normalizePath(undefined), "");
-    // No filesystem access here, so ".." is left exactly as written, even
-    // when a repeated slash next to it still gets collapsed.
     assert.equal(L.normalizePath("/home/krane/../etc"), "/home/krane/../etc");
     assert.equal(L.normalizePath("/home/krane//../etc"), "/home/krane/../etc");
 });
@@ -172,7 +165,6 @@ test("normalizePath collapses all-slash input to \"/\" and never resolves \"..\"
 test("tildePath does not shorten anything when home normalizes to \"/\"", () => {
     assert.equal(L.tildePath("/", "/"), "/");
     assert.equal(L.tildePath("/x", "/"), "/x");
-    // Normal homes still shorten as before.
     assert.equal(L.tildePath("/home/krane", "/home/krane"), "~");
 });
 
@@ -241,7 +233,6 @@ test("a group's rank is the best rank among its sessions, not its peak activity"
         { kind: "background", name: "idle-alone", status: "idle", cwd: "/home/krane/alone", ancestors: [], lastActivity: 999 },
     ];
     const r = plain(L.annotate(entries, [], home));
-    // "alone" has far more recent activity, but "mixed" holds a busy session, so it leads.
     assert.deepEqual([...new Set(r.sessions.map(s => s.group))], ["~/mixed", "~/alone"]);
 });
 

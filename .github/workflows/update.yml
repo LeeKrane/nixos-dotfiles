@@ -1,8 +1,5 @@
 name: update
 
-# Weekly flake update in two lanes, one PR each
-# (docs/superpowers/specs/2026-11-23-update-lanes-design.md): servers (stable channel, shared
-# inputs, claude-code) and desktops (everything else). update-lane.yml does a lane's work.
 on:
   schedule:
     - cron: '17 4 * * 1'
@@ -13,17 +10,14 @@ on:
         type: choice
         options: [both, servers, desktops]
         default: both
-  # A merged lane PR can leave the other lane's PR conflicting on flake.lock: refresh only
-  # that lane (scripts/update-select-lanes.sh decides).
+  # A merged lane PR can leave the other lane's PR conflicting on flake.lock: refresh only that lane.
   push:
     branches: [main]
     paths:
       - flake.lock
       - 'pkgs/claude-code/**'
 
-# No workflow-level concurrency group: GitHub keeps one pending run per group, so a conflict
-# refresh queued behind a running update would silently cancel a pending scheduled run. The
-# lane job below takes a group per lane instead.
+# No workflow-level concurrency group: GitHub keeps one pending run per group, so a queued conflict refresh would cancel a pending scheduled run. The lane job takes a group per lane.
 
 permissions: {}
 
@@ -56,13 +50,10 @@ jobs:
       fail-fast: false
       matrix:
         lane: ${{ fromJSON(needs.select.outputs.lanes) }}
-    # One group per lane: a second run for a lane queues behind the running one instead of
-    # racing it on that lane's branches. If a third arrives, it replaces the pending one,
-    # which loses nothing: both regenerate the same lane from the latest main.
+    # One group per lane: a second run queues behind the running one; a third replaces the pending one, losing nothing since both regenerate the lane from latest main.
     concurrency:
       group: update-lane-${{ matrix.lane }}
       cancel-in-progress: false
-    # The most any job in update-lane.yml needs; each of its jobs narrows this down.
     permissions:
       contents: write
       pull-requests: write

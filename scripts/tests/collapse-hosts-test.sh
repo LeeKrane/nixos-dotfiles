@@ -1,19 +1,18 @@
 #!/usr/bin/env bash
-# Tests scripts/lib/collapse-hosts.jq and its use in update-summary.sh and security-summary.sh. Run:
-#   nix shell nixpkgs#jq nixpkgs#gawk --command bash scripts/tests/collapse-hosts-test.sh
+# Run: nix shell nixpkgs#jq nixpkgs#gawk --command bash scripts/tests/collapse-hosts-test.sh
 set -euo pipefail
 
 SCRIPTS="$(dirname "$(readlink -f "$0")")/.."
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 failures=0
-check() { # check NAME CONDITION...
+check() {
     local name=$1
     shift
     if "$@"; then echo "ok   $name"; else echo "FAIL $name"; failures=$((failures + 1)); fi
 }
 ROLES='{"taractias":"desktop","tariognatha":"desktop","tarmantria":"desktop","taragarmr":"server","taronychus":"server","tarritator":"server","tarronax":"server"}'
-collapse() { # collapse JSON_ARRAY
+collapse() {
     jq -rn -L "$SCRIPTS/lib" --argjson roles "$ROLES" --argjson h "$1" \
         'include "collapse-hosts"; $h | collapse_hosts($roles)' 2>/dev/null || echo ERROR
 }
@@ -25,8 +24,6 @@ check 'servers plus two desktops' [ "$(collapse '["taragarmr","taronychus","tarr
 check 'single hosts only' [ "$(collapse '["taragarmr","taractias"]')" = 'taragarmr, taractias' ]
 check 'empty list' [ "$(collapse '[]')" = '' ]
 
-# update-summary.sh: a split version row names its hosts collapsed when HOST_ROLES is set,
-# and plainly joined when it is not.
 echo '{"nodes":{"root":{"inputs":{}}},"root":"root","version":7}' >"$WORK/lock.json"
 jq -n '{taragarmr:{p:"1"},taronychus:{p:"1"},tarritator:{p:"1"},tarronax:{p:"1"},taractias:{p:"1"},tariognatha:{p:"1"},tarmantria:{p:"1"}}' >"$WORK/before.json"
 jq -n '{taragarmr:{p:"2"},taronychus:{p:"2"},tarritator:{p:"2"},tarronax:{p:"2"},taractias:{p:"3"},tariognatha:{p:"1"},tarmantria:{p:"1"}}' >"$WORK/after.json"
@@ -35,7 +32,6 @@ without="$(bash "$SCRIPTS/update-summary.sh" "$WORK/lock.json" "$WORK/lock.json"
 check 'update-summary: collapsed row' grep -qF '| p | 1 | 2 | servers |' <<<"$with"
 check 'update-summary: no HOST_ROLES keeps join' grep -qF '| p | 1 | 2 | taragarmr, taronychus, tarritator, tarronax |' <<<"$without"
 
-# With HOST_ROLES the Hosts column is always shown, even when every host changed the same way.
 jq -n '{taragarmr:{p:"1"},taronychus:{p:"1"},tarritator:{p:"1"},tarronax:{p:"1"}}' >"$WORK/srv-before.json"
 jq -n '{taragarmr:{p:"2"},taronychus:{p:"2"},tarritator:{p:"2"},tarronax:{p:"2"}}' >"$WORK/srv-after.json"
 uniform="$(HOST_ROLES="$ROLES" bash "$SCRIPTS/update-summary.sh" "$WORK/lock.json" "$WORK/lock.json" "$WORK/srv-before.json" "$WORK/srv-after.json" 2>&1 || true)"
@@ -50,8 +46,6 @@ check 'update-summary: no HOST_ROLES uniform keeps 3 columns' grep -qF '| p | 1 
 # shellcheck disable=SC2016 # eval expands it, on purpose
 check 'update-summary: no HOST_ROLES uniform has no Hosts header' eval '! grep -qF "| Hosts |" <<<"$plain"'
 
-# security-summary.sh: a CVE new on all four scanned servers is "servers" with HOST_ROLES
-# (collapsed against the whole flake) and "all" without it (every scanned host).
 mkdir -p "$WORK/sec"
 servers=(taragarmr taronychus tarritator tarronax)
 for h in "${servers[@]}"; do

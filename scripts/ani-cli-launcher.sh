@@ -1,17 +1,7 @@
 #!/usr/bin/env bash
-# Build the "ani-cli" / "ani-cli continue" launcher APK (android/ani-cli-launcher), sign it and
-# put it on an Android phone running Termux, over SSH. Rerun to update; the signing key
-# (~/.local/share/ani-cli-launcher/, created on first run) must stay the same for updates to
-# install over the old app.
-#
-#   scripts/ani-cli-launcher.sh <phone address> [ssh port, default 8022]
-#
-# Needs Nix on this host and the phone prerequisites of scripts/ani-cli-termux.sh. The script
-# sets allow-external-apps in Termux and opens the installer, it does not wait: tap Install on
-# the phone. First install only: Settings > Apps > ani-cli > Permissions > Additional
-# permissions > "Run commands in Termux environment" (the app also asks when first launched).
-# Also needed once: Termux "Display over other apps" (Android lets it open its terminal from
-# the launcher entry only with that).
+# Usage: scripts/ani-cli-launcher.sh <phone address> [ssh port, default 8022]
+# Tap Install on the phone. First install only, grant "Run commands in Termux environment" (Settings > Apps > ani-cli >
+# Permissions > Additional permissions) and Termux "Display over other apps".
 set -euo pipefail
 
 host="${1:?usage: $0 <phone address> [port]}"
@@ -38,7 +28,6 @@ ssh -n -p "$port" "$host" '
   fi
   termux-reload-settings
 '
-# termux-open hands the file to the installer through Termux's file provider.
 # shellcheck disable=SC2016
 ssh -p "$port" "$host" '
   cat >~/ani-cli-launcher.apk

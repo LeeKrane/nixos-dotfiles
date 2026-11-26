@@ -1,9 +1,4 @@
 #!/usr/bin/env bash
-# GitHub side of the automatic server upgrade (modules/nixos/server/auto-upgrade.nix): keeps at
-# most one open `server-upgrade` issue per upgrade cycle (target SHA), one comment per host.
-# Called by `server-upgrade-hooks deliver` for each queued message. The repo is public, so
-# comments carry no logs, only host, stage and whether the host rolled back.
-#
 # Usage: server-upgrade-report.sh failed|recovered HOST SHA [STAGE] [ROLLED_BACK]
 #   GITHUB_TOKEN_FILE  file with a token that has Issues: read and write   required
 #   REPO               owner/name, default LeeKrane/nixos-dotfiles
@@ -23,8 +18,7 @@ LABEL=server-upgrade
 token="$(<"$GITHUB_TOKEN_FILE")"
 title="Server upgrade failed: ${sha:0:7}"
 
-# api METHOD PATH [JSON]: a repo-relative GitHub API call; the response goes to stdout. The
-# token is passed as a header file so it never shows up in the process list.
+# The token goes in a header file so it never shows in the process list.
 api() {
     local method="$1" path="$2"
     shift 2
@@ -43,17 +37,15 @@ api() {
     esac
 }
 
-# Open server-upgrade issues (the issues endpoint also lists pull requests).
+# The issues endpoint also lists pull requests.
 open_issues() {
     api GET "/issues?labels=$LABEL&state=open&per_page=100" | jq '[.[] | select(.pull_request == null)]'
 }
 
-# Lowest number among the listed issues titled for this SHA, empty if none (stdin: open_issues).
 issue_for_sha() {
     jq -r --arg t "$title" '[.[] | select(.title == $t) | .number] | min // empty'
 }
 
-# Each host's latest marker in an issue: [{host, sha, status}].
 latest_markers() {
     api GET "/issues/$1/comments?per_page=100" | jq '
         [.[].body
@@ -72,11 +64,11 @@ report_body() {
     fi
 }
 
-comment() { # ISSUE TEXT
+comment() {
     api POST "/issues/$1/comments" "$(jq -nc --arg b "$2" '{body: $b}')" >/dev/null
 }
 
-close_issue() { # ISSUE
+close_issue() {
     api PATCH "/issues/$1" '{"state":"closed","state_reason":"not_planned"}' >/dev/null
 }
 
@@ -85,7 +77,7 @@ on_failed() {
     issues="$(open_issues)"
     n="$(issue_for_sha <<<"$issues")"
     if [ -n "$n" ]; then
-        # A retried delivery must not repeat the comment this host already posted.
+        # A retried delivery must not repeat this host's comment.
         if ! latest_markers "$n" | jq -e --arg h "$host" --arg s "$sha" \
             'any(.[]; .host == $h and .sha == $s and .status == "failed")' >/dev/null; then
             comment "$n" "$(report_body failed)"
@@ -95,8 +87,7 @@ on_failed() {
             --arg b "The automatic upgrade of the servers to \`$sha\` failed. Each host reports in a comment below." \
             '{title: $t, body: $b, labels: [$l]}')" | jq -r .number)"
         comment "$created" "$(report_body failed)"
-        # Another host may have created its own issue for this SHA in the same minute: the
-        # lowest number wins, a newer duplicate hands its report over and closes itself.
+        # Another host may have created an issue for this SHA at the same time: the lowest number wins, a newer duplicate closes itself.
         issues="$(open_issues)"
         n="$(issue_for_sha <<<"$issues")"
         n="${n:-$created}"
@@ -106,14 +97,12 @@ on_failed() {
             close_issue "$created"
         fi
     fi
-    # Close issues of older cycles: only those whose SHA is an ancestor of this one, so a late
-    # failure report for an older SHA never closes the issue of a newer one.
+    # Close only issues whose SHA is an ancestor of this one, so a late report for an older SHA never closes a newer issue.
     local old old_sha rc cmp
     while read -r old old_sha; do
         rc=0
         cmp="$(api GET "/compare/$old_sha...$sha")" || rc=$?
-        # Any compare error (unrelated SHAs, API or network trouble) leaves that issue open: the
-        # report is already posted, and failing here would make deliver repost it forever.
+        # Any compare error leaves that issue open: the report is already posted, and failing here would make deliver repost it forever.
         if [ "$rc" -ne 0 ]; then
             echo "compare $old_sha...$sha failed (rc $rc), leaving #$old open" >&2
             continue
@@ -132,7 +121,6 @@ on_recovered() {
         markers="$(latest_markers "$n")"
         if jq -e --arg h "$host" 'any(.[]; .host == $h and .status == "failed")' <<<"$markers" >/dev/null; then
             comment "$n" "$(report_body recovered)"
-            # Close once no other host still has a failed marker as its latest.
             if jq -e --arg h "$host" 'any(.[]; .host != $h and .status == "failed") | not' <<<"$markers" >/dev/null; then
                 close_issue "$n"
             fi

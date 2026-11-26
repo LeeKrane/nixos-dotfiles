@@ -1,21 +1,19 @@
 #!/usr/bin/env bash
-# Tests scripts/update-lane-meta.sh, scripts/update-pr-body.sh and scripts/host-drvs.nix,
-# scripts/host-warnings.nix and scripts/lib/warnings-diff.jq. Run:
-#   nix shell nixpkgs#jq --command bash scripts/tests/update-pr-body-test.sh
+# Run: nix shell nixpkgs#jq --command bash scripts/tests/update-pr-body-test.sh
 set -euo pipefail
 
 SCRIPTS="$(dirname "$(readlink -f "$0")")/.."
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 failures=0
-check() { # check NAME CONDITION...
+check() {
     local name=$1
     shift
     if "$@"; then echo "ok   $name"; else echo "FAIL $name"; failures=$((failures + 1)); fi
 }
 has() { grep -qF -- "$1" "$WORK/body.md"; }
 
-# --- update-lane-meta.sh: the one lane table ---------------------------------
+# update-lane-meta.sh
 meta_servers="$(bash "$SCRIPTS/update-lane-meta.sh" servers 2>/dev/null || true)"
 meta_desktops="$(bash "$SCRIPTS/update-lane-meta.sh" desktops 2>/dev/null || true)"
 check 'meta servers: title' grep -qx 'title=Update server inputs' <<<"$meta_servers"
@@ -28,11 +26,11 @@ check 'meta desktops: no claude-code' grep -qx 'claude_code=false' <<<"$meta_des
 # shellcheck disable=SC2016 # eval expands it, on purpose
 check 'meta unknown lane fails' eval '! bash "$SCRIPTS/update-lane-meta.sh" nope >/dev/null 2>&1'
 
-# --- update-pr-body.sh ---------------------------------------------------------
+# update-pr-body.sh
 ROLES='{"taractias":"desktop","tariognatha":"desktop","tarmantria":"desktop","taragarmr":"server","taronychus":"server","tarritator":"server","tarronax":"server"}'
 echo '### Package versions' >"$WORK/summary.md"
 echo '### Security' >"$WORK/security.md"
-body() { # body LANE HOSTS [ENV=VAL...]: writes $WORK/body.md, sets $title
+body() {
     local lane=$1 hosts=$2
     shift 2
     title="$(env LANE="$lane" HOSTS="$hosts" ROLES="$ROLES" RESULT=success SECURITY_RESULT=success \
@@ -67,7 +65,7 @@ check 'gate failing: title prefix' [ "$title" = '[gate failing] Update desktop i
 check 'gate failing: gate line' has 'Gate: ❌ failing'
 check 'security failed: says so' has 'Security scan failed ([run](https://run))'
 
-# --- eval warnings section -----------------------------------------------------
+# eval warnings section
 body servers '["taragarmr"]'
 check 'no warnings env: no section' eval '! has "Eval warnings"'
 echo '{}' >"$WORK/warnings.json"
@@ -102,7 +100,7 @@ check 'warnings: new 11th dropped' eval '! has "- w10"'
 check 'warnings: new more line' has '… and 5 more'
 check 'warnings: existing more line' has '… and 2 more'
 
-# --- warnings-diff.jq ----------------------------------------------------------
+# warnings-diff.jq
 echo '{"warnings":{"a":["x /nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-source/f","same"],"b":["gone"],"c":[]}}' >"$WORK/wb.json"
 printf "%s\n" '{"warnings":{"a":["x /nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-source/f","same","new\n one"],"b":[],"c":[]}}' >"$WORK/wa.json"
 diff_out="$(jq -cn -f "$SCRIPTS/lib/warnings-diff.jq" --argjson hosts '["a","b","c"]' \
@@ -115,14 +113,14 @@ diff_out="$(jq -cn -f "$SCRIPTS/lib/warnings-diff.jq" --argjson hosts '["a"]' \
     --slurpfile a "$WORK/wa.json" --slurpfile b "$WORK/wb.json" 2>/dev/null || true)"
 check 'warnings-diff: leading whitespace trimmed' [ "$diff_out" = '{"a":{"new":[],"existing":["lead"]}}' ]
 
-# --- host-warnings.nix ---------------------------------------------------------
+# host-warnings.nix
 warns="$(nix eval --json --impure --expr "import $SCRIPTS/host-warnings.nix {
     a.config.warnings = [ \"w1\" ];
     b.config.warnings = [ ];
   } [ \"a\" \"b\" ]" 2>/dev/null || true)"
 check 'host-warnings: warnings per host' [ "$warns" = '{"a":["w1"],"b":[]}' ]
 
-# --- host-drvs.nix -------------------------------------------------------------
+# host-drvs.nix
 drvs="$(nix eval --json --impure --expr "import $SCRIPTS/host-drvs.nix {
     a.config.system.build.toplevel.drvPath = \"/a.drv\";
     b.config.system.build.toplevel.drvPath = \"/b.drv\";

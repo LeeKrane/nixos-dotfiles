@@ -1,22 +1,8 @@
 #!/usr/bin/env bash
-# Renders the Markdown body pieces for the weekly flake-update pull request
-# (.github/workflows/update.yml): a package-version table (from two
-# update-versions.nix evaluations), a top-level flake-input table with
-# GitHub compare links, and a <details> block holding the changed
-# transitive inputs plus the raw `nix flake update` log. Prints Markdown to
-# stdout; the workflow wraps it with the gate-result line and the two
-# closing notes.
-#
 # Usage: update-summary.sh OLD_LOCK NEW_LOCK [VERSIONS_BEFORE VERSIONS_AFTER] [RAW_LOG]
-#   OLD_LOCK, NEW_LOCK      flake.lock before/after `nix flake update`
-#   VERSIONS_BEFORE/_AFTER  optional, host->name->version JSON (nix eval --json
-#                           --impure '.#nixosConfigurations' --apply
-#                           'import scripts/update-versions.nix'); pass both
-#                           or neither, the package table is skipped otherwise
-#   RAW_LOG                 optional, raw `nix flake update` output, quoted
-#                           verbatim in the <details> block
-#   HOST_ROLES              optional env, {host: role} JSON for every flake host:
-#                           collapses host lists (scripts/lib/collapse-hosts.jq)
+#   VERSIONS_BEFORE/_AFTER  host->name->version JSON from update-versions.nix; pass both or neither
+#   RAW_LOG                 raw `nix flake update` output, quoted in the <details> block
+#   HOST_ROLES              optional env, {host: role} JSON for every flake host: collapses host lists
 set -euo pipefail
 LIB="$(dirname "$(readlink -f "$0")")/lib"
 
@@ -29,13 +15,8 @@ RAW_LOG="${5:-}"
 WORKDIR="$(mktemp -d)"
 trap 'rm -rf "$WORKDIR"' EXIT
 
-# Walks flake.lock's node graph from its root, naming every reachable input by
-# its path (`zen-browser/nixpkgs`, `illogical-flake/nur/flake-parts`, ...). A
-# `follows` entry is recorded in flake.lock as an array and introduces no node
-# of its own, so it is skipped; a plain string names another node to recurse
-# into. Emits { top: [...], trans: [...] }, already-formatted "| ... |" table
-# rows for inputs whose locked content changed, top-level (depth 1, declared
-# directly in flake.nix) separated from transitive.
+# Walks flake.lock's node graph from the root, naming reachable inputs by path. A `follows` entry (an array in flake.lock) has no node
+# and is skipped. Emits { top: [...], trans: [...] } table rows for changed inputs, top-level (declared in flake.nix) apart from transitive.
 cat >"$WORKDIR/lock-diff.jq" <<'JQ'
 def walk($nodes; $startInputs):
   def rec($path; $nodeKey):
@@ -59,8 +40,7 @@ def shortid:
   end;
 
 def fmtdate:
-  # A path/file input's locked node carries no lastModified, so render "-" for
-  # it instead of erroring on gmtime(null).
+  # A path/file input's locked node has no lastModified: render "-" instead of erroring on gmtime(null).
   if (. == null) or (.lastModified == null) then "-"
   else (.lastModified | gmtime | strftime("%Y-%m-%d"))
   end;
@@ -97,15 +77,6 @@ def changes($o; $n):
 }
 JQ
 
-# Diffs two update-versions.nix evaluations, each shaped {host: {package:
-# version}}. A package whose change is the same on every host it touched
-# gets one row; a package that differs between hosts (a different version,
-# or present on some hosts but not others) gets one row per distinct
-# (before, after) pair, each naming its hosts. Emits { needsHosts: bool,
-# packages: [{package, groups: [{before, after, hosts}]}] } — unchanged
-# hosts (before == after, including both missing) are dropped per package
-# before grouping, so a package with no surviving host is left out
-# entirely.
 cat >"$WORKDIR/version-diff.jq" <<'JQ'
 include "collapse-hosts";
 ($before[0]) as $before |
@@ -134,8 +105,7 @@ include "collapse-hosts";
     ),
   }
 ] as $packages |
-# With HOST_ROLES (CI, one update lane), the Hosts column is always shown: a lane's table covers
-# only the hosts it changed, so "all", "servers", "desktops" or single hosts must stay visible.
+# With HOST_ROLES (CI), the Hosts column is always shown: a lane's table covers only the hosts it changed.
 { needsHosts: ($roles != null or ($packages | any(.groups | length > 1))), packages: $packages }
 JQ
 
@@ -144,7 +114,7 @@ diff_json="$(jq -n --slurpfile old "$OLD_LOCK" --slurpfile new "$NEW_LOCK" -f "$
 top_rows="$(jq -r '.top[]' <<<"$diff_json")"
 trans_rows="$(jq -r '.trans[]' <<<"$diff_json")"
 
-# --- Package versions -------------------------------------------------------
+# Package versions
 if [ -n "$VERSIONS_BEFORE" ] && [ -n "$VERSIONS_AFTER" ]; then
   version_diff="$(jq -n -L "$LIB" \
     --argjson roles "${HOST_ROLES:-null}" \
@@ -176,7 +146,7 @@ if [ -n "$VERSIONS_BEFORE" ] && [ -n "$VERSIONS_AFTER" ]; then
   fi
 fi
 
-# --- Top-level inputs --------------------------------------------------------
+# Top-level inputs
 if [ -n "$top_rows" ]; then
   echo '### Inputs'
   echo '| Input | From | To | Changes |'
@@ -185,7 +155,7 @@ if [ -n "$top_rows" ]; then
   echo
 fi
 
-# --- Transitive inputs and raw log, collapsed -------------------------------
+# Transitive inputs and raw log
 if [ -n "$trans_rows" ] || [ -n "$RAW_LOG" ]; then
   echo '<details><summary>Transitive inputs and raw <code>nix flake update</code> log</summary>'
   echo
@@ -197,13 +167,8 @@ if [ -n "$trans_rows" ] || [ -n "$RAW_LOG" ]; then
   fi
   if [ -n "$RAW_LOG" ]; then
     echo '```'
-    # The raw log interleaves real `nix flake update` output with git's
-    # \r-updated fetch progress (Enumerating/Counting/Compressing/Receiving
-    # objects, Resolving deltas). Split \r-joined lines apart, then keep only
-    # the lines that carry information: the lock-file warning, each
-    # "• Updated input" line, its indented before/after quoted locked refs,
-    # and the claude-code version bump. grep finding nothing is not a script
-    # failure here, just an empty (but well-formed) code block.
+    # The raw log interleaves `nix flake update` output with git's \r-updated fetch progress: split on \r, keep the lock-file warning, "• Updated input"
+    # lines, their quoted refs and the claude-code bump. grep finding nothing is not a failure.
     keep_pattern="^(warning: |• |    '|  → |claude-code )"
     tr '\r' '\n' <"$RAW_LOG" | grep -E "$keep_pattern" || true
     echo '```'

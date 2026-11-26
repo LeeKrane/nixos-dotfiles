@@ -1,19 +1,14 @@
 #!/usr/bin/env bash
-# install.sh installs krane's NixOS + Hyprland flake on tariognatha,
-# tarmantria and taractias. Two modes, auto-detected, override with
-# --mode. Install mode runs from a live ISO and erases the target disk
-# while partitioning it with disko. Setup mode runs after first boot and
-# drives the second switch. Logs each run to
-# /tmp/krane-install-TIMESTAMP-PID.log.
+# Installs the krane flake on tariognatha, tarmantria and taractias.
+# Install mode (live ISO) partitions with disko; setup mode (after first boot) runs the second switch.
+# Mode is auto-detected, --mode overrides. Logs to /tmp/krane-install-TIMESTAMP-PID.log.
 
-# -E makes the ERR trap fire inside functions, not just at the top level.
 set -Eeuo pipefail
 
-# Every nix call below, including the ones nixos-install and nixos-rebuild make, needs flakes.
+# nix calls, including nixos-install and nixos-rebuild, need flakes.
 export NIX_CONFIG="${NIX_CONFIG:+$NIX_CONFIG$'\n'}experimental-features = nix-command flakes"
 
-# Re-execs through nix shell when gum is missing, since the live ISO
-# lacks it. KRANE_INSTALL_REEXEC stops this from looping.
+# Re-exec via nix shell: the live ISO lacks gum.
 if ! command -v gum >/dev/null 2>&1 && [ -z "${KRANE_INSTALL_REEXEC:-}" ]; then
     export KRANE_INSTALL_REEXEC=1
     exec nix --extra-experimental-features 'nix-command flakes' shell \
@@ -29,21 +24,17 @@ if ! : >"$LOG" 2>/dev/null; then
     echo "warning: cannot write to $LOG, continuing without a log file" >&2
 fi
 
-# CLICOLOR_FORCE keeps gum colour even though tee below makes stdout a
-# pipe. Only set when this script's own stdout is a real terminal.
+# CLICOLOR_FORCE keeps gum colour although tee makes stdout a pipe.
 if [ -t 1 ]; then
     export CLICOLOR_FORCE=1
 fi
 
-# Copies all output to $LOG from here on. tee still shows it live too.
 if $LOG_WRITABLE; then
     exec > >(tee -a "$LOG") 2>&1
 fi
 
-# stderr is now a pipe to tee, which breaks gum's interactive TUI (drawn on
-# stderr): the prompt line duplicates and typed input echoes late. gum_tty
-# redirects interactive gum calls to /dev/tty instead, falling back to
-# stderr when no real tty is available, such as container dry-runs.
+# stderr is a pipe to tee, which breaks gum's TUI (drawn on stderr). gum_tty uses /dev/tty,
+# falling back to stderr without a tty (container dry-runs).
 HAVE_TTY=false
 { : >/dev/tty; } 2>/dev/null && HAVE_TTY=true
 
@@ -55,18 +46,12 @@ gum_tty() {
     fi
 }
 
-# hosts/ is the single source of truth: flake.nix discovers its hosts from
-# the same directories, as do bootstrap-sops.sh's known_hosts() and
-# docker-check.sh's HOSTS.
 AVAILABLE_HOSTS=()
 for _d in "$REPO_ROOT"/hosts/*/; do
     AVAILABLE_HOSTS+=("$(basename "$_d")")
 done
 unset _d
 
-# templates/host/ is what the new-host flow renders hosts/<name>/ from.
-# Profile and form-factor names are the file names under its profiles/ and
-# form-factors/ (scripts/check-new-host.sh derives the same lists the same way).
 TEMPLATE_DIR="$REPO_ROOT/templates/host"
 GPU_PROFILES=()
 for _f in "$TEMPLATE_DIR"/profiles/*.nix.in; do
@@ -79,7 +64,6 @@ for _f in "$TEMPLATE_DIR"/form-factors/*.nix.in; do
 done
 mapfile -t FORM_FACTORS < <(printf '%s\n' "${FORM_FACTORS[@]}" | sort)
 unset _f
-# Defaults for a new host's answers, the values the original hosts use.
 DEFAULT_INSTALL_USER=krane
 DEFAULT_GIT_EMAIL=chris@krane.dev
 # shellcheck disable=SC2209 # "at" is the keyboard layout, not the job-scheduling command.
@@ -87,7 +71,7 @@ DEFAULT_KB_LAYOUT="at"
 DEFAULT_KB_VARIANT=nodeadkeys
 
 MODE=""
-# Not "${HOST:-}", so an ambient $HOST in the shell never picks the target.
+# Not "${HOST:-}": an ambient $HOST must not pick the target.
 HOST=""
 DISK=""
 YES=false
@@ -99,21 +83,12 @@ SELF_TEST_CHECK_DISKO_SED=false
 SELF_TEST_CHECK_PRIME_SED=false
 SELF_TEST_CHECK_SCAFFOLD=false
 SELF_TEST_FAILURES=0
-# The most recent command run/run_sh/capture executed, so err_trap can show
-# the real failing command instead of just a line number. Cleared to ""
-# only when that command succeeds.
 LAST_CMD=""
-# Suppresses on_exit's own reminder, since die/usage already explained the failure.
 HANDLED_EXIT=false
 USAGE_EXIT=false
-# Tracks whether setup_install_swap created /mnt/swapfile, so teardown_install_swap
-# and on_exit know whether there is anything to remove.
 INSTALL_SWAP_ACTIVE=false
 INSTALL_SWAP_ON=false
 
-# New-host flow (--new-host, or "+ new host" in the host menu). Empty means
-# not given yet: prompt_new_host fills the rest from a prompt or, under
-# --yes, from the DEFAULT_* values.
 NEW_HOST_MODE=false
 NEW_HOST=""
 NEW_USER=""
@@ -123,39 +98,22 @@ NEW_PROFILE=""
 NEW_FORM_FACTOR=""
 NEW_KB_LAYOUT=""
 NEW_KB_VARIANT=""
-# --kb-variant "" is a real answer (no variant), so it needs its own flag.
+# --kb-variant "" is a real answer, so it needs its own flag.
 NEW_KB_VARIANT_SET=false
-# Account names a new host's login user must not take: root and the system
-# accounts NixOS or this flake's modules create. nixbld* and systemd-* are
-# matched as prefixes in check_new_username.
 SYSTEM_ACCOUNT_NAMES=(root nobody daemon bin sys sync games man lp mail news uucp proxy backup operator
     sshd messagebus polkituser rtkit avahi geoclue nscd dhcpcd greeter flatpak ollama pipewire colord
     cups usbmux qemu-libvirtd nm-openvpn nm-iodine fwupd-refresh)
 
 SELF_TEST_SCAFFOLD=false
 NEW_HOST_MENU_ENTRY="+ new host"
-# scaffold_host state. SCAFFOLD_STAGING is its render dir, removed on exit.
-# SCAFFOLD_PREVIEW_DIR points host_dir at it under --dry-run, which never
-# writes hosts/<name>/. SCAFFOLD_PENDING is true only while hosts/$HOST/ and
-# .sops.yaml may be half-written, which is when on_exit rolls them back.
-# SCAFFOLD_SOPS_SNAPSHOT is a copy of .sops.yaml's exact on-disk content
-# (including any uncommitted edits) taken right before register_sops_host
-# runs, so a rollback restores that content instead of discarding those
-# edits; also removed on exit.
 SCAFFOLD_STAGING=""
 SCAFFOLD_PREVIEW_DIR=""
 SCAFFOLD_PENDING=false
 SCAFFOLD_SOPS_SNAPSHOT=""
 
-# The target host's login account (its krane.user.name), set by
-# resolve_install_user once the host is known and staged.
 INSTALL_USER=""
 
-# Runs from run_install_mode after a successful install and from on_exit, so
-# an aborted run never leaves the swapfile inside the new root. Warns
-# instead of dying on failure, so cleanup never trips the ERR trap. Defined
-# early since on_exit can call it before arg parsing reaches --help or an
-# unknown flag.
+# Defined early: on_exit can call it before arg parsing finishes.
 teardown_install_swap() {
     if ! $INSTALL_SWAP_ACTIVE; then
         return
@@ -168,14 +126,8 @@ teardown_install_swap() {
     INSTALL_SWAP_ACTIVE=false
 }
 
-# Undoes a scaffold_host that did not finish: removes the new hosts/$HOST/
-# and restores .sops.yaml from SCAFFOLD_SOPS_SNAPSHOT (its exact content
-# right before register_sops_host ran), never from git: a `git checkout`
-# would discard any uncommitted .sops.yaml edits the user already had on
-# disk before scaffold_host started. SCAFFOLD_PENDING is only true between
-# scaffold_host's "does not exist yet" check and its last step, and never
-# under --dry-run, so this can never touch an existing host. Warns instead
-# of dying, like teardown_install_swap.
+# Undoes an unfinished scaffold_host: removes hosts/$HOST and restores .sops.yaml from
+# SCAFFOLD_SOPS_SNAPSHOT, not git, which would drop uncommitted edits.
 rollback_scaffold() {
     if ! $SCAFFOLD_PENDING || [ -z "$HOST" ]; then
         return 0
@@ -237,15 +189,8 @@ clean_log_tail() {
     tail -n "$1" "$LOG" | clean_log_lines
 }
 
-# FUNCNAME[0]/BASH_LINENO[0] here are err_trap's own frame. When the failure
-# happened directly inside run/run_sh/capture, FUNCNAME[1] just names that
-# generic helper, so this shifts one frame further out to the user-level
-# function that called it, such as run_disko, and BASH_LINENO[1] for the
-# line in that function where the helper was called.
 err_trap() {
-    # A failure inside a $(...) or (...) subshell runs err_trap in a child
-    # process. Returning early there leaves the box to the parent shell,
-    # which sees the same failure, instead of printing one box per level.
+    # In a subshell the parent sees the same failure; return to print one box.
     [ "${BASHPID:-$$}" = "$$" ] || return 0
     local rc="$1" line="$2"
     local fn="${FUNCNAME[1]:-main}" fn_line="${BASH_LINENO[0]:-$line}"
@@ -302,13 +247,9 @@ run() {
     return "$rc"
 }
 
-# For a run whose failure is tolerated (caller has its own || handler and
-# keeps going): clears LAST_CMD even on failure, so a later, unrelated
-# failure in the same function never has err_trap blame this one instead.
+# Tolerated failure: clears LAST_CMD even on failure so err_trap never blames it later.
 run_soft() { run "$@" || { local rc=$?; LAST_CMD=""; return "$rc"; }; }
 
-# -o pipefail matters the moment a run_sh string pipes commands, so a
-# failing command on the left cannot look like a success.
 run_sh() {
     if $DRY_RUN; then
         printf '+ %s\n' "$1" >&2
@@ -321,11 +262,8 @@ run_sh() {
     return "$rc"
 }
 
-# Like run_sh, but for full-screen interactive programs (sops's $EDITOR)
-# that get confused by output going through the tee pipe set up on stdout
-# and stderr near the top of the script. When a real tty is available,
-# runs straight against /dev/tty instead; otherwise falls back to run_sh's
-# own behaviour.
+# Like run_sh for full-screen programs (sops $EDITOR) that break under the tee pipe;
+# runs against /dev/tty when available.
 run_tty() {
     if $DRY_RUN; then
         printf '+ %s\n' "$1" >&2
@@ -378,7 +316,6 @@ confirm() {
     return 1
 }
 
-# Never reached under --yes or --dry-run: callers require --host or --disk first.
 choose_one() {
     local prompt="$1" selected="$2"
     shift 2
@@ -396,8 +333,7 @@ choose_one() {
     printf '%s\n' "$result"
 }
 
-# Under --dry-run this only warns, so container tests without real tools
-# like nixos-install and sops still exercise every code path.
+# Under --dry-run this only warns, so container tests without real tools still run every path.
 require() {
     for bin in "$@"; do
         command -v "$bin" >/dev/null 2>&1 || soft_fail "required command not found: $bin"
@@ -452,7 +388,6 @@ usage_die() {
     exit 1
 }
 
-# Avoids an unbound-variable error under set -u when a flag has no value.
 require_arg() {
     if [ "$#" -lt 2 ]; then
         usage_die "$1 requires a value"
@@ -627,11 +562,7 @@ detect_mode() {
     echo setup
 }
 
-# True only when $HOST's own default.nix imports the NVIDIA desktop GPU
-# module, confirmed with `git grep -n nvidia-desktop hosts/`: tariognatha
-# only, among the committed hosts. A new host is not written until after
-# check_dns runs, so it answers from its chosen GPU profile instead. Empty
-# $HOST (interactive host choice not made yet) reads as false.
+# New hosts are not written until after check_dns, so they answer from their chosen GPU profile.
 host_uses_cuda() {
     if $NEW_HOST_MODE && [ -n "$NEW_PROFILE" ]; then
         [ "$NEW_PROFILE" = nvidia-desktop ]
@@ -640,8 +571,6 @@ host_uses_cuda() {
     grep -q 'gpu/nvidia-desktop' "$REPO_ROOT/hosts/$HOST/default.nix" 2>/dev/null
 }
 
-# hosts/$HOST, or under --dry-run for a new host the staging copy
-# scaffold_host rendered, since --dry-run never writes hosts/<name>/.
 host_dir() {
     if [ -n "$SCAFFOLD_PREVIEW_DIR" ]; then
         printf '%s\n' "$SCAFFOLD_PREVIEW_DIR"
@@ -650,12 +579,7 @@ host_dir() {
     fi
 }
 
-# Prints the --option flags that add the CUDA cache substituter, so the
-# CUDA host doesn't have to build its packages from source at install
-# time. flake.nix carries no nixConfig (it prompted on every nix
-# invocation and hung direnv), so this is the only place that grants the
-# cache, and only for the host that actually pulls packages from it.
-# Values must be kept in sync with modules/nixos/gpu/nvidia-desktop.nix.
+# --option flags adding the CUDA cache substituter. flake.nix has no nixConfig, so only the CUDA host gets it here.
 flake_config_opt() {
     if host_uses_cuda; then
         printf -- '--option extra-substituters https://cache.nixos-cuda.org --option extra-trusted-public-keys cache.nixos-cuda.org:74DUi4Ye579gUqzH4ziL9IyiJBlDpMRn9MBN8oNan9M='
@@ -784,8 +708,6 @@ choose_host() {
     fi
 }
 
-# Escapes $1 for a Nix double-quoted string: \ first, then " and ${, so
-# any git name or email renders as the same string it was typed as.
 nix_string_escape() {
     local s="$1"
     s=${s//\\/\\\\}
@@ -794,23 +716,15 @@ nix_string_escape() {
     printf '%s' "$s"
 }
 
-# Escapes $1 for the replacement side of a sed s/// using / as delimiter:
-# / ends the expression, & inserts the match and \ escapes, so all three
-# get a backslash.
 sed_replacement_escape() {
     printf '%s' "$1" | sed -e 's/[\/&\\]/\\&/g'
 }
 
-# Prints section $2 of template $1: the lines after a "#== $2" header up to
-# the next "#== " header. Lines before the first header are the file's own
-# comment and never printed. A missing section prints nothing.
 template_section() {
     awk -v want="$2" '/^#== / { cur = $2; next } cur == want' "$1"
 }
 
-# Replaces every line of $1 that is exactly @$2@ (surrounding blanks
-# ignored) with $3, in place. An empty $3 drops the line. $3 reaches awk
-# through ENVIRON, not -v, so awk never rewrites its backslashes.
+# $3 goes through ENVIRON, not -v, which would rewrite its backslashes.
 replace_block_token() {
     local file="$1" token="@$2@" tmp
     tmp=$(mktemp "$file.XXXXXX")
@@ -822,10 +736,6 @@ replace_block_token() {
     mv "$tmp" "$file"
 }
 
-# Renders templates/host/ into $1 for host $2: the profile's and form
-# factor's #== sections first, then every scalar @TOKEN@ through sed with
-# its value Nix- and sed-escaped. Writes only under $1, which callers point
-# at a temp dir, so this runs for real under --dry-run too.
 render_host_templates() {
     local dest="$1" host="$2" user="$3" git_name="$4" git_email="$5"
     local profile="$6" form_factor="$7" kb_layout="$8" kb_variant="$9"
@@ -838,8 +748,6 @@ render_host_templates() {
     for name in default.nix disko.nix display.nix hardware-configuration.nix; do
         cp "$TEMPLATE_DIR/$name.in" "$dest/$name"
     done
-    # Not a template: no @TOKEN@ placeholders, so neither the sed pass nor the
-    # leftover-token grep below (both *.nix only) needs to see it.
     mkdir -p "$dest/illogical-impulse"
     cp "$TEMPLATE_DIR/illogical-impulse/.gitignore" "$dest/illogical-impulse/.gitignore"
     cp "$TEMPLATE_DIR/ii-settings.json" "$dest/ii-settings.json"
@@ -847,14 +755,8 @@ render_host_templates() {
     replace_block_token "$dest/default.nix" FORM_FACTOR_IMPORTS "$(template_section "$ff_file" imports)"
     replace_block_token "$dest/default.nix" PROFILE "$(template_section "$profile_file" body)"
     replace_block_token "$dest/display.nix" TOUCHPAD "$(template_section "$ff_file" touchpad)"
-    # GIT_EMAIL's -e expression runs last of the eight so a rendered GIT_NAME is never
-    # mistaken for a later token's placeholder by that expression. It cannot protect
-    # GIT_NAME itself: all -e expressions run in one pass over each line, so a git name
-    # containing the literal text "@GIT_EMAIL@" would be rewritten again when GIT_EMAIL's
-    # expression runs right after it, leaving no unrendered @TOKEN@ for the leftover-token
-    # grep below to catch. So a git name containing @ is refused outright. Task 6's
-    # validator forbids @ in a new host's git name too; this is defence in depth for any
-    # other caller of render_host_templates.
+    # One sed pass cannot protect GIT_NAME: a name containing "@GIT_EMAIL@" would be rewritten again
+    # by GIT_EMAIL's expression, so a git name containing @ is refused.
     case "$git_name" in
         *@*) die "git name '$git_name' contains '@', refusing to render: it could be rewritten by a later sed expression" ;;
     esac
@@ -873,8 +775,6 @@ render_host_templates() {
     fi
 }
 
-# nix-instantiate --parse catches a template or substitution mistake before
-# anything lands in hosts/ or the disk is touched.
 parse_check_nix_dir() {
     local file
     for file in "$1"/*.nix; do
@@ -883,7 +783,6 @@ parse_check_nix_dir() {
     done
 }
 
-# True if $1 is already a hosts/ directory name (AVAILABLE_HOSTS).
 host_known() {
     local h
     for h in "${AVAILABLE_HOSTS[@]}"; do
@@ -892,13 +791,8 @@ host_known() {
     return 1
 }
 
-# Each check_* prints why its value is unusable and returns 1, or returns 0
-# silently. prompt_validated re-prompts on 1; validate_new_host_flags turns
-# it into a usage error.
-
-# Beyond the spec regex: no trailing -, since NixOS's networking.hostName
-# type rejects it and that would only surface in nixos-install, after the
-# wipe. tariognatha-vm is flake.nix's VM check target, not a hosts/ dir.
+# No trailing -: networking.hostName rejects it, surfacing only in nixos-install after the wipe.
+# tariognatha-vm is flake.nix's VM check target, not a hosts/ dir.
 check_new_hostname() {
     local name="$1"
     if ! [[ "$name" =~ ^[a-z][a-z0-9-]{0,62}$ ]]; then
@@ -945,8 +839,7 @@ check_new_username() {
     return 0
 }
 
-# No @: no git name needs one, and it keeps render_host_templates'
-# leftover-@TOKEN@ check unambiguous. Nix and sed escaping covers the rest.
+# No @: keeps the leftover-@TOKEN@ check in render_host_templates unambiguous.
 check_git_name() {
     if [ -z "$1" ]; then
         echo "git name must not be empty"
@@ -975,7 +868,6 @@ check_kb_layout() {
     return 0
 }
 
-# Empty is valid: no variant.
 check_kb_variant() {
     if ! [[ "$1" =~ ^[a-z0-9_,-]*$ ]]; then
         echo "keyboard variant '$1' must be an XKB variant such as nodeadkeys, or empty"
@@ -1002,11 +894,8 @@ check_form_factor() {
     return 1
 }
 
-# Prints "<gpu-profile> <form-factor>" from the same dmidecode/lspci probes
-# as suggest_host, separated by exactly one space so callers split with
-# ${s%% *} / ${s#* } and an empty field stays empty. Missing tools or no
-# match mean no pre-selection, never a failure. AMD+NVIDIA PRIME is out of
-# scope, so an NVIDIA GPU without an Intel one suggests nvidia-desktop.
+# Prints "<gpu-profile> <form-factor>" with one space, so an empty field stays empty.
+# AMD+NVIDIA PRIME is unsupported: NVIDIA without Intel suggests nvidia-desktop.
 suggest_profile() {
     local chassis="" gpu_info="" profile="" form_factor=""
     if command -v dmidecode >/dev/null 2>&1; then
@@ -1022,9 +911,7 @@ suggest_profile() {
     fi
     if printf '%s' "$gpu_info" | grep -qi nvidia; then
         if printf '%s' "$gpu_info" | grep -qi intel; then
-            # intel-nvidia-prime's whole point is switching between the
-            # iGPU and the NVIDIA GPU to save battery, which only matters
-            # on a laptop. A desktop with both keeps the NVIDIA GPU on.
+            # intel-nvidia-prime switches iGPU/NVIDIA to save battery, which only matters on a laptop.
             if [ "$form_factor" = desktop ]; then
                 profile=nvidia-desktop
             else
@@ -1041,11 +928,6 @@ suggest_profile() {
     printf '%s %s\n' "$profile" "$form_factor"
 }
 
-# Enforces the new-host flag rules before anything runs. The new-host
-# flags need --new-host. --new-host needs install mode and excludes --host.
-# --yes needs --user, --profile and --form-factor. Every value given must
-# pass the same check_* prompt_new_host applies. Any violation is a usage
-# error.
 validate_new_host_flags() {
     local given=() reason
     [ -z "$NEW_USER" ] || given+=(--user)
@@ -1094,9 +976,6 @@ validate_new_host_flags() {
     fi
 }
 
-# Prompts until $3 accepts the answer, printing the validator's reason and
-# asking again otherwise. $2 is pre-filled. Never reached under --yes:
-# validate_new_host_flags requires or defaults every answer there.
 prompt_validated() {
     local prompt="$1" default="$2" validator="$3" answer reason
     while true; do
@@ -1110,10 +989,6 @@ prompt_validated() {
     done
 }
 
-# Collects every new-host answer before anything is written: flags win,
-# then --yes takes the DEFAULT_*s (validate_new_host_flags already required
-# --user/--profile/--form-factor), else a prompt pre-filled with the
-# default or suggest_profile's guess. Sets HOST last.
 prompt_new_host() {
     log_step "New host"
     if [ -z "$NEW_HOST" ]; then
@@ -1154,9 +1029,7 @@ prompt_new_host() {
         fi
     fi
     if ! $NEW_KB_VARIANT_SET; then
-        # DEFAULT_KB_VARIANT (nodeadkeys) only makes sense for
-        # DEFAULT_KB_LAYOUT (at): "us(nodeadkeys)" etc. is not a valid xkb
-        # variant, so any other layout defaults to no variant.
+        # nodeadkeys only fits the at layout; other layouts get no variant.
         local default_kb_variant=""
         if [ "$NEW_KB_LAYOUT" = "$DEFAULT_KB_LAYOUT" ]; then
             default_kb_variant="$DEFAULT_KB_VARIANT"
@@ -1172,8 +1045,7 @@ prompt_new_host() {
     log_info "new host $HOST: user $NEW_USER, git $NEW_GIT_NAME <$NEW_GIT_EMAIL>, $NEW_PROFILE, $NEW_FORM_FACTOR, keyboard $NEW_KB_LAYOUT/${NEW_KB_VARIANT:-<none>}"
 }
 
-# Excludes zram, device-mapper, MD-RAID and loop devices by name, since
-# lsblk's own TYPE==disk filter below does not catch zram.
+# Excludes zram, device-mapper, MD-RAID and loop by name; lsblk's TYPE filter misses zram.
 is_excluded_disk_name() {
     case "$1" in
         zram* | dm-* | md* | loop*) return 0 ;;
@@ -1201,7 +1073,6 @@ choose_disk() {
         if is_excluded_disk_name "$base"; then
             continue
         fi
-        # Excludes the disk the live ISO itself booted from.
         if [ -n "$iso_disk" ] && [ "$base" = "$iso_disk" ]; then
             continue
         fi
@@ -1214,8 +1085,6 @@ choose_disk() {
     chosen=$(choose_one "Select the target disk. THIS WILL BE ERASED." "" "${candidates[@]}")
     DISK=$(printf '%s' "$chosen" | awk '{print $1}')
 
-    # Prefers a stable /dev/disk/by-id path, which survives disk
-    # reordering across reboots.
     local by_id="" candidate
     while IFS= read -r candidate; do
         case "$candidate" in
@@ -1237,7 +1106,6 @@ choose_disk() {
     fi
 }
 
-# Blocks $DISK values that could break out of patch_disko's sed expression.
 validate_disk_charset() {
     case "$DISK" in
         *[!A-Za-z0-9/_.:-]*)
@@ -1246,9 +1114,7 @@ validate_disk_charset() {
     esac
 }
 
-# The -b check guards against a non-block-device $DISK before anything
-# destructive runs. Warns instead of dying under --dry-run, for
-# placeholder paths like /dev/null in container tests.
+# Under --dry-run only warns, for placeholder paths like /dev/null in container tests.
 validate_disk_is_physical() {
     if [ -b "$DISK" ]; then
         :
@@ -1287,12 +1153,8 @@ confirm_wipe_target() {
     log_info "wipe confirmed for /dev/$kernel"
 }
 
-# Renders templates/host/ for $HOST into a staging dir, parse-checks every
-# file, then copies it into hosts/$HOST/ and registers $HOST's sops
-# placeholders. Runs only after the wipe is confirmed, so an abort before
-# then leaves the repo untouched. Until it finishes, on_exit's
-# rollback_scaffold removes hosts/$HOST/ and restores .sops.yaml. A later
-# failure leaves the host in place, and a rerun picks it from the menu.
+# Runs only after the wipe is confirmed, so an earlier abort leaves the repo untouched.
+# A later failure leaves the host in place; a rerun picks it from the menu.
 scaffold_host() {
     log_step "Scaffolding hosts/$HOST ($NEW_PROFILE, $NEW_FORM_FACTOR, user $NEW_USER)"
     require nix-instantiate awk
@@ -1306,21 +1168,11 @@ scaffold_host() {
     parse_check_nix_dir "$SCAFFOLD_STAGING"
     log_ok "rendered and parse-checked hosts/$HOST in $SCAFFOLD_STAGING"
     if $DRY_RUN; then
-        # Nothing below writes under --dry-run, so later steps read the
-        # staging copy instead (host_dir). No snapshot either: there is
-        # nothing for rollback_scaffold to ever restore.
         SCAFFOLD_PREVIEW_DIR="$SCAFFOLD_STAGING"
     else
-        # .sops.yaml must exist and be readable before anything else below
-        # is written: SCAFFOLD_PENDING only flips to true once the snapshot
-        # is safely on disk, so a missing/unreadable .sops.yaml dies here,
-        # rollback_scaffold sees SCAFFOLD_PENDING still false, and never
-        # fabricates an empty .sops.yaml where none existed.
+        # Check .sops.yaml is readable first so rollback never fabricates an empty one.
         [ -f "$REPO_ROOT/.sops.yaml" ] || die "$REPO_ROOT/.sops.yaml not found, cannot register sops placeholders for $HOST"
-        # Snapshot .sops.yaml's exact current content, uncommitted edits
-        # included, before register_sops_host mutates it. Lives in TMPDIR,
-        # never inside the repo or SCAFFOLD_STAGING (which lands in
-        # hosts/$HOST/ below, and must not carry this file along).
+        # Snapshot .sops.yaml (uncommitted edits included) in TMPDIR, outside SCAFFOLD_STAGING, which is copied to hosts/$HOST/.
         SCAFFOLD_SOPS_SNAPSHOT=$(mktemp "${TMPDIR:-/tmp}/krane-install-sops-snapshot.XXXXXX")
         cp -p "$REPO_ROOT/.sops.yaml" "$SCAFFOLD_SOPS_SNAPSHOT"
         SCAFFOLD_PENDING=true
@@ -1336,18 +1188,14 @@ scaffold_host() {
     fi
 }
 
-# grep -qF verifies the sed actually landed, factored out so --self-test
-# can exercise it for real against a throwaway copy.
 patch_disko_file() {
     local disko_file="$1" disk="$2"
     if grep -qF "device = \"$disk\";" "$disko_file"; then
         log_info "disko.nix already patched for $disk"
         return 0
     fi
-    # A committed disk that differs from the chosen one stays a hard stop: the
-    # by-id path in git is the only check on the disk choice that lives
-    # outside this prompt flow. Replacing a disk means recording the new one
-    # in git first, so the message says how.
+    # A committed disk that differs from the chosen one is a hard stop: the by-id path in git is the
+    # only disk-choice check outside this prompt flow. Record the new disk in git first.
     if ! grep -qF 'device = "/dev/CHANGE-ME";' "$disko_file"; then
         local committed
         committed=$(sed -n 's/^[[:space:]]*device = "\(.*\)";.*/\1/p' "$disko_file" | head -n 1)
@@ -1365,11 +1213,8 @@ patch_disko() {
     patch_disko_file "$(host_dir)/disko.nix" "$DISK"
 }
 
-# Reads the target host's login account from its evaluated krane.user.name.
-# Runs after patch_disko's `git add -A`, since a new host's files are
-# invisible to the flake until staged. Under --dry-run a new host was never
-# written or staged, so the prompted username stands in. The eval is
-# read-only, so it runs for real under --dry-run for an existing host.
+# Runs after patch_disko's `git add -A`: a new host's files are invisible to the flake until staged.
+# Under --dry-run a new host is never staged, so the prompted username stands in.
 resolve_install_user() {
     if $NEW_HOST_MODE && $DRY_RUN; then
         INSTALL_USER="$NEW_USER"
@@ -1396,7 +1241,7 @@ run_disko() {
     disko_script=$(capture_with_spin "Evaluating disko script for $HOST" \
         nix build --no-link --print-out-paths $(flake_config_opt) \
         "$REPO_ROOT#nixosConfigurations.$HOST.config.system.build.diskoScript")
-    # No spinner or extra tee here, both need to stream live output directly.
+    # No spinner or extra tee: output must stream live.
     run_sh "\"$disko_script\" 2>&1" || { LAST_CMD=""; die "disko run failed for $HOST, see $LOG"; }
 }
 
@@ -1405,10 +1250,8 @@ run_disko() {
 # max-jobs/cores pile on top of that on a live ISO with no swap.
 install_swap_needed() { [ "$1" -lt 25165824 ]; }
 
-# The live ISO keeps /tmp and ~/.cache/nix in RAM with no swap backing it, so
-# nixos-install's nix build can OOM on a low-RAM machine. /mnt exists by now.
-# Swap is an optimisation here, never abort the install over it: a failed
-# mkswapfile or swapon just warns and continues without one.
+# The live ISO has no swap backing RAM, so nixos-install's nix build can OOM on low-RAM machines.
+# Swap is best-effort: a failed mkswapfile or swapon warns and continues.
 setup_install_swap() {
     log_step "Checking RAM for an install swapfile"
     local mem_kb=""
@@ -1445,8 +1288,7 @@ generate_hardware_config() {
     fi
 }
 
-# lspci -D prints DDDD:bb:dd.f in hex. krane.prime.*BusId wants
-# PCI:bus:device:function in decimal, so this converts hex to decimal.
+# lspci -D prints hex DDDD:bb:dd.f; krane.prime.*BusId wants decimal PCI:bus:device:function.
 pci_addr_to_bus_id() {
     local addr="$1" bdf bus dev fn rest
     bdf="${addr#*:}"
@@ -1467,8 +1309,7 @@ patch_prime_line() {
     if ! grep -qE "^[[:space:]]*krane\.prime\.${key}[[:space:]]*=[[:space:]]*\"" "$file"; then
         die "$file has no krane.prime.${key} assignment to patch"
     fi
-    # Uses | as the sed delimiter, not #, since the replacement text
-    # itself contains a literal # in its trailing comment.
+    # | as sed delimiter: the replacement contains a literal #.
     run sed -i -E "s|(krane\.prime\.${key}[[:space:]]*=[[:space:]]*)\"[^\"]*\"[[:space:]]*;.*|\\1\"${value}\"; # set by install.sh|" "$file"
     if ! $DRY_RUN; then
         grep -qF "$target" "$file" || die "post-sed verification failed for $key in $file"
@@ -1489,11 +1330,9 @@ patch_prime() {
     fi
 
     local lspci_out intel_addr nvidia_addr
-    # || true, since a non-zero lspci exit here must fall through to
-    # soft_fail, not abort after the disk is already wiped.
+    # || true: a non-zero lspci must fall through to soft_fail.
     lspci_out=$(lspci -D) || true
-    # || true, since under set -o pipefail an empty grep match must not
-    # abort the script here.
+    # || true: an empty grep match must not abort under pipefail.
     intel_addr=$(printf '%s\n' "$lspci_out" | grep -i vga | grep -i intel | head -1 | awk '{print $1}' || true)
     nvidia_addr=$(printf '%s\n' "$lspci_out" | grep -iE '3d controller|vga' | grep -i nvidia | head -1 | awk '{print $1}' || true)
     if [ -z "$intel_addr" ] || [ -z "$nvidia_addr" ]; then
@@ -1511,10 +1350,8 @@ patch_prime() {
     patch_prime_line "$default_nix" "nvidiaBusId" "$nvidia_bus"
 }
 
-# Commits before nixos-install so the copied repo starts with a clean
-# history instead of the disko/PRIME patches left as a local diff. A new
-# host's files, its .sops.yaml placeholders and its hardware config land in
-# this one commit.
+# Commit before nixos-install so the copied repo starts clean; the new host's files, .sops.yaml
+# placeholders and hardware config land in this one commit.
 commit_hardware_config() {
     log_step "Committing local hardware config for $HOST"
     run git -C "$REPO_ROOT" add -A
@@ -1523,7 +1360,6 @@ commit_hardware_config() {
         return 0
     fi
     local id_args=()
-    # Commit identity is overridden only when none is configured.
     if [ -z "$(git -C "$REPO_ROOT" config user.email 2>/dev/null || true)" ]; then
         id_args=(-c "user.name=$INSTALL_USER" -c "user.email=$INSTALL_USER@localhost")
     fi
@@ -1590,8 +1426,7 @@ run_nixos_install() {
     run rm -rf /mnt/var/cache/installer
 }
 
-# Always runs for real outside --dry-run: --yes must never leave a fresh
-# install with no login. Retries a few times for a mistyped password.
+# Not skipped under --yes: a fresh install needs a login.
 set_user_password() {
     log_step "Set $INSTALL_USER's password on the new install"
 
@@ -1642,8 +1477,7 @@ finish_install() {
         "  2. ~/.dotfiles/install.sh --mode setup" \
         "  3. second switch, setup mode drives this"
 
-    # The new host's only copies are this live ISO's checkout, gone at
-    # reboot, and the one on the target disk.
+    # The live ISO checkout is lost at reboot; the only other copy is on the target disk.
     if $NEW_HOST_MODE; then
         gum style \
             --border double --border-foreground 226 --foreground 226 --bold \
@@ -1693,23 +1527,15 @@ preflight_setup() {
     fi
     require git just sops age ssh-to-age
     HOST="${HOST:-$(hostname)}"
-    # A die, not soft_fail: setup mode on a machine this flake never
-    # installed has no host config to bootstrap or switch to, and a new host
-    # can only be created from install mode.
+    # Setup mode needs an installed host config; new hosts are created only in install mode.
     host_known "$HOST" || die "host '$HOST' not in hosts/ — install it via install mode, or pass --host"
     if [ "$REPO_ROOT" != "$HOME/.dotfiles" ]; then
         log_warn "checked out at $REPO_ROOT, not \$HOME/.dotfiles. The docs assume the latter"
     fi
 }
 
-# True when $1 (a .sops.yaml path) still contains either of $2's unreplaced
-# bootstrap-sops.sh placeholder recipients: the SSH-host-derived key
-# (age1PLACEHOLDER_HOST_...) or the per-host personal/admin key
-# (age1PLACEHOLDER_ADMIN_...). Mirrors the placeholder shapes
-# scripts/bootstrap-sops.sh derives from HOST (see its HOST_PLACEHOLDER and
-# ADMIN_PLACEHOLDER). A missing .sops.yaml counts as "placeholder present"
-# too, i.e. not yet bootstrapped: bootstrap-sops.sh must still run, and hits
-# its own "not found" guard if it has nothing to work from.
+# True when $1 (.sops.yaml) still has either of $2's age1PLACEHOLDER_HOST_/ADMIN_ recipients
+# (see scripts/bootstrap-sops.sh), or is missing.
 sops_placeholder_present() {
     local sops_yaml="$1" host="$2" host_upper host_placeholder admin_placeholder
     [ -f "$sops_yaml" ] || return 0
@@ -1720,14 +1546,9 @@ sops_placeholder_present() {
         || grep -qF "$admin_placeholder" "$sops_yaml" 2>/dev/null
 }
 
-# Adds host $2's two age1PLACEHOLDER_* recipients to the sops config $1 as
-# the last `keys:` entries and appends a creation rule for secrets/$2.yaml:
-# the same shape the committed hosts had before scripts/bootstrap-sops.sh
-# replaced their placeholders, so setup mode's run_bootstrap_sops and
-# sops_placeholder_present work unchanged. No secrets/$2.yaml is created:
-# modules/nixos/common/sops.nix's pathExists gate handles its absence. A no-op when
-# either anchor already exists, matched whole so `tar` never hits
-# `&admin_taractias`.
+# Adds host $2's two age1PLACEHOLDER_* recipients to $1 as the last `keys:` entries plus a creation rule
+# for secrets/$2.yaml, the shape bootstrap-sops.sh expects. No-op when an anchor exists, matched whole so
+# `tar` never hits `&admin_taractias`.
 register_sops_host() {
     local sops_yaml="$1" host="$2" host_upper tmp
     [ -f "$sops_yaml" ] || die "$sops_yaml not found, cannot register sops placeholders for $host"
@@ -1739,9 +1560,7 @@ register_sops_host() {
         || die "$sops_yaml has no top-level creation_rules:, cannot place $host's recipients"
     host_upper=$(printf '%s' "$host" | tr '[:lower:]' '[:upper:]')
     tmp=$(mktemp "${TMPDIR:-/tmp}/krane-install-sops.XXXXXX")
-    # Blank lines are held back until the next non-blank line, so the new keys
-    # go right after the last keys: entry and the gap stays before
-    # creation_rules:.
+    # Blank lines are held until the next non-blank, so new keys land after the last keys: entry, before creation_rules:.
     awk -v host="$host" -v upper="$host_upper" '
         /^creation_rules:/ && !done {
             printf "  - &admin_%s age1PLACEHOLDER_ADMIN_%s_REPLACE_VIA_BOOTSTRAP_SOPS_SH\n", host, upper
@@ -1765,39 +1584,27 @@ register_sops_host() {
         rm -f "$tmp"
         die "post-awk verification failed for $host in $sops_yaml"
     fi
-    # cat into the original, not mv, so the file keeps its mode and owner.
+    # cat into the original, not mv, to keep its mode and owner.
     cat "$tmp" >"$sops_yaml"
     rm -f "$tmp"
 }
 
-# True when $2, in the worktree of the git repo at $1, has no uncommitted
-# change at all -- modified, untracked, staged, or deleted. Reads the
-# worktree/index via `git status --porcelain` so callers can decide whether
-# there is anything to commit BEFORE staging: `git add` only runs once the
-# user has confirmed the commit, so a declined confirm leaves nothing
-# staged. Works with no HEAD too (an unborn branch still reports an
-# untracked path via `??`), unlike an index-vs-HEAD diff.
+# True when $2 in repo $1 has no uncommitted change (modified, untracked, staged or deleted).
+# Checked before staging so a declined confirm stages nothing; works on an unborn branch.
 git_path_clean() {
     local repo="$1" path="$2"
     [ -z "$(git -C "$repo" status --porcelain -- "$path" 2>/dev/null)" ]
 }
 
-# Setup mode must be safely re-runnable: a prior run may have already
-# patched .sops.yaml and committed it, in which case bootstrap-sops.sh has
-# nothing left to do and `git commit` on a clean tree would exit 1 and
-# abort the rest of setup (edit_host_secrets, setup_rust, ...).
+# Re-runnable: a prior run may have committed the patched .sops.yaml, and `git commit` on a clean tree exits 1.
 run_bootstrap_sops() {
     log_step "Bootstrapping sops-nix recipients for $HOST"
     local key_file="${SOPS_AGE_KEY_FILE:-$HOME/.config/sops/age/keys.txt}"
     if sops_placeholder_present "$REPO_ROOT/.sops.yaml" "$HOST"; then
         run_sh "\"$REPO_ROOT/scripts/bootstrap-sops.sh\" \"$HOST\""
     elif [ -f "$key_file" ]; then
-        # Both placeholders are already replaced, so .sops.yaml should be
-        # carrying this host's real admin_$HOST recipient. Cross-check the
-        # local personal key against it: a mismatch usually means the key
-        # file was copied from another host or regenerated after
-        # .sops.yaml was bootstrapped, and secrets encrypted for the
-        # registered recipient would silently fail to decrypt with it.
+        # A mismatch with the registered admin_$HOST recipient usually means the key came from another host
+        # or was regenerated, so secrets would fail to decrypt.
         if command -v age-keygen >/dev/null 2>&1; then
             local local_pub registered_pub
             local_pub=$(age-keygen -y "$key_file" 2>/dev/null || true)
@@ -1819,12 +1626,8 @@ run_bootstrap_sops() {
             log_info "sops already bootstrapped for $HOST, skipping"
         fi
     else
-        # Both placeholders are gone but the personal key that decrypts
-        # existing secrets is missing. Re-running bootstrap-sops.sh here
-        # would generate a fresh personal key that never becomes a
-        # recipient (the admin placeholder is already replaced too),
-        # silently locking secrets out from under the new key. Fail loudly
-        # instead.
+        # Re-running bootstrap-sops.sh would generate a personal key that never becomes a recipient,
+        # locking secrets out. Fail instead.
         local host_upper
         host_upper=$(printf '%s' "$HOST" | tr '[:lower:]' '[:upper:]')
         local msg="sops already bootstrapped for $HOST but personal key $key_file is missing; restore it from your backup (see secrets/README.md) or re-add the age1PLACEHOLDER_ADMIN_${host_upper}_REPLACE_VIA_BOOTSTRAP_SOPS_SH placeholder to .sops.yaml and rerun"
@@ -1920,8 +1723,6 @@ check_flathub() {
     fi
 }
 
-# One entry per docs/VERIFY.md checklist item. Never dies, reports
-# OK/WARN/SKIP instead.
 verify_check() {
     local desc="$1"
     shift
@@ -1938,7 +1739,6 @@ verify_skip() {
 
 verify_checks() {
     log_step "VERIFY checklist (docs/VERIFY.md section 2)"
-    # SC2016: these bash -c strings expand $HOME inside the spawned bash, not here.
     # shellcheck disable=SC2016
     verify_check "keybinds.lua has the GENERATED header" \
         bash -c 'head -4 "$HOME/.config/hypr/custom/keybinds.lua" | grep -q "GENERATED FILE"'
@@ -1962,11 +1762,8 @@ verify_checks() {
     fi
 
     if command -v bootctl >/dev/null 2>&1; then
-        # bootctl list needs root: the ESP is mounted umask=0077 (hosts/*/disko.nix).
-        # Cache the credential first; sudo reads the password straight from
-        # /dev/tty, so it works despite the tee pipe on stdout/stderr. run_tty
-        # no-ops under --dry-run and fails fast with no tty, in which case the
-        # `sudo -n` below just WARNs instead of stalling the checklist.
+        # bootctl list needs root (ESP is umask=0077). Cache the credential first: sudo prompts on /dev/tty,
+        # so it works despite the tee pipe. With no tty `sudo -n` below WARNs instead of stalling.
         log_info "caching sudo credential for on-target checks"
         run_tty "sudo -v" || LAST_CMD=""
         verify_check "systemd-boot entries present" sudo -n bootctl list
@@ -2057,20 +1854,15 @@ main() {
     fi
 }
 
-# Self-test: a maintainer or CI hook, dispatched before main runs.
-
-# Spawns a separate bash "$0" so the real -E and ERR trap fire, unlike an
-# in-process subshell. self_test() greps its output for the failure box.
+# Spawns a separate bash "$0" so the real ERR trap fires.
 if $SELF_TEST_TRIGGER_ERR; then
     self_test_trigger_err_fn() { false; }
     self_test_trigger_err_fn
-    # Unreachable: false fails under set -e, this guards a silent regression.
+    # Unreachable unless the ERR trap regresses.
     echo "self-test-trigger-err: unreachable line ran, ERR trap did not abort the script" >&2
     exit 1
 fi
 
-# Each builds a throwaway fixture and runs the real (non-dry-run) sed and
-# verify helper against it, since a --dry-run test never exercises real sed.
 if $SELF_TEST_CHECK_DISKO_SED; then
     self_test_tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/krane-install-selftest.XXXXXX")
     trap 'rc=$?; rm -rf "$self_test_tmpdir"; (exit $rc); on_exit' EXIT
@@ -2096,9 +1888,6 @@ if $SELF_TEST_CHECK_PRIME_SED; then
     exit 0
 fi
 
-# Renders every GPU profile x form factor from templates/host/ into a
-# throwaway dir with the real (non-dry-run) helpers and parse-checks each
-# result, the same checks scaffold_host runs before it writes hosts/<name>/.
 if $SELF_TEST_CHECK_SCAFFOLD; then
     self_test_tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/krane-install-selftest.XXXXXX")
     trap 'rc=$?; rm -rf "$self_test_tmpdir"; (exit $rc); on_exit' EXIT
@@ -2157,10 +1946,8 @@ if $SELF_TEST_CHECK_SCAFFOLD; then
             fi
         done
     done
-    # A git name containing @ could be rewritten again by GIT_EMAIL's later sed
-    # expression (see render_host_templates), so it must be refused outright. Captured
-    # through $(...), a subshell, so render_host_templates's own die exits only that
-    # subshell and not this whole self-test.
+    # A git name with @ could be rewritten by GIT_EMAIL's sed expression (see render_host_templates), so it is
+    # refused. The $(...) subshell absorbs render_host_templates' die.
     st_dir="$self_test_tmpdir/refuse-at-in-git-name"
     st_out8=$(render_host_templates "$st_dir" testhost tester 'Bad@Name' tester@example.invalid \
         amd-igpu laptop at nodeadkeys 2>&1) && st_rc8=0 || st_rc8=$?
@@ -2169,8 +1956,6 @@ if $SELF_TEST_CHECK_SCAFFOLD; then
     fi
     printf '%s' "$st_out8" | grep -qF "contains '@'" \
         || die "render_host_templates refused the @ git name for the wrong reason: $st_out8"
-    # sed's / & \ and Nix's " \ ${ must land as the same string, not break
-    # the sed expression or the Nix string.
     st_dir="$self_test_tmpdir/escaping"
     # shellcheck disable=SC2016 # the literal ${x} is the point of this value.
     render_host_templates "$st_dir" testhost tester 'A/B & C\D "q" ${x}' 'a&b/c\d@example.invalid' \
@@ -2181,9 +1966,6 @@ if $SELF_TEST_CHECK_SCAFFOLD; then
         || die "git name with / & \\ \" \${ was not escaped for Nix and sed"
     grep -qF 'gitEmail = "a&b/c\\d@example.invalid";' "$st_dir/default.nix" \
         || die "git email with & / \\ was not escaped for Nix and sed"
-    # A non-"at" layout with an empty variant (prompt_new_host's default for
-    # e.g. "us") must still render a valid, empty Nix string, not a stray
-    # "()" or unterminated quote.
     st_dir="$self_test_tmpdir/empty-kb-variant"
     render_host_templates "$st_dir" testhost tester "Test Er" tester@example.invalid \
         amd-igpu laptop us ""
@@ -2192,9 +1974,6 @@ if $SELF_TEST_CHECK_SCAFFOLD; then
         || die "non-at keyboard layout did not render into krane.keyboard.layout"
     grep -qF 'variant = "";' "$st_dir/default.nix" \
         || die "empty keyboard variant did not render as variant = \"\";"
-    # .sops.yaml: the new anchors land as the last keys: entries, a second
-    # run is a no-op, and a host whose name prefixes an existing one (tar vs
-    # taractias) is still added.
     st_sops="$self_test_tmpdir/sops.yaml"
     cp "$REPO_ROOT/.sops.yaml" "$st_sops"
     register_sops_host "$st_sops" testhost
@@ -2226,11 +2005,8 @@ if $SELF_TEST_CHECK_SCAFFOLD; then
     exit 0
 fi
 
-# Scaffolds the --new-host flags' host for real (DRY_RUN=false) into this
-# checkout's hosts/ and .sops.yaml, patches its disko.nix with a fake disk,
-# then exits. For scripts/check-new-host.sh and self_test's rollback check,
-# which both run it from a throwaway copy of the repo. The env guard keeps
-# it from writing into a real checkout by accident.
+# Scaffolds the --new-host host for real into this checkout's hosts/ and .sops.yaml, patches disko.nix
+# with a fake disk, then exits. Used by check-new-host.sh and self_test from a throwaway repo copy.
 if $SELF_TEST_SCAFFOLD; then
     [ "${KRANE_ALLOW_SCAFFOLD_HOOK:-}" = 1 ] \
         || die "--self-test-scaffold writes hosts/ and .sops.yaml for real, it only runs with KRANE_ALLOW_SCAFFOLD_HOOK=1 from a throwaway copy of the repo"
@@ -2246,9 +2022,6 @@ if $SELF_TEST_SCAFFOLD; then
     exit 0
 fi
 
-# For self_test: runs validator $2 on each remaining argument and prints a
-# FAIL line for each one whose verdict is not $1 (valid or invalid).
-# Returns 1 if any verdict was wrong.
 self_test_validator() {
     local want="$1" validator="$2" value rc=0
     shift 2
@@ -2305,7 +2078,6 @@ self_test() {
     fi
 
     echo "== self-test: ERR trap fires inside a function ==" >&2
-    # A separate bash "$0" process, not a subshell, so the real ERR trap fires.
     local out rc2=0
     out=$(bash "$0" --self-test-trigger-err 2>&1) || rc2=$?
     if [ "$rc2" -ne 0 ] && printf '%s' "$out" | grep -q "false" \
@@ -2421,14 +2193,12 @@ self_test() {
         git add tracked.yaml
         git -c user.email=t@t -c user.name=t -c commit.gpgsign=false commit -q -m add
     )
-    # Committed, worktree matches HEAD, nothing staged: clean.
     if git_path_clean "$git_tmp" tracked.yaml; then
         echo "OK: a clean committed file reads as nothing to commit" >&2
     else
         echo "FAIL: a clean committed file did not read as clean" >&2
         clean_ok=false
     fi
-    # Modified in the worktree, not staged: dirty.
     echo modified >"$git_tmp/tracked.yaml"
     if ! git_path_clean "$git_tmp" tracked.yaml; then
         echo "OK: a modified, unstaged file reads as dirty" >&2
@@ -2437,7 +2207,6 @@ self_test() {
         clean_ok=false
     fi
     git -C "$git_tmp" checkout -q -- tracked.yaml
-    # Untracked, not staged: dirty.
     echo new >"$git_tmp/untracked.yaml"
     if ! git_path_clean "$git_tmp" untracked.yaml; then
         echo "OK: an untracked file reads as dirty" >&2
@@ -2445,7 +2214,6 @@ self_test() {
         echo "FAIL: an untracked file read as clean" >&2
         clean_ok=false
     fi
-    # Staged new file: dirty.
     git -C "$git_tmp" add -- untracked.yaml
     if ! git_path_clean "$git_tmp" untracked.yaml; then
         echo "OK: a staged new file reads as dirty" >&2
@@ -2454,14 +2222,8 @@ self_test() {
         clean_ok=false
     fi
     git -C "$git_tmp" -c user.email=t@t -c user.name=t -c commit.gpgsign=false commit -q -m add-untracked
-    # Staged deletion (`git rm --cached`) with the worktree copy left
-    # identical to HEAD: still dirty, because the index no longer matches
-    # HEAD -- `git status --porcelain` reports both the index-level D and
-    # an untracked ?? for the same path. A real run would then `git add`
-    # (restoring the index to match HEAD and the worktree) before
-    # committing; the caller re-checks `git diff --cached --quiet HEAD`
-    # after that `add` and, finding nothing staged, skips the commit
-    # instead of running it and hitting exit 1 "nothing to commit".
+    # Staged deletion with the worktree identical to HEAD is still dirty: the index no longer matches HEAD.
+    # A real run re-adds, finds nothing staged and skips the commit.
     git -C "$git_tmp" rm -q --cached tracked.yaml
     if ! git_path_clean "$git_tmp" tracked.yaml; then
         echo "OK: a staged deletion with worktree identical to HEAD reads as dirty" >&2
@@ -2470,8 +2232,6 @@ self_test() {
         clean_ok=false
     fi
     git -C "$git_tmp" add -- tracked.yaml
-    # No HEAD at all (unborn branch) with an untracked file: dirty, not an
-    # error -- `git status --porcelain` needs no HEAD to report `??`.
     local no_head_tmp
     no_head_tmp=$(mktemp -d "${TMPDIR:-/tmp}/krane-install-selftest-git-nohead.XXXXXX")
     (
@@ -2499,7 +2259,7 @@ self_test() {
     long32=$(printf 'u%.0s' {1..32})
     long33=$(printf 'u%.0s' {1..33})
     self_test_validator valid check_new_hostname newbox a b2 my-box "$long63" || vd_ok=false
-    # box- passes the bare regex but NixOS's networking.hostName rejects it.
+    # box- passes the bare regex but networking.hostName rejects it.
     self_test_validator invalid check_new_hostname "" 9box Box -box box- my_box my.box "my box" \
         tariognatha-vm "${AVAILABLE_HOSTS[@]}" "$long64" || vd_ok=false
     self_test_validator valid check_new_username krane alice _svc a-b a_b "$long32" || vd_ok=false
@@ -2583,8 +2343,6 @@ self_test() {
         suggest_profile
     )
     [ "$sp_got" = "intel-nvidia-prime laptop" ] || { echo "FAIL: Intel+NVIDIA laptop suggested '$sp_got'" >&2; sp_ok=false; }
-    # Desktop chassis with both GPUs: no battery to save by prime-switching,
-    # so this should suggest nvidia-desktop, not intel-nvidia-prime.
     sp_got=$(
         lspci() { printf '00:02.0 VGA compatible controller: Intel Corporation UHD\n01:00.0 3D controller: NVIDIA Corporation GA104\n'; }
         dmidecode() { [ "$2" = chassis-type ] && echo Desktop; }
@@ -2603,8 +2361,6 @@ self_test() {
         suggest_profile
     )
     [ "$sp_got" = "nvidia-desktop desktop" ] || { echo "FAIL: NVIDIA tower suggested '$sp_got'" >&2; sp_ok=false; }
-    # Unknown GPU, known chassis: the profile slot stays empty and laptop
-    # stays in the form-factor slot.
     sp_got=$(
         lspci() { :; }
         dmidecode() { [ "$2" = chassis-type ] && echo Notebook; }
@@ -2612,7 +2368,6 @@ self_test() {
     )
     [ "${sp_got%% *}" = "" ] && [ "${sp_got#* }" = laptop ] \
         || { echo "FAIL: unknown GPU on a notebook split as profile='${sp_got%% *}' form='${sp_got#* }'" >&2; sp_ok=false; }
-    # Both probes fail, as without dmidecode/lspci: no suggestion at all.
     sp_got=$(
         lspci() { return 1; }
         dmidecode() { return 1; }
@@ -2658,8 +2413,7 @@ EOF
     cp -r "$REPO_ROOT/templates" "$sb_tmp/templates"
     mkdir -p "$sb_tmp/hosts/taractias"
     cp "$REPO_ROOT/hosts/taractias/default.nix" "$sb_tmp/hosts/taractias/default.nix"
-    # No creation_rules: line, so register_sops_host dies after hosts/rbhost/
-    # has already been copied in: on_exit's rollback_scaffold must remove it.
+    # No creation_rules: line, so register_sops_host dies after hosts/rbhost/ is copied in; rollback_scaffold must remove it.
     printf 'keys:\n  - &admin_taractias age1PLACEHOLDER_ADMIN_TARACTIAS_REPLACE_VIA_BOOTSTRAP_SOPS_SH\n' >"$sb_tmp/.sops.yaml"
     (
         cd "$sb_tmp"
@@ -2692,15 +2446,12 @@ EOF
         echo "  captured output: $sb_out" >&2
         sb_ok=false
     fi
-    # cp -a preserves mktemp -d's 0700/0600 modes; scaffold_host must widen
-    # them back to the repo's normal 0755 dirs / 0644 files.
+    # cp -a keeps mktemp -d's 0700/0600 modes; scaffold_host widens them to 0755/0644.
     [ "$(stat -c%a "$sb_tmp/hosts/goodhost")" = 755 ] \
         || { echo "FAIL: hosts/goodhost is $(stat -c%a "$sb_tmp/hosts/goodhost"), expected 755" >&2; sb_ok=false; }
     [ "$(stat -c%a "$sb_tmp/hosts/goodhost/default.nix")" = 644 ] \
         || { echo "FAIL: hosts/goodhost/default.nix is $(stat -c%a "$sb_tmp/hosts/goodhost/default.nix"), expected 644" >&2; sb_ok=false; }
-    # A .sops.yaml missing entirely (not just missing creation_rules:) must
-    # die before SCAFFOLD_PENDING is ever set, so rollback never fabricates
-    # an empty .sops.yaml where none existed.
+    # A missing .sops.yaml must die before SCAFFOLD_PENDING is set, so rollback creates no empty one.
     rm -f "$sb_tmp/.sops.yaml"
     sb_rc=0
     sb_out=$(KRANE_ALLOW_SCAFFOLD_HOOK=1 bash "$sb_tmp/install.sh" --self-test-scaffold \
@@ -2740,13 +2491,10 @@ EOF
     rb_committed='keys:
   - &admin_taractias age1PLACEHOLDER_ADMIN_TARACTIAS_REPLACE_VIA_BOOTSTRAP_SOPS_SH
 '
-    # A pre-existing uncommitted edit, made before scaffold_host ever ran.
     rb_edited='keys:
   - &admin_taractias age1PLACEHOLDER_ADMIN_TARACTIAS_REPLACE_VIA_BOOTSTRAP_SOPS_SH
   - &uncommitted_local_edit age1UNCOMMITTED_LOCAL_EDIT_MUST_SURVIVE_ROLLBACK
 '
-    # register_sops_host's own mutation, applied after the snapshot: the
-    # thing rollback_scaffold must undo.
     rb_registered='keys:
   - &admin_taractias age1PLACEHOLDER_ADMIN_TARACTIAS_REPLACE_VIA_BOOTSTRAP_SOPS_SH
   - &uncommitted_local_edit age1UNCOMMITTED_LOCAL_EDIT_MUST_SURVIVE_ROLLBACK
@@ -2769,9 +2517,7 @@ EOF
     rollback_scaffold
     [ ! -e "$rb_tmp/hosts/rbhost" ] || { echo "FAIL: hosts/rbhost survived rollback_scaffold" >&2; rb_ok=false; }
     [ -e "$rb_tmp/hosts/taractias/default.nix" ] || { echo "FAIL: rollback_scaffold touched hosts/taractias" >&2; rb_ok=false; }
-    # Command substitution strips trailing newlines on every side of this
-    # comparison, so run the expected strings through it too rather than
-    # let a newline count mismatch masquerade as a content mismatch.
+    # Command substitution strips trailing newlines, so run the expected strings through it too.
     rb_got=$(command cat "$rb_tmp/.sops.yaml")
     if [ "$rb_got" != "$(printf '%s' "$rb_edited")" ]; then
         echo "FAIL: .sops.yaml after rollback_scaffold does not match the pre-registration snapshot" >&2
@@ -2810,11 +2556,8 @@ EOF
         SELF_TEST_FAILURES=$((SELF_TEST_FAILURES + 1))
     fi
 
-    # Distinct from check_new_hostname's own guard above: scaffold_host has
-    # its own separate "$dest already exists" check ($dest -e or -L), which
-    # is what actually protects a real scaffold. Exercised directly, with
-    # REPO_ROOT/HOST overridden only for this one command (so the die's
-    # exit 1 does not abort self_test, and neither global leaks outside it).
+    # scaffold_host's own "$dest already exists" check (-e or -L) protects a real scaffold.
+    # REPO_ROOT/HOST are overridden for this command only.
     echo "== self-test: scaffold_host refuses a dangling symlink at hosts/<name> ==" >&2
     local dg_ok=true dg_tmp dg_out dg_rc=0
     dg_tmp=$(mktemp -d "${TMPDIR:-/tmp}/krane-install-selftest-scaffold-symlink.XXXXXX")

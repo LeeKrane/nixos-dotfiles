@@ -1,21 +1,9 @@
 #!/usr/bin/env bash
-# Install ani-cli with the history sync wrapper (scripts/ani-cli-sync.sh) on an Android phone
-# running Termux, over SSH from a desktop host that has the ani-cli/curl-auth secret.
-# Rerun after changing ani-cli-sync.sh or the ani-cli pin in overlays/ani-cli.nix.
-#
-#   scripts/ani-cli-termux.sh <phone address> [ssh port, default 8022]
-#
-# Phone prerequisites: Termux from GitHub or F-Droid with `pkg install openssh` and `sshd`
-# running, this host's key in ~/.ssh/authorized_keys, and the mpv-android app (is.xyz.mpv),
-# which ani-cli starts for playback. Termux:Widget (same source as Termux) turns the
-# ~/.shortcuts entries this creates into home-screen icons; for launchers that can't use
-# those (Niagara), scripts/ani-cli-launcher.sh installs real app entries instead.
-#
-# Playback needs two one-time manual steps, or mpv opens without playing: mpv-android takes
-# no options from the intent, so ani-cli writes the stream's referrer to
-# /storage/emulated/0/mpv/mpv.config.mp4. Run `termux-setup-storage` so Termux can write it,
-# and add `include="/storage/emulated/0/mpv/mpv.config.mp4"` to mpv's mpv.conf (Settings >
-# Advanced > Edit mpv.conf) with mpv's Videos permission granted.
+# Usage: scripts/ani-cli-termux.sh <phone address> [ssh port, default 8022]
+# Phone: Termux with openssh and sshd running, this host's key in ~/.ssh/authorized_keys, and mpv-android (is.xyz.mpv).
+# Termux:Widget turns the ~/.shortcuts entries into home-screen icons; scripts/ani-cli-launcher.sh installs real app entries instead.
+# One-time for playback: run `termux-setup-storage`, then add `include="/storage/emulated/0/mpv/mpv.config.mp4"` to mpv.conf
+# (Settings > Advanced > Edit mpv.conf) with mpv's Videos permission granted; mpv-android takes no intent options, so ani-cli writes the referrer there.
 set -euo pipefail
 
 host="${1:?usage: $0 <phone address> [port]}"
@@ -31,7 +19,6 @@ auth=/run/secrets/ani-cli/curl-auth
 rev="$(grep -oP 'rev = "\K[0-9a-f]{40}' "$repo/overlays/ani-cli.nix")"
 upstream="https://raw.githubusercontent.com/pystardust/ani-cli/$rev/ani-cli"
 
-# The wrapper body expects ANI_CLI_REAL and ANI_SYNC_AUTH set first, as the Nix wrapper does.
 wrapper="$(
   printf '#!/data/data/com.termux/files/usr/bin/bash\nset -o errexit -o nounset -o pipefail\n'
   printf 'ANI_CLI_REAL=/data/data/com.termux/files/usr/libexec/ani-cli-real\n'

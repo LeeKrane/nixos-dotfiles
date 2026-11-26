@@ -1,32 +1,12 @@
 #!/usr/bin/env bash
-# Shrinks an assembled pull request body to stay under GitHub's 65536-character
-# pull request body limit. Used by .github/workflows/update.yml's pr job after
-# assembling the full body from scripts/update-summary.sh and
-# scripts/security-summary.sh. The workflow uploads the full, untruncated body
-# separately as the pr-body-full artifact before capping, so nothing is lost.
-#
-# Shrinks progressively, stopping as soon as the body fits under MAX_CHARS.
-# Each step replaces the content it drops with a one-line note pointing at the
-# run's artifacts:
-#   1. the raw `nix flake update` log block (the fenced code block inside the
-#      "Transitive inputs and raw ... log" <details>)
-#   2. the CVE "Fixed" table (security-summary.sh)
-#   3. the CVE "New" table (security-summary.sh)
-#
 # Usage: cap-pr-body.sh BODY_FILE RUN_URL [MAX_CHARS]
-#   BODY_FILE   assembled Markdown body; the (possibly capped) result is
-#               printed to stdout
-#   RUN_URL     workflow run URL, quoted in the note text
-#   MAX_CHARS   shrink while the body exceeds this many characters (default
-#               60000, leaving headroom under GitHub's 65536 limit)
-#
-# Self-test: cap-pr-body.sh --self-test
+# Shrinks BODY_FILE (printed to stdout) to MAX_CHARS (default 60000) to fit GitHub's 65536-char PR body limit;
+# self-test: cap-pr-body.sh --self-test
 set -euo pipefail
 
 MAX_DEFAULT=60000
 KEEP_ROWS=15
 
-# Replaces the first ``` ... ``` fenced block with a one-line note.
 strip_log() {
   awk '
     BEGIN { infence = 0; replaced = 0 }
@@ -44,10 +24,6 @@ strip_log() {
   '
 }
 
-# truncate_table HEADING KEEP URL: truncates the Markdown table that follows
-# a line equal to HEADING (a blank line, then a "| ... |" header row, a
-# separator row, then data rows until a blank line), keeping the first KEEP
-# data rows and replacing the rest with one note line.
 truncate_table() {
   awk -v heading="$1" -v keep="$2" -v url="$3" '
     function note(n) { printf("... %d more rows, see run artifacts: %s\n", n, url) }

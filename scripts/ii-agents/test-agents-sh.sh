@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-# Tests scripts/claude/agents.sh in a dots-hyprland checkout against a fake
-# `claude`. Usage: bash test-agents-sh.sh [<ii root>]   (default: the krane clone)
+# Usage: bash test-agents-sh.sh [<ii root>]   (default: the krane clone)
 set -euo pipefail
 ii=${1:-$HOME/src/dots-hyprland/dots/.config/quickshell/ii}
 script="$ii/scripts/claude/agents.sh"
 work=$(mktemp -d -p "${XDG_RUNTIME_DIR:-/tmp}")
 trap 'rm -rf "$work"' EXIT
 fail=0
-check() { # name, expected, actual
+check() {
     if [[ $2 == "$3" ]]; then echo "ok   $1"; else echo "FAIL $1: expected [$2], got [$3]"; fail=1; fi
 }
 

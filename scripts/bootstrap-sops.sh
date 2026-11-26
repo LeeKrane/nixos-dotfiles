@@ -1,20 +1,9 @@
 #!/usr/bin/env bash
-# Bootstraps sops-nix recipients for one host. Each host has its own
-# personal admin age key -- generated here and kept in
-# $PERSONAL_AGE_KEY_FILE, never shared with any other host -- plus a host
-# key derived from that host's own SSH host key. Both are patched into
-# .sops.yaml in place of the age1PLACEHOLDER_... placeholders. NEVER
-# writes a secret value, only PUBLIC age recipients.
-#
-# Usage: scripts/bootstrap-sops.sh <host>. Run this on the target host,
-# after first boot, as the admin user, not root. Idempotent, safe to run
-# again.
+# Usage: scripts/bootstrap-sops.sh <host>, on the target host after first boot, as the admin user, not root.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# hosts/ is the single source of truth: flake.nix discovers its hosts from
-# the same directories, as do install.sh and docker-check.sh's HOSTS.
 known_hosts() {
     (
         cd "$REPO_ROOT/hosts"
@@ -47,13 +36,10 @@ SOPS_YAML="$REPO_ROOT/.sops.yaml"
 HOST_SECRETS_FILE="$REPO_ROOT/secrets/$HOST.yaml"
 HOST_SSH_PUBKEY="/etc/ssh/ssh_host_ed25519_key.pub"
 
-# Placeholders take the form age1PLACEHOLDER_..., matched literally so a
-# real recipient already in place does not match again.
 HOST_UPPER=$(printf '%s' "$HOST" | tr '[:lower:]' '[:upper:]')
 HOST_PLACEHOLDER="age1PLACEHOLDER_HOST_${HOST_UPPER}_REPLACE_VIA_BOOTSTRAP_SOPS_SH"
 ADMIN_PLACEHOLDER="age1PLACEHOLDER_ADMIN_${HOST_UPPER}_REPLACE_VIA_BOOTSTRAP_SOPS_SH"
 
-# PERSONAL_AGE_KEY_FILE is sops' own SOPS_AGE_KEY_FILE default.
 PERSONAL_AGE_KEY_FILE="${SOPS_AGE_KEY_FILE:-$HOME/.config/sops/age/keys.txt}"
 
 if [ ! -f "$SOPS_YAML" ]; then
@@ -76,8 +62,6 @@ if ! command -v age-keygen >/dev/null 2>&1; then
     exit 1
 fi
 
-# Refuses root only when it would write a new personal key into /root's
-# home instead of the real admin account's.
 if [ "$(id -u)" -eq 0 ] && [ ! -f "$PERSONAL_AGE_KEY_FILE" ]; then
     echo "error: running as root would create a personal age key under root's home, $PERSONAL_AGE_KEY_FILE." >&2
     echo "       Re-run as this host's admin user, or set SOPS_AGE_KEY_FILE to an" >&2
@@ -85,11 +69,6 @@ if [ "$(id -u)" -eq 0 ] && [ ! -f "$PERSONAL_AGE_KEY_FILE" ]; then
     exit 1
 fi
 
-# If this host's admin placeholder is already gone from .sops.yaml, a
-# previous run of this script (or a by-hand edit) already patched in the
-# real recipient for '$HOST'. Don't blindly proceed as if bootstrapping
-# were still needed: verify the local personal key, if any, actually
-# matches what .sops.yaml already trusts for this host.
 if ! grep -qF "$ADMIN_PLACEHOLDER" "$SOPS_YAML"; then
     SOPS_ADMIN_LINE=$(grep -E "&admin_${HOST}[[:space:]]" "$SOPS_YAML" || true)
     if [ -z "$SOPS_ADMIN_LINE" ]; then
@@ -142,10 +121,7 @@ echo "    $HOST_AGE_KEY"
 if [ -f "$PERSONAL_AGE_KEY_FILE" ]; then
     echo "==> Personal age key already exists at $PERSONAL_AGE_KEY_FILE, not regenerating"
     if grep -qF "$ADMIN_PLACEHOLDER" "$SOPS_YAML"; then
-        # About to register this existing key as $HOST's admin_$HOST
-        # recipient below. Refuse if it's already registered as some
-        # OTHER host's personal key -- two hosts sharing one personal
-        # admin key defeats the point of per-host keys.
+        # Refuse a key already registered as another host's personal key.
         if [ -z "${LOCAL_ADMIN_KEY:-}" ]; then
             LOCAL_ADMIN_KEY=$(age-keygen -y "$PERSONAL_AGE_KEY_FILE" 2>/dev/null || true)
             if [ -z "$LOCAL_ADMIN_KEY" ]; then

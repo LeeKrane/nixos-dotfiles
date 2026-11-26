@@ -1,24 +1,7 @@
 #!/usr/bin/env bash
-# Renders the Markdown body pieces for the weekly flake-update pull request's
-# security report (.github/workflows/update.yml, `security` job): a CVE diff
-# between vulnix scans of each host's toplevel derivation before/after
-# `nix flake update`, and a count of local builds that are new since main,
-# per host, from `nix build --dry-run`. Prints Markdown to stdout. CVEs are
-# reported here only, never gating the PR or its title.
-#
 # Usage: security-summary.sh WORKDIR HOST...
-#   WORKDIR  directory holding, per HOST:
-#              vulnix-before-<host>.json  `vulnix -j` output, pre-update drv
-#              vulnix-after-<host>.json   `vulnix -j` output, post-update drv
-#              build-before-<host>.log    raw `nix build --dry-run` output,
-#                                         pre-update drv
-#              build-after-<host>.log     raw `nix build --dry-run` output,
-#                                         post-update drv
-#              build-before-<host>.failed  present if the pre-update dry-run
-#                                           itself failed (not just found
-#                                           builds)
-#              build-after-<host>.failed   same, post-update drv
-#   HOST...  one or more host names, in display order
+#   WORKDIR per HOST: vulnix-{before,after}-<host>.json, build-{before,after}-<host>.log (raw `nix build --dry-run`),
+#     build-{before,after}-<host>.failed (present if that dry-run itself failed)
 #   HOST_ROLES  optional env, {host: role} JSON for every flake host: collapses host lists
 set -euo pipefail
 LIB="$(dirname "$(readlink -f "$0")")/lib"
@@ -34,10 +17,7 @@ fi
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-# --- Flatten each host's vulnix run to one row per (cve, package, version) -
-# vulnix -j only lists derivations with at least one active (non-whitelisted)
-# CVE, each carrying affected_by (CVE ids) and cvssv3_basescore (CVE id ->
-# score; absent when NVD has no CVSSv3 score for it).
+# Flatten each host's vulnix run
 cat >"$WORK/flatten.jq" <<'JQ'
 [
   .[] as $d |
@@ -70,9 +50,8 @@ for host in "${HOSTS[@]}"; do
   done
 done
 
-# --- Diff: per host, which (cve, package) pairs are new/gone ---------------
-# Keyed on (host, cve, package), not version: a version bump that leaves the
-# same CVE unfixed on the same package must show as neither new nor fixed.
+# Diff
+# Keyed on (host, cve, package), not version: a version bump that leaves the same CVE unfixed must show as neither new nor fixed.
 cat >"$WORK/diff.jq" <<'JQ'
 include "collapse-hosts";
 def tkey: [.cve, .package];
@@ -96,13 +75,7 @@ def tkey: [.cve, .package];
     select((tkey) as $k | ($afterKeys | any(. == $k)) | not)
   ]
 ) as $fixedFlat |
-# $flat rows for the "new" side come from $after (the version on the host
-# today) and rows for the "fixed" side come from $before (the version that
-# carried the CVE before the update), so .version is already the right side
-# per caller; group it into one deduplicated, comma-joined string in case it
-# somehow differs across the hosts a group spans. With HOST_ROLES set, the
-# hosts are collapsed against the whole flake (scripts/lib/collapse-hosts.jq).
-# Without it, a group spanning every scanned host shows "all".
+# With HOST_ROLES, hosts collapse against the whole flake; without it, a group spanning every scanned host shows "all".
 def grouped($flat):
   $flat
   | group_by([.cve, .package])
@@ -164,10 +137,8 @@ if [ "$new_count" -gt 0 ] || [ "$fixed_count" -gt 0 ]; then
   echo
 fi
 
-# --- Local builds: new-vs-main cache misses per host ------------------------
-# Counting every package `nix build --dry-run` would build after the update
-# is mostly noise: most of it is already true on main. Instead diff the
-# before/after "will be built" name sets and show only what's new.
+# Local builds
+# Diff the before/after "will be built" sets and show only what is new: most of the dry-run is already true on main.
 names_in() {
   local log="$1"
   [ -f "$log" ] || return 0

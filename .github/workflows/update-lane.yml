@@ -22,12 +22,9 @@ jobs:
     permissions:
       contents: write
     outputs:
-      # Set only by the final step, after the update commit has been pushed. A failure
-      # anywhere earlier fails the job and this output stays unset, so check/security/pr
-      # never run against a half-done push (or last week's staging branch).
+      # Set only by the final step, after the update commit is pushed, so check/security/pr never run on a half-done push.
       changed: ${{ steps.push.outputs.changed }}
       sha: ${{ steps.push.outputs.sha }}
-      # JSON list of the hosts whose toplevel drvPath this update changed.
       hosts: ${{ steps.evals.outputs.hosts }}
       roles: ${{ steps.meta.outputs.roles }}
     env:
@@ -40,8 +37,6 @@ jobs:
       - name: Host roles and lane inputs
         id: meta
         run: |
-          # {host: role} for every host, the Pis included: drives the changed-host evals and
-          # the host-list collapsing in the PR body (scripts/lib/collapse-hosts.jq).
           nix eval --json '.#lib.hostMeta' --apply 'builtins.mapAttrs (n: v: v.role)' > "$RUNNER_TEMP/roles.json"
           echo "roles=$(command cat "$RUNNER_TEMP/roles.json")" >> "$GITHUB_OUTPUT"
           nix eval --json --impure --expr \
@@ -50,7 +45,6 @@ jobs:
           # Two steps, so a jq failure fails the step instead of passing an empty list on.
           inputs="$(jq -r --arg l "$LANE" '.[$l] | join(" ")' "$RUNNER_TEMP/lanes.json")"
           echo "inputs=$inputs" >> "$GITHUB_OUTPUT"
-          # The lane's strings (claude_code, title, commit, switch_host): one table for all jobs.
           scripts/update-lane-meta.sh "$LANE" >> "$GITHUB_OUTPUT"
       - name: Save old flake.lock
         run: cp flake.lock "$RUNNER_TEMP/flake.lock.old"
@@ -82,35 +76,26 @@ jobs:
           cp flake.lock "$RUNNER_TEMP/flake.lock.new"
           rm -rf "$RUNNER_TEMP/claude-code.new"
           cp -r pkgs/claude-code "$RUNNER_TEMP/claude-code.new"
-      # Evaluating drvs and package versions is not free (it forces most of the
-      # nixosConfigurations closure), so a week with no change skips it entirely.
       - name: Evaluate changed hosts and package versions
         id: evals
         if: steps.diff.outputs.haschanges == 'true'
         env:
           ROLES_JSON: ${{ steps.meta.outputs.roles }}
         run: |
-          # One eval per state: every host's toplevel drvPath plus its package versions.
           apply='cfgs: let hosts = builtins.attrNames (builtins.fromJSON (builtins.getEnv "ROLES_JSON")); in { drvs = import ./scripts/host-drvs.nix cfgs hosts; versions = import ./scripts/update-versions.nix cfgs hosts; warnings = import ./scripts/host-warnings.nix cfgs hosts; }'
           nix eval --json --impure '.#nixosConfigurations' --apply "$apply" > "$RUNNER_TEMP/eval-after.json"
-          # The update commit hasn't happened yet, so HEAD still holds the pre-update
-          # content. If pkgs/claude-code is new (untracked at HEAD), restore fails on it with
-          # "pathspec did not match" instead of deleting it: the step fails fail-safe,
-          # before anything is committed or pushed.
+          # HEAD still holds the pre-update content: if pkgs/claude-code is new, restore fails ("pathspec did not match") before anything is committed or pushed.
           git restore --source=HEAD --worktree -- flake.lock pkgs/claude-code
           nix eval --json --impure '.#nixosConfigurations' --apply "$apply" > "$RUNNER_TEMP/eval-before.json"
-          # Put the updated state back, so the commit captures it.
           rm -rf pkgs/claude-code
           cp "$RUNNER_TEMP/flake.lock.new" flake.lock
           cp -r "$RUNNER_TEMP/claude-code.new" pkgs/claude-code
           hosts="$(jq -cn --slurpfile a "$RUNNER_TEMP/eval-after.json" --slurpfile b "$RUNNER_TEMP/eval-before.json" \
             '$a[0].drvs as $A | $b[0].drvs as $B | [$A | keys[] | select($A[.] != $B[.])]')"
           echo "hosts=$hosts" >> "$GITHUB_OUTPUT"
-          # Eval warnings of the changed hosts, new vs already there before the update.
           jq -n -f scripts/lib/warnings-diff.jq --argjson hosts "$hosts" \
             --slurpfile a "$RUNNER_TEMP/eval-after.json" --slurpfile b "$RUNNER_TEMP/eval-before.json" \
             > "$RUNNER_TEMP/eval-warnings.json"
-          # The version table covers the changed hosts only.
           for state in before after; do
             jq --argjson hosts "$hosts" '.versions | with_entries(select(.key as $k | $hosts | index($k)))' \
               "$RUNNER_TEMP/eval-$state.json" > "$RUNNER_TEMP/versions-$state.json"
@@ -143,10 +128,7 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add flake.lock pkgs/claude-code
           git commit -m "$COMMIT"
-          # Pushed to a staging branch, not ci/flake-update-<lane> directly: the pr job moves
-          # the lane branch to this exact commit only after it has built the PR body, so the
-          # branch's head and its PR's body change together instead of a window where the
-          # branch already points at a new commit but the open PR still shows last week's body.
+          # Pushed to a staging branch: the pr job moves ci/flake-update-<lane> to this commit only after building the PR body, so the branch head and the PR body change together.
           git push --force origin "HEAD:refs/heads/ci/flake-update-$LANE-staging"
           echo "changed=true" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
@@ -154,8 +136,7 @@ jobs:
   check:
     needs: update
     if: needs.update.outputs.changed == 'true'
-    # A called workflow gets at most what its caller grants; check.yml's nvim job asks for
-    # pull-requests: read.
+    # A called workflow gets at most what its caller grants; check.yml's nvim job needs pull-requests: read.
     permissions:
       contents: read
       pull-requests: read
@@ -165,13 +146,9 @@ jobs:
       force-nvim: true
       force-server-pkgs: ${{ inputs.lane == 'servers' }}
 
-  # Report-only: a vulnix CVE diff and a local-build count per changed host, never gating
-  # the PR or its title. Skipped when the update changed no host's closure. The exact commit
-  # the update job pushed is main plus one commit, so its HEAD~1 is the pre-update base. This
-  # runs on a fresh runner, so the before/after .drv files from the update job's evals don't
-  # exist in its store (they're local build products, not fetched from a substituter) -- it
-  # has to instantiate both states itself, which is also why it still needs
-  # flake.lock/pkgs/claude-code checked out at HEAD~1 and HEAD in turn.
+  # Report-only, never gates the PR. HEAD~1 of the pushed commit is the pre-update base.
+  # A fresh runner's store lacks the update job's .drv files, so it instantiates both states itself
+  # (flake.lock and pkgs/claude-code at HEAD~1, then HEAD).
   security:
     needs: update
     if: needs.update.outputs.changed == 'true' && needs.update.outputs.hosts != '[]'
@@ -181,14 +158,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # The exact SHA the update job pushed, not the staging branch name.
+          # The pushed SHA, not the staging branch name.
           ref: ${{ needs.update.outputs.sha }}
           fetch-depth: 2
       - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
         with:
-          # The Pis' kernels, firmware and images come from nixos-raspberrypi's cache (the same
-          # substituter and key as modules/nixos/common/nix-settings.nix); without it every Pi
-          # kernel would count as a local build.
+          # Pi kernels, firmware and images come from nixos-raspberrypi's cache (as in modules/nixos/common/nix-settings.nix); without it they count as local builds.
           extra_nix_config: |
             extra-substituters = https://nixos-raspberrypi.cachix.org
             extra-trusted-public-keys = nixos-raspberrypi.cachix.org-1:4iMO9LXa8BqhU+Rpg6LQKiGa2lsNh/j2oiYLNOQ5sPI=
@@ -197,9 +172,7 @@ jobs:
           HOSTS_JSON: ${{ needs.update.outputs.hosts }}
         run: |
           apply='cfgs: import ./scripts/host-drvs.nix cfgs (builtins.fromJSON (builtins.getEnv "HOSTS_JSON"))'
-          # git restore --worktree is no-overlay: unlike `git checkout <ref> --
-          # <path>`, it deletes a path that exists in the worktree but not at
-          # <ref> (e.g. pkgs/claude-code, if this update added it).
+          # `git restore --worktree` deletes a path missing at <ref> (e.g. a newly added pkgs/claude-code); `git checkout <ref> -- <path>` would not.
           git restore --source=HEAD~1 --worktree -- flake.lock pkgs/claude-code
           nix eval --json --impure '.#nixosConfigurations' --apply "$apply" > "$RUNNER_TEMP/drvs-before.json"
           git restore --source=HEAD --worktree -- flake.lock pkgs/claude-code
@@ -220,10 +193,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/security"
           scan() {
-            # vulnix exits 0 (no CVEs), 1 (CVEs found but all whitelisted), or
-            # 2 (active CVEs found); all three are a completed scan, not a
-            # scan failure, so only a different nonzero code is fatal.
-            # --inputs-from . pins vulnix itself to the flake's nixpkgs.
+            # vulnix exits 0 (no CVEs), 1 (only whitelisted CVEs) or 2 (active CVEs): all completed scans; only other codes are fatal.
             set +e
             nix run --inputs-from . nixpkgs#vulnix -- --json "$1" > "$2"
             rc=$?
@@ -246,8 +216,7 @@ jobs:
           for host in "${HOSTS[@]}"; do
             before_drv="$(jq -r --arg h "$host" '.[$h]' "$RUNNER_TEMP/drvs-before.json")"
             after_drv="$(jq -r --arg h "$host" '.[$h]' "$RUNNER_TEMP/drvs-after.json")"
-            # Not `|| true`: a dry-run failure must be visible to the summary
-            # as "check failed" instead of silently counting as 0 builds.
+            # Not `|| true`: a dry-run failure must show as "check failed", not as 0 builds.
             if ! nix build --dry-run "${before_drv}^*" > "$RUNNER_TEMP/security/build-before-$host.log" 2>&1; then
               echo "dry-run before failed for $host" >&2
               : > "$RUNNER_TEMP/security/build-before-$host.failed"
@@ -271,13 +240,8 @@ jobs:
           path: ${{ runner.temp }}/security-summary.md
           retention-days: 7
           overwrite: true
-      # The dry-run logs are the only place a locally-built package's name
-      # still appears (scripts/security-summary.sh only counts them). This is
-      # the job's last step, so if: always() here guards against an earlier
-      # step failing (the dry-run check itself, say), not a later one:
-      # the logs still upload even when the job ends up failed overall.
-      # continue-on-error: true keeps an upload failure (no files matched,
-      # say) from being the thing that fails the job.
+      # The dry-run logs are the only place locally built package names appear. always() uploads them even if an earlier step failed;
+      # continue-on-error keeps an upload failure from failing the job.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         continue-on-error: true
@@ -299,7 +263,6 @@ jobs:
     env:
       LANE: ${{ inputs.lane }}
     steps:
-      # Needed for scripts/cap-pr-body.sh, scripts/lib and to push the branch-move below.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
@@ -340,8 +303,7 @@ jobs:
         env:
           SHA: ${{ needs.update.outputs.sha }}
         run: |
-          # The exact SHA the update job pushed, not whatever the staging branch happens to
-          # point at by the time this runs.
+          # The pushed SHA, not whatever the staging branch points at by then.
           git fetch --depth=1 origin "$SHA"
           git push --force origin "$SHA":"refs/heads/ci/flake-update-$LANE"
       - name: Create or update the pull request
@@ -350,9 +312,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
           TITLE: ${{ steps.build.outputs.title }}
         run: |
-          # The repo is public: `--head ci/flake-update-<lane>` alone would also match a fork
-          # PR from a same-named branch, so restrict to PRs whose head lives in this repo
-          # before treating them as "the" prior update PR.
+          # Public repo: `--head ci/flake-update-<lane>` alone also matches fork PRs from a same-named branch, so keep only PRs headed in this repo.
           number=$(gh pr list --head "ci/flake-update-$LANE" --base main --state open \
             --json number,isCrossRepository --jq '[.[] | select(.isCrossRepository | not)][0].number // empty')
           if [ -n "$number" ]; then

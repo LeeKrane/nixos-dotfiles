@@ -1,8 +1,5 @@
-# collapse_hosts($roles): an array of host names -> one display string for PR bodies
-# (docs/superpowers/specs/2026-11-23-update-lanes-design.md, "Host list collapsing").
-# $roles is {host: role} for EVERY host of the flake (lib.hostMeta), so "all" means the whole
-# flake, not the hosts a lane touched. A complete role group shows as its role plus "s"
-# ("servers", "desktops"); hosts outside a complete group follow by name, in input order.
+# collapse_hosts($roles): host names -> one display string for PR bodies. $roles is {host: role} for every flake host (lib.hostMeta),
+# so "all" means the whole flake. A complete role group shows as its role plus "s"; other hosts follow by name.
 def collapse_hosts($roles):
   . as $hs
   | ($roles | keys) as $all

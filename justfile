@@ -1,9 +1,5 @@
-# Common tasks for this flake. Recipes saying "in docker" route Nix through
-# the throwaway container in scripts/docker-check.sh, working with or
-# without local Nix installed. The rest (test, ci, diff, switch*, boot,
-# nvim, check-new-host) need local Nix, on the target host or a dev machine.
-# The docker container is capped by default, 6 CPUs, 14g memory, low CPU
-# shares. Override with env vars, for example:
+# "in docker" recipes run Nix in the throwaway container of scripts/docker-check.sh; the rest need local Nix.
+# Container defaults: 6 CPUs, 14g memory. Override with env vars, e.g.
 #   DOCKER_CPUS=12 DOCKER_MEMORY=28g NIX_MAX_JOBS=4 just docker-build tariognatha
 
 default: check
@@ -20,19 +16,19 @@ eval-host HOST:
 docker-build HOST:
     scripts/docker-check.sh build {{ HOST }}
 
-# Removes the nixstore docker volume, the only place this repo ever deletes it.
+# Removes the nixstore docker volume.
 docker-clean:
     docker volume rm nixstore
 
-# nix fmt, nixfmt-tree, over the whole tree, in docker.
+# nix fmt over the whole tree, in docker.
 fmt:
     scripts/docker-check.sh fmt
 
-# scripts/lint.sh (nixfmt, statix, deadnix, shellcheck, actionlint, secrets guard), all checks run, in docker.
+# scripts/lint.sh (nixfmt, statix, deadnix, shellcheck, actionlint, secrets guard), in docker.
 lint:
     scripts/docker-check.sh lint
 
-# Runs every scripts/tests/*-test.sh with CI's deps, all run and failures listed at the end, needs local Nix.
+# Runs every scripts/tests/*-test.sh with CI's deps and lists failures at the end, needs local Nix.
 test:
     #!/usr/bin/env bash
     set -u
@@ -47,11 +43,11 @@ ci:
 install-test:
     scripts/docker-check.sh install-test
 
-# Scaffolds a throwaway testhost for every GPU profile x form factor in a temporary git worktree of HEAD and evaluates each, needs local Nix, commit first.
+# Scaffolds a throwaway testhost per GPU profile x form factor in a temporary worktree of HEAD and evaluates each, needs local Nix, commit first.
 check-new-host:
     scripts/check-new-host.sh
 
-# Opens secrets/HOST.yaml in $EDITOR through sops, HOST defaults to this machine, a path (with /) opens that file, never in docker.
+# Opens secrets/HOST.yaml in $EDITOR through sops; HOST defaults to this machine, a path (with /) opens that file; not in docker.
 sops-edit HOST=`hostname`:
     sops {{ if HOST =~ '/' { HOST } else { "secrets/" + HOST + ".yaml" } }}
 
@@ -61,7 +57,7 @@ sops-edit HOST=`hostname`:
 nvim *ARGS:
     nix run "{{ justfile_directory() }}#nvim" -- "$@"
 
-# nix flake update, in docker, writes flake.lock back into the repo, review the diff before committing.
+# nix flake update in docker, writes flake.lock back into the repo.
 update:
     scripts/docker-check.sh update
 
@@ -69,15 +65,15 @@ update:
 update-claude VERSION="":
     scripts/update-claude-code.sh {{ VERSION }}
 
-# nix flake lock, in docker, only adds missing entries, never bumps pins.
+# nix flake lock in docker, only adds missing entries.
 lock:
     scripts/docker-check.sh lock
 
-# Applies this machine's configuration (picked by hostname) with a real nixos-rebuild, not docker. Use switch-remote for other hosts.
+# Applies this machine's configuration (by hostname) with nixos-rebuild; use switch-remote for other hosts.
 switch:
     sudo nixos-rebuild switch --flake .#$(hostname)
 
-# Switches HOST over ssh for servers and Pis outside auto-upgrade, e.g. the first switch, builds locally so aarch64 Pis need binfmt or a builder.
+# Switches HOST over ssh (servers and Pis outside auto-upgrade, e.g. the first switch); builds locally, so aarch64 Pis need binfmt or a builder.
 switch-remote HOST USER="krane":
     nixos-rebuild switch --flake .#{{ HOST }} --target-host {{ USER }}@{{ HOST }} --sudo --ask-sudo-password
 
@@ -106,6 +102,6 @@ diff HOST=`hostname`:
     nix build .#nixosConfigurations.{{ HOST }}.config.system.build.toplevel --out-link "$link"
     nix store diff-closures /run/current-system "$link"
 
-# Builds the tariognatha-vm QEMU/UEFI image in docker, llvmpipe only, proves wiring not real GPU or boot.
+# Builds the tariognatha-vm QEMU/UEFI image in docker (llvmpipe only: proves wiring, not real GPU or boot).
 vm:
     scripts/docker-check.sh vm

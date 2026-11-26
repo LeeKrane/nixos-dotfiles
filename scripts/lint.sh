@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
-# The lint checks, one source of truth for CI (.github/workflows/check.yml) and
-# the pre-push hook (.githooks/pre-push). Tools come from the flake's pinned
-# nixpkgs, like CI.
 set -euo pipefail
 
 cd "$(dirname "$(readlink -f "$0")")/.."
 nixsh() { nix shell --inputs-from . "$@"; }
 
-# Every check runs even after one fails, so one run reports all findings.
 failed=()
 step() {
     local name=$1

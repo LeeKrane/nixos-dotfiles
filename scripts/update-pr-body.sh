@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Writes the body of a weekly update lane's pull request (.github/workflows/update-lane.yml,
-# pr job) to BODY_FILE and prints its title.
 #   update-pr-body.sh BODY_FILE
 # Env:
 #   LANE              servers | desktops
@@ -28,15 +26,10 @@ case "$RESULT" in
     failure) gate='❌ failing' ;;
     *) gate="$RESULT" ;;
 esac
-# Servers this update changes, in either lane (desktop-lane bumps reach servers through
-# unstable.codegraph in modules/home/server). promote.yml moves deploy on any green main
-# commit, so merging upgrades exactly these.
+# Servers this update changes, in either lane: desktop-lane bumps reach servers through unstable.codegraph in modules/home/server, and promote.yml moves deploy on any green main commit.
 servers_hit="$(jq -rn -L "$SCRIPTS/lib" --argjson roles "$ROLES" --argjson hosts "$HOSTS" \
     'include "collapse-hosts"; [$hosts[] | select($roles[.] == "server")] | collapse_hosts($roles)')"
 
-# "Eval warnings" section from the WARNINGS file ({host: {new, existing}}, see
-# lib/warnings-diff.jq): new ones per host group, existing ones folded away. Empty when
-# WARNINGS is unset or lists nothing.
 warnings=''
 if [ -s "${WARNINGS:-}" ]; then
     warnings="$(jq -rn -L "$SCRIPTS/lib" --argjson roles "$ROLES" --slurpfile w "$WARNINGS" '
