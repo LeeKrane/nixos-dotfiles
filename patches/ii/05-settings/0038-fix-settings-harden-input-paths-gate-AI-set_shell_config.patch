@@ -59,7 +59,7 @@ index 54ea2dd1..288eebfd 100755
  
      subprocess.run(['hyprctl', 'dispatch', f'hl.dsp.focus({{workspace = {workspace}}})'])
 diff --git a/dots/.config/quickshell/ii/scripts/presets.sh b/dots/.config/quickshell/ii/scripts/presets.sh
-index f592f371..df98cd6a 100755
+index 0d6ac2a3..96b12d07 100755
 --- a/dots/.config/quickshell/ii/scripts/presets.sh
 +++ b/dots/.config/quickshell/ii/scripts/presets.sh
 @@ -193,7 +193,7 @@ else

@@ -11,7 +11,7 @@ Drop when: the pinned modules/ii/sidebarLeft/translator/TextCanvas.qml output ar
  1 file changed, 12 insertions(+), 7 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml
-index acfedd90..bc22bac4 100644
+index 7fdb5910..a2de7fff 100644
 --- a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml
 @@ -13,8 +13,7 @@ Rectangle {
@@ -28,8 +28,8 @@ index acfedd90..bc22bac4 100644
                      visible: !root.isInput
                      Layout.fillWidth: true
                      Layout.fillHeight: true
--                    sourceComponent: StyledText {
-+                    sourceComponent: StyledTextArea {
+-                    sourceComponent: StyledText { // Output area
++                    sourceComponent: StyledTextArea { // Output area
                          id: outputTextArea
 -                        padding: 15
 -                        wrapMode: Text.Wrap

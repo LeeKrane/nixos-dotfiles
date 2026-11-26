@@ -313,7 +313,7 @@ index 00000000..9eff5e18
 \ No newline at end of file
 diff --git a/dots/.config/quickshell/ii/scripts/presets.sh b/dots/.config/quickshell/ii/scripts/presets.sh
 new file mode 100755
-index 00000000..f592f371
+index 00000000..0d6ac2a3
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/scripts/presets.sh
 @@ -0,0 +1,294 @@
@@ -341,7 +341,7 @@ index 00000000..f592f371
 +# Preset and asset names reach paths and the restore script Hyprland runs at start (switchwall.sh); allow only plain file-name characters.
 +SAFE_NAME_RE='^[A-Za-z0-9._ -]+$'
 +
-+# Imported presets are filtered by allowlist: booleans and numbers survive; other strings and arrays only if their dotted key path is listed.
++# Imported presets are filtered by allowlist: booleans and numbers survive; other strings and arrays only if their path is listed here or is a rewritten image key (IMPORTED_KEPT_IMAGE_PATHS).
 +IMPORTED_ALLOWED_STRING_PATHS='[
 +  "panelFamily",
 +  "profile.displayName",
@@ -453,7 +453,7 @@ index 00000000..f592f371
 +    else
 +        python3 -c "import zipfile, sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$zip_path" "$tmpdir"
 +    fi
-+# A symlink could point outside $tmpdir.
++    # A symlink could point outside $tmpdir.
 +    if find "$tmpdir" -type l | grep -q .; then
 +        echo "Error: zip contains symlinks, refusing to import" >&2
 +        trap - EXIT
@@ -472,14 +472,14 @@ index 00000000..f592f371
 +        rm -rf "$tmpdir"
 +        exit 1
 +    fi
-+# Anchored to the json dir so flat and folder-wrapped zips both work.
++    # Anchored to the json dir so flat and folder-wrapped zips both work.
 +    json_dir=$(dirname "$json_file")
 +    asset_files=$(find "$json_dir" -maxdepth 1 -type f ! -name "*.json" ! -name "meta.json" -exec basename {} \; | jq -R . | jq -s .)
 +    safe_asset_files=$(echo "$asset_files" | jq --arg re "$SAFE_NAME_RE" '[.[] | select(test($re))]')
 +    asset_cache="$IMPORTED_PRESETS_DIR/assets/$base"
 +    mkdir -p "$asset_cache"
 +    find "$json_dir" -maxdepth 1 -type f ! -name "*.json" ! -name "meta.json" -exec cp -L {} "$asset_cache/" \; 2>/dev/null || true
-+# Rewrite only known image keys (not every string) so a preset can't point e.g. apps.terminal at an executable from the zip.
++    # Rewrite only known image keys (not every string) so a preset can't point e.g. apps.terminal at an executable from the zip.
 +    jq --arg dir "$asset_cache" --argjson files "$safe_asset_files" '
 +      def rewritten: if type == "string" then ((split("/") | last) as $b | if ($b != "." and $b != ".." and ($files | index($b))) then ($dir + "/" + $b) else null end) else null end;
 +      (if .background.wallpaperPath != null then (.background.wallpaperPath |= rewritten | if .background.wallpaperPath == null then del(.background.wallpaperPath) else . end) else . end)

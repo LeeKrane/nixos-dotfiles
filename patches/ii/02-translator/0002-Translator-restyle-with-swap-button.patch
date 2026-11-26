@@ -10,16 +10,16 @@ Port: hand-ported (squashed; dropped bar hunks and comment stripping; removed
   buttonColor shadow; per-pill hover tokens; added scrolling)
 Drop when: never (feature, not a fix); revisit if upstream restyles Translator.qml
 ---
- .../ii/modules/ii/sidebarLeft/Translator.qml  | 178 +++++++++++-------
+ .../ii/modules/ii/sidebarLeft/Translator.qml  | 179 +++++++++++-------
  .../translator/LanguageSelectorButton.qml     |   5 +-
  .../ii/sidebarLeft/translator/TextCanvas.qml  |  99 ++++++----
- 3 files changed, 176 insertions(+), 106 deletions(-)
+ 3 files changed, 177 insertions(+), 106 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
-index 994880eb..336ce136 100644
+index 994880eb..348b7b2f 100644
 --- a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
-@@ -39,6 +39,17 @@ Item {
+@@ -39,6 +39,18 @@ Item {
          root.showLanguageSelector = true
      }
  
@@ -28,6 +28,7 @@ index 994880eb..336ce136 100644
 +        root.targetLanguage = root.sourceLanguage;
 +        root.sourceLanguage = temp;
 +
++        // Save to config
 +        Config.options.language.translator.targetLanguage = root.targetLanguage;
 +        Config.options.language.translator.sourceLanguage = root.sourceLanguage;
 +
@@ -37,7 +38,7 @@ index 994880eb..336ce136 100644
      onFocusChanged: (focus) => {
          if (focus) {
              root.inputField.forceActiveFocus()
-@@ -105,82 +116,12 @@ Item {
+@@ -105,82 +117,12 @@ Item {
              fill: parent
              margins: root.padding
          }
@@ -122,7 +123,7 @@ index 994880eb..336ce136 100644
              placeholderText: Translation.tr("Enter text to translate...")
              onInputTextChanged: {
                  translateTimer.restart();
-@@ -217,6 +158,99 @@ Item {
+@@ -217,6 +159,99 @@ Item {
                  }
              }
          }
@@ -133,7 +134,7 @@ index 994880eb..336ce136 100644
 +
 +            Item { Layout.fillWidth: true }
 +
-+            LanguageSelectorButton {
++            LanguageSelectorButton { // Source language button
 +                id: sourceLanguageButton
 +                displayText: root.sourceLanguage
 +                colBackground: Appearance.colors.colSecondaryContainer
@@ -162,7 +163,7 @@ index 994880eb..336ce136 100644
 +                }
 +            }
 +
-+            LanguageSelectorButton {
++            LanguageSelectorButton { // Target language button
 +                id: targetLanguageButton
 +                displayText: root.targetLanguage
 +                colBackground: Appearance.colors.colPrimaryContainer
@@ -175,7 +176,7 @@ index 994880eb..336ce136 100644
 +            Item { Layout.fillWidth: true }
 +        }
 +
-+        TextCanvas {
++        TextCanvas { // Content translation
 +            id: outputCanvas
 +            isInput: false
 +            containerColor: ColorUtils.transparentize(Appearance.colors.colPrimaryContainer, 0.8)
@@ -240,7 +241,7 @@ index f23e3b84..c1c0e0f2 100644
      contentItem: Item {
          anchors.centerIn: parent
 diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml
-index ec6fbe26..acfedd90 100644
+index ec6fbe26..7fdb5910 100644
 --- a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/translator/TextCanvas.qml
 @@ -11,57 +11,92 @@ Rectangle {
@@ -331,7 +332,7 @@ index ec6fbe26..acfedd90 100644
 +                    visible: root.isInput
 +                    Layout.fillWidth: true
 +                    Layout.fillHeight: true
-+                    sourceComponent: StyledTextArea {
++                    sourceComponent: StyledTextArea { // Input area
 +                        id: inputTextArea
 +                        placeholderText: root.placeholderText
 +                        wrapMode: TextEdit.Wrap
@@ -351,7 +352,7 @@ index ec6fbe26..acfedd90 100644
 +                    visible: !root.isInput
 +                    Layout.fillWidth: true
 +                    Layout.fillHeight: true
-+                    sourceComponent: StyledText {
++                    sourceComponent: StyledText { // Output area
 +                        id: outputTextArea
 +                        padding: 15
 +                        wrapMode: Text.Wrap
