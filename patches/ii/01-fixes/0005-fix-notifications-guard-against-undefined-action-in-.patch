@@ -14,10 +14,10 @@ Drop when: the pinned services/Notifications.qml attemptInvokeAction checks the 
  1 file changed, 5 insertions(+), 1 deletion(-)
 
 diff --git a/dots/.config/quickshell/ii/services/Notifications.qml b/dots/.config/quickshell/ii/services/Notifications.qml
-index dad8ab64..f9cf1136 100644
+index 67b1a4c7..b04f7f87 100644
 --- a/dots/.config/quickshell/ii/services/Notifications.qml
 +++ b/dots/.config/quickshell/ii/services/Notifications.qml
-@@ -250,7 +250,11 @@ Singleton {
+@@ -247,7 +247,11 @@ Singleton {
              const notifServerNotif = notifServer.trackedNotifications.values[notifServerIndex];
              const action = notifServerNotif.actions.find((action) => action.identifier === notifIdentifier);
              // console.log("Action found: " + JSON.stringify(action));

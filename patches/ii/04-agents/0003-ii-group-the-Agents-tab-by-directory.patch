@@ -176,10 +176,10 @@ index e2533bf0..0daa8a74 100644
          root.headlessCount = result.headlessCount;
      }
 diff --git a/dots/.config/quickshell/ii/services/claude-agents.js b/dots/.config/quickshell/ii/services/claude-agents.js
-index 98f62449..59bcefa0 100644
+index b5880fee..a1887ba2 100644
 --- a/dots/.config/quickshell/ii/services/claude-agents.js
 +++ b/dots/.config/quickshell/ii/services/claude-agents.js
-@@ -65,7 +65,39 @@ function computeRowKey(e, index) {
+@@ -63,7 +63,39 @@ function computeRowKey(e, index) {
      return `${e?.kind ?? "?"}:${e?.pid ?? "?"}:${index}`;
  }
  
@@ -220,7 +220,7 @@ index 98f62449..59bcefa0 100644
      let headlessCount = 0;
      const sessions = [];
      const nameCounts = {};
-@@ -82,7 +114,23 @@ function annotate(entries, windows) {
+@@ -80,7 +112,23 @@ function annotate(entries, windows) {
          sessions.push(s);
      });
      sessions.sort((a, b) => rank(a) - rank(b) || activityMs(b) - activityMs(a));
@@ -245,7 +245,7 @@ index 98f62449..59bcefa0 100644
  }
  
  function classifyResult(exitCode, stdout, stderr, failuresSoFar) {
-@@ -106,11 +154,6 @@ function nextInterval(current, elapsedMs) {
+@@ -104,11 +152,6 @@ function nextInterval(current, elapsedMs) {
      return BASE_INTERVAL;
  }
  
@@ -257,7 +257,7 @@ index 98f62449..59bcefa0 100644
  function relativeTime(ms, nowMs) {
      const sec = Math.max(0, Math.floor((nowMs - ms) / 1000));
      if (sec < 60) return "just now";
-@@ -120,7 +163,7 @@ function relativeTime(ms, nowMs) {
+@@ -118,7 +161,7 @@ function relativeTime(ms, nowMs) {
  }
  
  function subtitle(session, nowMs) {

@@ -11,11 +11,11 @@ honours independently of Wayland surface state.
 
 Drop when Hyprland counts layer-surface inhibitors regardless of alpha.
 ---
- dots/.config/quickshell/ii/services/Idle.qml | 13 +++++++++++++
- 1 file changed, 13 insertions(+)
+ dots/.config/quickshell/ii/services/Idle.qml | 8 ++++++++
+ 1 file changed, 8 insertions(+)
 
 diff --git a/dots/.config/quickshell/ii/services/Idle.qml b/dots/.config/quickshell/ii/services/Idle.qml
-index eff8bcaf..9719582b 100644
+index a63431e6..e6f4808a 100644
 --- a/dots/.config/quickshell/ii/services/Idle.qml
 +++ b/dots/.config/quickshell/ii/services/Idle.qml
 @@ -2,6 +2,7 @@ pragma Singleton
@@ -26,15 +26,10 @@ index eff8bcaf..9719582b 100644
  import Quickshell.Wayland
  
  /**
-@@ -43,6 +44,18 @@ Singleton {
+@@ -39,6 +40,13 @@ Singleton {
          }
      }
  
-+    // Hyprland ignores a layer-surface inhibitor while the layer's alpha is
-+    // zero: during its fade-in and whenever a fullscreen window covers the
-+    // monitor. hypridle then locks anyway. Also hold a logind idle inhibitor
-+    // lock, which hypridle honours on its own. `cat` waits on stdin, so it
-+    // exits and frees the lock as soon as Quickshell stops the process or dies.
 +    Process {
 +        running: root.inhibit
 +        stdinEnabled: true

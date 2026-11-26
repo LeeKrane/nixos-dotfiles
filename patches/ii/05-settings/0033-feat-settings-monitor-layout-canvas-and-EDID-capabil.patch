@@ -12,8 +12,8 @@ Drop when: the Displays section is dropped.
 ---
  .../modules/common/widgets/MonitorCanvas.qml  | 144 ++++++++++++++
  .../ii/modules/common/widgets/MonitorRect.qml | 177 ++++++++++++++++++
- .../ii/scripts/hyprland/monitor_caps.py       | 168 +++++++++++++++++
- 3 files changed, 489 insertions(+)
+ .../ii/scripts/hyprland/monitor_caps.py       | 167 +++++++++++++++++
+ 3 files changed, 488 insertions(+)
  create mode 100644 dots/.config/quickshell/ii/modules/common/widgets/MonitorCanvas.qml
  create mode 100644 dots/.config/quickshell/ii/modules/common/widgets/MonitorRect.qml
  create mode 100755 dots/.config/quickshell/ii/scripts/hyprland/monitor_caps.py
@@ -355,10 +355,10 @@ index 00000000..087ff80c
 \ No newline at end of file
 diff --git a/dots/.config/quickshell/ii/scripts/hyprland/monitor_caps.py b/dots/.config/quickshell/ii/scripts/hyprland/monitor_caps.py
 new file mode 100755
-index 00000000..968a699d
+index 00000000..55c67341
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/scripts/hyprland/monitor_caps.py
-@@ -0,0 +1,168 @@
+@@ -0,0 +1,167 @@
 +#!/usr/bin/env -S\_/bin/sh\_-c\_"source\_\$(eval\_echo\_\$ILLOGICAL_IMPULSE_VIRTUAL_ENV)/bin/activate&&exec\_python\_-E\_"\$0"\_"\$@""
 +import argparse
 +import glob
@@ -379,7 +379,6 @@ index 00000000..968a699d
 +
 +
 +def find_edid_path(output_name):
-+    # st_size is always 0 for this sysfs attribute, so we can only check hat it exists. An empty read means disconnected.
 +    matches = glob.glob(f"/sys/class/drm/card*-{output_name}/edid")
 +    return matches[0] if matches else None
 +

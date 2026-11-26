@@ -62,7 +62,7 @@ index f516aefc..0ae56fa0 100644
      }
  
 diff --git a/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml b/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
-index 2b42aef8..5d5b6083 100644
+index 830b61af..9a3a1200 100644
 --- a/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
 +++ b/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
 @@ -38,6 +38,15 @@ ContentPage {

@@ -8,10 +8,10 @@ Port: new (no fork origin). services/ClaudeAgents.qml polls scripts/claude/agent
 Drop when: the pinned ii ships an equivalent agents tab, or `claude agents --json` is removed.
 ---
  .../quickshell/ii/modules/common/Config.qml   |   3 +
- .../quickshell/ii/scripts/claude/agents.sh    |  43 ++++++
+ .../quickshell/ii/scripts/claude/agents.sh    |  39 ++++++
  .../quickshell/ii/services/ClaudeAgents.qml   | 126 +++++++++++++++++
- .../quickshell/ii/services/claude-agents.js   | 132 ++++++++++++++++++
- 4 files changed, 304 insertions(+)
+ .../quickshell/ii/services/claude-agents.js   | 130 ++++++++++++++++++
+ 4 files changed, 298 insertions(+)
  create mode 100755 dots/.config/quickshell/ii/scripts/claude/agents.sh
  create mode 100644 dots/.config/quickshell/ii/services/ClaudeAgents.qml
  create mode 100644 dots/.config/quickshell/ii/services/claude-agents.js
@@ -32,15 +32,11 @@ index 30e87439..ac0851f3 100644
                      property string defaultProvider: "yandere"
 diff --git a/dots/.config/quickshell/ii/scripts/claude/agents.sh b/dots/.config/quickshell/ii/scripts/claude/agents.sh
 new file mode 100755
-index 00000000..a4000d53
+index 00000000..5537b0a2
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/scripts/claude/agents.sh
-@@ -0,0 +1,43 @@
+@@ -0,0 +1,39 @@
 +#!/usr/bin/env bash
-+# Prints `claude agents --json` as one JSON array, each entry unchanged plus:
-+#   ancestors     interactive sessions: pid chain from the session up to,
-+#                 not including, init; [] for background sessions, whose
-+#                 ancestry leads to the daemon supervisor, not a terminal
 +set -euo pipefail
 +
 +command -v claude >/dev/null 2>&1 || { echo "claude not found on PATH" >&2; exit 3; }
@@ -213,10 +209,10 @@ index 00000000..e2533bf0
 +}
 diff --git a/dots/.config/quickshell/ii/services/claude-agents.js b/dots/.config/quickshell/ii/services/claude-agents.js
 new file mode 100644
-index 00000000..98f62449
+index 00000000..b5880fee
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/services/claude-agents.js
-@@ -0,0 +1,132 @@
+@@ -0,0 +1,130 @@
 +const BASE_INTERVAL = 3000;
 +const MAX_INTERVAL = 15000;
 +const SLOW_RUN_MS = 1000;
@@ -224,8 +220,6 @@ index 00000000..98f62449
 +// agents.sh exits 3 when claude is not on PATH.
 +const MISSING_EXIT_CODE = 3;
 +
-+// Claude Code sets the terminal title to "<spinner> <session name>":
-+// ◐ ◑ ◒ ◓ while busy, ✳ otherwise. Braille frames are covered too.
 +function stripSpinner(title) {
 +    return String(title ?? "").replace(/^[◐-◓✳⠀-⣿]\s+/, "");
 +}

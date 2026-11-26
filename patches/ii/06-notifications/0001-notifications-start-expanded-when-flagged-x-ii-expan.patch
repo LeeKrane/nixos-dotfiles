@@ -22,7 +22,7 @@ index 4641b02e..8a7b7026 100644
      property real padding: 10
      implicitHeight: background.implicitHeight
 diff --git a/dots/.config/quickshell/ii/services/Notifications.qml b/dots/.config/quickshell/ii/services/Notifications.qml
-index f9cf1136..a51c0ded 100644
+index b04f7f87..7f09ad51 100644
 --- a/dots/.config/quickshell/ii/services/Notifications.qml
 +++ b/dots/.config/quickshell/ii/services/Notifications.qml
 @@ -26,6 +26,7 @@ Singleton {

@@ -13,10 +13,10 @@ Drop when: the pinned services/Notifications.qml cancelTimeout checks the timer 
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/dots/.config/quickshell/ii/services/Notifications.qml b/dots/.config/quickshell/ii/services/Notifications.qml
-index f2c451ab..dad8ab64 100644
+index e9cced58..67b1a4c7 100644
 --- a/dots/.config/quickshell/ii/services/Notifications.qml
 +++ b/dots/.config/quickshell/ii/services/Notifications.qml
-@@ -222,7 +222,7 @@ Singleton {
+@@ -219,7 +219,7 @@ Singleton {
  
      function cancelTimeout(id) {
          const index = root.list.findIndex((notif) => notif.notificationId === id);

@@ -9,20 +9,17 @@ Problem: re-applying border colors on every configreloaded would rewrite shellOv
 Port: krane-only
 Drop when: the pinned hyprconfigurator.py compares before writing.
 ---
- .../quickshell/ii/scripts/hyprland/hyprconfigurator.py      | 6 ++++++
- 1 file changed, 6 insertions(+)
+ .../.config/quickshell/ii/scripts/hyprland/hyprconfigurator.py | 3 +++
+ 1 file changed, 3 insertions(+)
 
 diff --git a/dots/.config/quickshell/ii/scripts/hyprland/hyprconfigurator.py b/dots/.config/quickshell/ii/scripts/hyprland/hyprconfigurator.py
-index 10bf4ea7..bf4528a6 100755
+index 10bf4ea7..7ca2125e 100755
 --- a/dots/.config/quickshell/ii/scripts/hyprland/hyprconfigurator.py
 +++ b/dots/.config/quickshell/ii/scripts/hyprland/hyprconfigurator.py
-@@ -85,6 +85,12 @@ def edit_hyprland_config(file_path, set_args, reset_args):
+@@ -85,6 +85,9 @@ def edit_hyprland_config(file_path, set_args, reset_args):
                      new_lines[-1] += '\n'
                  new_lines.append(generate_config_line(key, value))
                  
-+    # Unchanged content: skip the write. Hyprland reloads on every write to this
-+    # file, and the shell re-applies border colors on every reload, so writing
-+    # the same content again would loop.
 +    if os.path.exists(file_path) and "".join(new_lines) == "".join(lines):
 +        return
 +

@@ -16,10 +16,10 @@ depends on deleteButton.enabled.
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
-index e8d2c78a..11fc96f8 100644
+index 37297dc4..8e2ff3c8 100644
 --- a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
-@@ -181,7 +181,7 @@ Item {
+@@ -178,7 +178,7 @@ Item {
                      horizontalAlignment: Text.AlignHCenter
                      iconSize: Appearance.font.pixelSize.larger
                      text: "content_paste"

@@ -11,11 +11,11 @@ Problem: every raw Hyprland event ran all five hyprctl queries; dragging a windo
 Port: hand-ported. Dropped the fork's WM.compositor guards (no compositor abstraction at the pin). Added a configreloaded branch that refreshes monitors and workspaces; 204f22f itself only changes a fork-only settings component. Widened the fork's routing so workspace and activespecial events also refresh monitors, fullscreen refreshes workspaces, and openlayer/closelayer refresh layers, since consumers read those. Also refreshes clients on moveworkspace and monitor hotplug, and matches Hyprland's minimized event name. Coalesces events into at most one round of queries every 60ms (leading-edge throttle) rather than debouncing until the stream goes quiet, so a continuous stream of events (a drag, a spinner title) cannot starve refreshes indefinitely.
 Drop when: the pinned services/HyprlandData.qml throttles onRawEvent.
 ---
- .../quickshell/ii/services/HyprlandData.qml   | 101 +++++++++++++++---
- 1 file changed, 89 insertions(+), 12 deletions(-)
+ .../quickshell/ii/services/HyprlandData.qml   | 96 ++++++++++++++++---
+ 1 file changed, 84 insertions(+), 12 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/services/HyprlandData.qml b/dots/.config/quickshell/ii/services/HyprlandData.qml
-index 5dfedab6..d7ddb83c 100644
+index 5dfedab6..43cd4c12 100644
 --- a/dots/.config/quickshell/ii/services/HyprlandData.qml
 +++ b/dots/.config/quickshell/ii/services/HyprlandData.qml
 @@ -46,28 +46,71 @@ Singleton {
@@ -112,7 +112,7 @@ index 5dfedab6..d7ddb83c 100644
      }
  
      Connections {
-@@ -88,8 +135,38 @@ Singleton {
+@@ -88,8 +135,33 @@ Singleton {
  
          function onRawEvent(event) {
              // console.log("Hyprland raw event:", event.name);
@@ -135,17 +135,12 @@ index 5dfedab6..d7ddb83c 100644
 +            } else if (name === "fullscreen") {
 +                root.queueUpdate(true, true, false, false);
 +            } else if (name.startsWith("monitor")) {
-+                // monitoradded[v2]/monitorremoved[v2]: hotplug can also
-+                // reshuffle which clients report which monitor.
 +                root.queueUpdate(true, true, true, false);
 +            } else if (name === "focusedmon") {
 +                root.queueUpdate(false, true, true, false);
 +            } else if (name.startsWith("activespecial")) {
 +                root.queueUpdate(false, true, true, false);
 +            } else if (name === "configreloaded") {
-+                // A Hyprland config reload can add/remove monitors or change
-+                // their layout, which also reshuffles workspace-monitor
-+                // bindings.
 +                root.queueUpdate(false, true, true, false);
 +            } else {
 +                root.queueUpdate(true, true, false, false);

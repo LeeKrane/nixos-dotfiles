@@ -7,11 +7,11 @@ Problem: the swap button swapped only the languages, so the input kept the old s
 Port: new. Swap also moves the output into the input and the input into the output; while a translation is pending the swap waits for it (a second press cancels), and the swap button shows the queued state.
 Drop when: the pinned modules/ii/sidebarLeft/Translator.qml swap exchanges the texts.
 ---
- .../ii/modules/ii/sidebarLeft/Translator.qml  | 50 ++++++++++++++++++-
- 1 file changed, 48 insertions(+), 2 deletions(-)
+ .../ii/modules/ii/sidebarLeft/Translator.qml  | 47 ++++++++++++++++++-
+ 1 file changed, 45 insertions(+), 2 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
-index 348b7b2f..e8d2c78a 100644
+index 348b7b2f..37297dc4 100644
 --- a/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/sidebarLeft/Translator.qml
 @@ -33,6 +33,7 @@ Item {
@@ -78,7 +78,7 @@ index 348b7b2f..e8d2c78a 100644
              }
          }
      }
-@@ -80,14 +109,30 @@ Item {
+@@ -80,14 +109,27 @@ Item {
              + ` -target '${StringUtils.shellSingleQuoteEscape(root.targetLanguage)}'`
              + ` '${StringUtils.shellSingleQuoteEscape((root.inputField?.text ?? "").trim())}'`]
          property string buffer: ""
@@ -89,12 +89,9 @@ index 348b7b2f..e8d2c78a 100644
              }
          }
          onExited: (exitCode, exitStatus) => {
-+            // Quickshell clears `process` before emitting exited and only starts a
-+            // queued restart afterwards, so a !translateProc.running check here is
-+            // always true and cannot tell us anything new.
 +            if (translateProc.stale) {
 +                translateProc.stale = false;
-+                translateProc.buffer = ""; // SplitParser can still deliver the killed run's tail
++                translateProc.buffer = "";
 +                // The stale kill may be the empty-input branch, not a restart: resolve a pending swap too.
 +                if (root.swapPending && !translateTimer.running
 +                    && root.inputField.text.trim().length === 0) root.doSwap();
@@ -109,7 +106,7 @@ index 348b7b2f..e8d2c78a 100644
          }
      }
  
-@@ -180,6 +225,7 @@ Item {
+@@ -180,6 +222,7 @@ Item {
                  id: swapButton
                  implicitHeight: contentItem.implicitHeight + verticalPadding * 2
                  Layout.preferredWidth: height
@@ -117,7 +114,7 @@ index 348b7b2f..e8d2c78a 100644
                  colBackground: Appearance.colors.colTertiaryContainer
                  colBackgroundHover: Appearance.colors.colTertiaryContainerHover
                  buttonRadius: Appearance.rounding.full
-@@ -188,7 +234,7 @@ Item {
+@@ -188,7 +231,7 @@ Item {
                      horizontalAlignment: Text.AlignHCenter
                      iconSize: Appearance.font.pixelSize.larger
                      text: "autorenew"

@@ -11,21 +11,17 @@ inhibitor once, 3 s after start.
 
 Drop when Hyprland rechecks idle inhibitors on layer surface map.
 ---
- dots/.config/quickshell/ii/services/Idle.qml | 14 ++++++++++++++
- 1 file changed, 14 insertions(+)
+ dots/.config/quickshell/ii/services/Idle.qml | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
 
 diff --git a/dots/.config/quickshell/ii/services/Idle.qml b/dots/.config/quickshell/ii/services/Idle.qml
-index 22f059ec..eff8bcaf 100644
+index 22f059ec..a63431e6 100644
 --- a/dots/.config/quickshell/ii/services/Idle.qml
 +++ b/dots/.config/quickshell/ii/services/Idle.qml
-@@ -29,6 +29,20 @@ Singleton {
+@@ -29,6 +29,16 @@ Singleton {
          Persistent.states.idle.inhibit = root.inhibit;
      }
  
-+    // At startup the inhibitor is created before its layer surface is mapped.
-+    // Hyprland then counts it as not visible and only rechecks on window or
-+    // focus events, so idle can stay uninhibited. Recreate it once the surface
-+    // is mapped.
 +    Timer {
 +        running: true
 +        interval: 3000

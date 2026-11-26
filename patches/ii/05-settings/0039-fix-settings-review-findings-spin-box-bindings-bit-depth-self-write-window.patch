@@ -6,24 +6,20 @@ Subject: [PATCH] fix(settings): review findings: spin box keeps value
  when the command ends, idle spin box capped at 86400 s
 
 ---
- .../modules/common/widgets/StyledSpinBox.qml  | 42 ++++++++-----------
+ .../modules/common/widgets/StyledSpinBox.qml  | 38 +++++++------------
  .../ii/modules/settings/HyprlandConfig.qml    |  8 ++--
- .../quickshell/ii/services/KraneSettings.qml  | 12 ++++--
- 3 files changed, 29 insertions(+), 33 deletions(-)
+ .../quickshell/ii/services/KraneSettings.qml  | 10 +++--
+ 3 files changed, 23 insertions(+), 33 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/common/widgets/StyledSpinBox.qml b/dots/.config/quickshell/ii/modules/common/widgets/StyledSpinBox.qml
-index 0ae56fa0..d2eadf60 100644
+index 0ae56fa0..b7db23aa 100644
 --- a/dots/.config/quickshell/ii/modules/common/widgets/StyledSpinBox.qml
 +++ b/dots/.config/quickshell/ii/modules/common/widgets/StyledSpinBox.qml
-@@ -21,32 +21,24 @@ SpinBox {
+@@ -21,32 +21,20 @@ SpinBox {
          radius: root.radius
      }
  
 -    contentItem: Item {
-+    // The TextInput is the contentItem itself, so Qt's own commit path applies a
-+    // typed value on Enter / focus-out (valueFromText, then valueModified()) without
-+    // an imperative `root.value = ...`, which would break any `value:` binding a
-+    // user of this control (ConfigSpinBox alias) sets.
 +    contentItem: StyledTextInput {
          implicitHeight: root.baseHeight
 -        implicitWidth: Math.max(labelText.implicitWidth, 40)
@@ -53,7 +49,7 @@ index 0ae56fa0..d2eadf60 100644
 +        implicitWidth: Math.max(contentWidth, 40)
 +        horizontalAlignment: TextInput.AlignHCenter
 +        verticalAlignment: TextInput.AlignVCenter
-+        text: root.value // displayText would make the numbers weird like 1,000 instead of 1000
++        text: root.value
 +        color: Appearance.colors.colOnLayer2
 +        font.family: Appearance.font.family.numbers
 +        font.variableAxes: Appearance.font.variableAxes.numbers
@@ -66,7 +62,7 @@ index 0ae56fa0..d2eadf60 100644
  
      down.indicator: Rectangle {
 diff --git a/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml b/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
-index d5258c61..f052ab2b 100644
+index a2bc47ab..436ad82a 100644
 --- a/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
 +++ b/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
 @@ -235,8 +235,7 @@ ContentPage {
@@ -106,7 +102,7 @@ index d5258c61..f052ab2b 100644
                          onValueModified: {
                              if (!timerRow.loaded) return
 diff --git a/dots/.config/quickshell/ii/services/KraneSettings.qml b/dots/.config/quickshell/ii/services/KraneSettings.qml
-index 9f648251..95f6776a 100644
+index 9f648251..e3f497e0 100644
 --- a/dots/.config/quickshell/ii/services/KraneSettings.qml
 +++ b/dots/.config/quickshell/ii/services/KraneSettings.qml
 @@ -85,7 +85,6 @@ Singleton {
@@ -117,17 +113,15 @@ index 9f648251..95f6776a 100644
          runProc.busy = true;
          runProc.exitedFlag = false;
          runProc.stderrDone = false;
-@@ -96,6 +95,9 @@ Singleton {
+@@ -96,6 +95,7 @@ Singleton {
  
      function _finish(code, errText) {
          runProc.busy = false;
-+        // The window opens when the command ends (file watcher events lag a
-+        // little); while it runs, every repo write is ours.
 +        root._selfWriteUntil = Date.now() + 3000;
          root.lastError = code === 0 ? "" : (errText.trim() || Translation.tr("krane-ii-settings failed (exit %1)").arg(code));
          root.refresh();
          Qt.callLater(root._next);
-@@ -139,7 +141,11 @@ Singleton {
+@@ -139,7 +139,11 @@ Singleton {
          stdout: StdioCollector {
              onStreamFinished: {
                  try {
@@ -140,7 +134,7 @@ index 9f648251..95f6776a 100644
                      root.available = true;
                  } catch (e) {
                      root.available = false;
-@@ -159,7 +165,7 @@ Singleton {
+@@ -159,7 +163,7 @@ Singleton {
          watchChanges: true
          printErrors: false
          onFileChanged: {

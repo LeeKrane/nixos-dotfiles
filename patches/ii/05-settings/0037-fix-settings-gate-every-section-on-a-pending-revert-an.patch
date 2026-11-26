@@ -60,7 +60,7 @@ index 3efcb71f..f4188a59 100644
                      root.loaded = true;
                      return;
 diff --git a/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml b/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
-index 5d5b6083..d5258c61 100644
+index 9a3a1200..a2bc47ab 100644
 --- a/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
 +++ b/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
 @@ -43,6 +43,8 @@ ContentPage {
@@ -335,7 +335,7 @@ index 5d5b6083..d5258c61 100644
                              if (!timerRow.loaded) return
                              timerRow.displayValue = value
                              timerRow.edited(value * timerRow.displayUnit)
-@@ -682,16 +689,17 @@ ContentPage {
+@@ -679,16 +686,17 @@ ContentPage {
              icon: "deblur"
              shape: MaterialShape.Shape.PixelCircle
              title: Translation.tr("Visual & Aesthetics")
@@ -356,7 +356,7 @@ index 5d5b6083..d5258c61 100644
                          if (optRounding.fetching || !optRounding.loaded || value === optRounding.number) return
                          optRounding.setValue(value)
                      }
-@@ -700,8 +708,8 @@ ContentPage {
+@@ -697,8 +705,8 @@ ContentPage {
                  ConfigSwitch {
                      HyprlandConfigOption { id: optBlur; key: "decoration:blur:enabled" }
                      buttonIcon: "blur_on"
@@ -367,7 +367,7 @@ index 5d5b6083..d5258c61 100644
                      checked: optBlur.boolean
                      onCheckedChanged: {
                          if (optBlur.fetching || !optBlur.loaded || checked === optBlur.boolean) return
-@@ -712,11 +720,11 @@ ContentPage {
+@@ -709,11 +717,11 @@ ContentPage {
                  ConfigSpinBox {
                      HyprlandConfigOption { id: optBlurSize; key: "decoration:blur:size" }
                      icon: "blur_circular"
@@ -382,7 +382,7 @@ index 5d5b6083..d5258c61 100644
                          if (optBlurSize.fetching || !optBlurSize.loaded || value === optBlurSize.number) return
                          optBlurSize.setValue(value)
                      }
-@@ -725,11 +733,11 @@ ContentPage {
+@@ -722,11 +730,11 @@ ContentPage {
                  ConfigSpinBox {
                      HyprlandConfigOption { id: optBlurPasses; key: "decoration:blur:passes" }
                      icon: "layers"
@@ -397,7 +397,7 @@ index 5d5b6083..d5258c61 100644
                          if (optBlurPasses.fetching || !optBlurPasses.loaded || value === optBlurPasses.number) return
                          optBlurPasses.setValue(value)
                      }
-@@ -738,11 +746,11 @@ ContentPage {
+@@ -735,11 +743,11 @@ ContentPage {
                  ConfigSpinBox {
                      HyprlandConfigOption { id: optGapsIn; key: "general:gaps_in" }
                      icon: "margin"
@@ -412,7 +412,7 @@ index 5d5b6083..d5258c61 100644
                          if (optGapsIn.fetching || !optGapsIn.loaded || value === optGapsIn.number) return
                          optGapsIn.setValue(value)
                      }
-@@ -751,11 +759,11 @@ ContentPage {
+@@ -748,11 +756,11 @@ ContentPage {
                  ConfigSpinBox {
                      HyprlandConfigOption { id: optGapsOut; key: "general:gaps_out" }
                      icon: "open_in_full"
@@ -427,7 +427,7 @@ index 5d5b6083..d5258c61 100644
                          if (optGapsOut.fetching || !optGapsOut.loaded || value === optGapsOut.number) return
                          optGapsOut.setValue(value)
                      }
-@@ -764,11 +772,11 @@ ContentPage {
+@@ -761,11 +769,11 @@ ContentPage {
                  ConfigSpinBox {
                      HyprlandConfigOption { id: optActiveOpacity; key: "decoration:active_opacity" }
                      icon: "opacity"
@@ -442,7 +442,7 @@ index 5d5b6083..d5258c61 100644
                          if (optActiveOpacity.fetching || !optActiveOpacity.loaded || value === Math.round(optActiveOpacity.number * 100)) return
                          optActiveOpacity.setValue(value / 100)
                      }
-@@ -777,11 +785,11 @@ ContentPage {
+@@ -774,11 +782,11 @@ ContentPage {
                  ConfigSpinBox {
                      HyprlandConfigOption { id: optInactiveOpacity; key: "decoration:inactive_opacity" }
                      icon: "opacity"
@@ -457,7 +457,7 @@ index 5d5b6083..d5258c61 100644
                          if (optInactiveOpacity.fetching || !optInactiveOpacity.loaded || value === Math.round(optInactiveOpacity.number * 100)) return
                          optInactiveOpacity.setValue(value / 100)
                      }
-@@ -789,11 +797,11 @@ ContentPage {
+@@ -786,11 +794,11 @@ ContentPage {
                  ConfigSpinBox {
                      HyprlandConfigOption { id: optBorderSize; key: "general:border_size" }
                      icon: "border_outer"
@@ -472,7 +472,7 @@ index 5d5b6083..d5258c61 100644
                          if (optBorderSize.fetching || !optBorderSize.loaded || value === optBorderSize.number) return
                          optBorderSize.setValue(value)
                      }
-@@ -836,7 +844,7 @@ ContentPage {
+@@ -833,7 +841,7 @@ ContentPage {
                          text: Translation.tr("Active border opacity")
                          value: Math.round(Config.options.hyprland.general.borderColor.activeOpacity * 100)
                          from: 0; to: 100; stepSize: 5
@@ -481,7 +481,7 @@ index 5d5b6083..d5258c61 100644
                              if (value === Math.round(Config.options.hyprland.general.borderColor.activeOpacity * 100)) return
                              Config.options.hyprland.general.borderColor.activeOpacity = value / 100.0
                              HyprlandConfig.applyBorderColors()
-@@ -859,7 +867,7 @@ ContentPage {
+@@ -856,7 +864,7 @@ ContentPage {
                          text: Translation.tr("Inactive border opacity")
                          value: Math.round(Config.options.hyprland.general.borderColor.inactiveOpacity * 100)
                          from: 0; to: 100; stepSize: 5
@@ -490,7 +490,7 @@ index 5d5b6083..d5258c61 100644
                              if (value === Math.round(Config.options.hyprland.general.borderColor.inactiveOpacity * 100)) return
                              Config.options.hyprland.general.borderColor.inactiveOpacity = value / 100.0
                              HyprlandConfig.applyBorderColors()
-@@ -874,6 +882,7 @@ ContentPage {
+@@ -871,6 +879,7 @@ ContentPage {
              icon: "app_registration"
              shape: MaterialShape.Shape.Sunny
              title: Translation.tr("Autostart Apps")
@@ -498,7 +498,7 @@ index 5d5b6083..d5258c61 100644
              Layout.fillWidth: true
  
              AutostartApps {}
-@@ -884,12 +893,13 @@ ContentPage {
+@@ -881,12 +890,13 @@ ContentPage {
              icon: "animation"
              shape: MaterialShape.Shape.Oval
              title: Translation.tr("Animations")

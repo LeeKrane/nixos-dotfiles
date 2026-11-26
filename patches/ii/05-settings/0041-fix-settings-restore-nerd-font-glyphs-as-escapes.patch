@@ -9,7 +9,7 @@ Subject: [PATCH] fix(settings): restore Nerd Font glyphs as ASCII escapes
  2 files changed, 3 insertions(+), 3 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/settings/GeneralConfig.qml b/dots/.config/quickshell/ii/modules/settings/GeneralConfig.qml
-index c5b422b7..ace088b9 100644
+index 3a350e6a..f557d7b5 100644
 --- a/dots/.config/quickshell/ii/modules/settings/GeneralConfig.qml
 +++ b/dots/.config/quickshell/ii/modules/settings/GeneralConfig.qml
 @@ -349,7 +349,7 @@ ContentPage {

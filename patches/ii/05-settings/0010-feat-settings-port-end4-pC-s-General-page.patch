@@ -13,7 +13,7 @@ Drop when: upstream ships an equivalent General page, or the settings port is ab
  1 file changed, 320 insertions(+), 290 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/settings/GeneralConfig.qml b/dots/.config/quickshell/ii/modules/settings/GeneralConfig.qml
-index 6b83f9cf..c5b422b7 100644
+index 6b83f9cf..3a350e6a 100644
 --- a/dots/.config/quickshell/ii/modules/settings/GeneralConfig.qml
 +++ b/dots/.config/quickshell/ii/modules/settings/GeneralConfig.qml
 @@ -8,351 +8,381 @@ import qs.modules.common.functions
@@ -496,7 +496,7 @@ index 6b83f9cf..c5b422b7 100644
 +                        text: Translation.tr("Volume limit")
 +                        value: Config.options.audio.protection.maxAllowed
 +                        from: 0
-+                        to: 154 // pavucontrol allows up to 153%
++                        to: 154
 +                        stepSize: 2
 +                        onValueChanged: {
 +                            Config.options.audio.protection.maxAllowed = value;

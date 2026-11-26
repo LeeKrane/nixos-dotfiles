@@ -9,9 +9,9 @@ Problem: discardNotification() used list.splice(), which emits listChanged per s
 Port: clean
 Drop when: the pinned services/Notifications.qml no longer removes notifications with root.list.splice().
 ---
- .../common/widgets/NotificationGroup.qml      |  8 +++---
- .../quickshell/ii/services/Notifications.qml  | 26 ++++++++++++-------
- 2 files changed, 19 insertions(+), 15 deletions(-)
+ .../common/widgets/NotificationGroup.qml      |  8 +++----
+ .../quickshell/ii/services/Notifications.qml  | 23 +++++++++++--------
+ 2 files changed, 16 insertions(+), 15 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/common/widgets/NotificationGroup.qml b/dots/.config/quickshell/ii/modules/common/widgets/NotificationGroup.qml
 index e3d64027..4641b02e 100644
@@ -33,10 +33,10 @@ index e3d64027..4641b02e 100644
      }
  
 diff --git a/dots/.config/quickshell/ii/services/Notifications.qml b/dots/.config/quickshell/ii/services/Notifications.qml
-index a45b8600..4264a892 100644
+index a45b8600..ec62d0ec 100644
 --- a/dots/.config/quickshell/ii/services/Notifications.qml
 +++ b/dots/.config/quickshell/ii/services/Notifications.qml
-@@ -190,18 +190,24 @@ Singleton {
+@@ -190,18 +190,21 @@ Singleton {
      }
  
      function discardNotification(id) {
@@ -51,9 +51,6 @@ index a45b8600..4264a892 100644
 +    function discardNotifications(ids) {
 +        console.log("[Notifications] Discarding notifications with IDs: " + ids.join(", "));
 +        const idSet = new Set(ids);
-+        // Assign a new array instead of splicing: on a list<> property, splice()
-+        // shifts the following elements one by one and emits listChanged for each,
-+        // re-running the grouping and every model bound to the list each time.
 +        const remaining = root.list.filter((notif) => !idSet.has(notif.notificationId));
 +        if (remaining.length !== root.list.length) {
 +            root.list = remaining;

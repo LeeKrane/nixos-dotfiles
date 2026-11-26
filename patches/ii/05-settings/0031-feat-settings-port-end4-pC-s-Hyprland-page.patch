@@ -10,8 +10,8 @@ Port: hand-ported (live values from hyprctl; writes through krane-ii-settings; s
 Drop when: upstream ships an equivalent page, or the settings port is abandoned.
 ---
  .../common/widgets/ColorSelectionArray.qml    |  98 +++
- .../ii/modules/settings/HyprlandConfig.qml    | 597 ++++++++++++++++++
- 2 files changed, 695 insertions(+)
+ .../ii/modules/settings/HyprlandConfig.qml    | 594 ++++++++++++++++++
+ 2 files changed, 692 insertions(+)
  create mode 100644 dots/.config/quickshell/ii/modules/common/widgets/ColorSelectionArray.qml
  create mode 100644 dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
 
@@ -122,10 +122,10 @@ index 00000000..0af1c8ce
 \ No newline at end of file
 diff --git a/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml b/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
 new file mode 100644
-index 00000000..2b42aef8
+index 00000000..830b61af
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
-@@ -0,0 +1,597 @@
+@@ -0,0 +1,594 @@
 +import QtQuick
 +import QtQuick.Layouts
 +import Quickshell.Io
@@ -451,9 +451,6 @@ index 00000000..2b42aef8
 +                    label: Translation.tr("Lock screen")
 +                    enabled: !KraneSettings.isLocked("idle", "")
 +                    seconds: KraneSettings.state.idle?.lock ?? 0
-+                    // The row's spin box also emits edited() when `seconds` arrives from
-+                    // `get` after loading; writing that value back would put ii's default
-+                    // into the sparse file on every page open.
 +                    onEdited: newSeconds => {
 +                        if (KraneSettings.state.idle && newSeconds !== KraneSettings.state.idle.lock)
 +                            KraneSettings.set("idle", "lock", newSeconds)

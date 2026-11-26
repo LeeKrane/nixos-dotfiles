@@ -14,10 +14,10 @@ Drop when: the pinned services/Notifications.qml wraps the notifications-file JS
  1 file changed, 28 insertions(+), 21 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/services/Notifications.qml b/dots/.config/quickshell/ii/services/Notifications.qml
-index 4264a892..f2c451ab 100644
+index ec62d0ec..e9cced58 100644
 --- a/dots/.config/quickshell/ii/services/Notifications.qml
 +++ b/dots/.config/quickshell/ii/services/Notifications.qml
-@@ -274,29 +274,36 @@ Singleton {
+@@ -271,29 +271,36 @@ Singleton {
          id: notifFileView
          path: Qt.resolvedUrl(filePath)
          onLoaded: {

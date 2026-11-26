@@ -11,9 +11,9 @@ Port: hand-ported (WM checks, setIdle and setAnimPreset dropped; scripts run thr
 Drop when: upstream ii ships border colors from palette roles.
 ---
  .../ii/modules/common/Appearance.qml          | 16 +++
- .../quickshell/ii/services/HyprlandConfig.qml | 99 +++++++++++++------
+ .../quickshell/ii/services/HyprlandConfig.qml | 97 +++++++++++++------
  .../ii/services/MaterialThemeLoader.qml       |  2 +
- 3 files changed, 86 insertions(+), 31 deletions(-)
+ 3 files changed, 84 insertions(+), 31 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/common/Appearance.qml b/dots/.config/quickshell/ii/modules/common/Appearance.qml
 index bedf01eb..6b88688c 100644
@@ -43,7 +43,7 @@ index bedf01eb..6b88688c 100644
          property bool darkmode: true
          property bool transparent: false
 diff --git a/dots/.config/quickshell/ii/services/HyprlandConfig.qml b/dots/.config/quickshell/ii/services/HyprlandConfig.qml
-index 0f2f3f2c..45d9378d 100644
+index 0f2f3f2c..f437fda1 100644
 --- a/dots/.config/quickshell/ii/services/HyprlandConfig.qml
 +++ b/dots/.config/quickshell/ii/services/HyprlandConfig.qml
 @@ -9,46 +9,80 @@ import qs.modules.common
@@ -157,14 +157,12 @@ index 0f2f3f2c..45d9378d 100644
      }
  
      Connections {
-@@ -56,7 +90,10 @@ Singleton {
+@@ -56,7 +90,8 @@ Singleton {
  
          function onRawEvent(event) {
              if (event.name == "configreloaded") {
 -                root.reloaded()
 +                root.reloaded();
-+                // A switch wipes shellOverrides/main.lua and ends with a reload.
-+                // hyprconfigurator.py skips unchanged writes, so this cannot loop.
 +                root.applyBorderColors();
              }
          }

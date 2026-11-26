@@ -5,33 +5,28 @@ Subject: [PATCH] fix(settings): spin box sizes from its background; About
  shows the dotfiles git URL
 
 ---
- .../ii/modules/common/widgets/StyledSpinBox.qml  |  5 +++--
+ .../ii/modules/common/widgets/StyledSpinBox.qml  |  4 ++--
  .../quickshell/ii/modules/settings/About.qml     | 16 +++++++++++++++-
- 2 files changed, 18 insertions(+), 3 deletions(-)
+ 2 files changed, 17 insertions(+), 3 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/common/widgets/StyledSpinBox.qml b/dots/.config/quickshell/ii/modules/common/widgets/StyledSpinBox.qml
-index d2eadf60..d91a02e6 100644
+index b7db23aa..99eb864a 100644
 --- a/dots/.config/quickshell/ii/modules/common/widgets/StyledSpinBox.qml
 +++ b/dots/.config/quickshell/ii/modules/common/widgets/StyledSpinBox.qml
-@@ -19,6 +19,9 @@ SpinBox {
+@@ -19,11 +19,11 @@ SpinBox {
      background: Rectangle {
          color: Appearance.colors.colLayer2
          radius: root.radius
-+        // Basic SpinBox sizes itself from this (indicators are padding): 40 px of text + both buttons.
 +        implicitWidth: 40 + 2 * root.baseHeight
 +        implicitHeight: root.baseHeight
      }
  
-     // The TextInput is the contentItem itself, so Qt's own commit path applies a
-@@ -26,8 +29,6 @@ SpinBox {
-     // an imperative `root.value = ...`, which would break any `value:` binding a
-     // user of this control (ConfigSpinBox alias) sets.
      contentItem: StyledTextInput {
 -        implicitHeight: root.baseHeight
 -        implicitWidth: Math.max(contentWidth, 40)
          horizontalAlignment: TextInput.AlignHCenter
          verticalAlignment: TextInput.AlignVCenter
-         text: root.value // displayText would make the numbers weird like 1,000 instead of 1000
+         text: root.value
 diff --git a/dots/.config/quickshell/ii/modules/settings/About.qml b/dots/.config/quickshell/ii/modules/settings/About.qml
 index 946714c3..33a196fb 100644
 --- a/dots/.config/quickshell/ii/modules/settings/About.qml
