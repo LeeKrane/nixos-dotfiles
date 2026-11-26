@@ -1,21 +1,17 @@
-# QEMU/UEFI check target overrides for tariognatha (flake.nix's tariognatha-vm), neutralising
-# everything that assumes real NVIDIA hardware or a real disk so this builds as a plain llvmpipe
-# smoke test. All overrides use mkForce: the base host modules set these at normal priority, so a
-# plain definition here would conflict instead of overriding.
+# Overrides for tariognatha-vm (flake.nix): a QEMU/UEFI llvmpipe smoke test without real NVIDIA
+# hardware or disk. mkForce because the base modules set these at normal priority.
 { config, lib, ... }:
 {
-  # No GPU passthrough here: force generic `modesetting` instead of nvidia-desktop.nix's "nvidia".
   services.xserver.videoDrivers = lib.mkForce [ "modesetting" ];
 
-  # gpu/nvidia-desktop.nix turns these on for real hardware. Force them off so nothing loads the
-  # proprietary NVIDIA stack against a llvmpipe/virtio GPU.
+  # nvidia-desktop.nix enables these for real hardware; off so nothing loads the NVIDIA stack
+  # against llvmpipe.
   hardware.nvidia.modesetting.enable = lib.mkForce false;
   hardware.nvidia.open = lib.mkForce false;
   boot.blacklistedKernelModules = lib.mkForce [ ];
   services.ollama.enable = lib.mkForce false;
 
-  # disko.nix points at a real disk and generates fileSystems from it, meaningless for this VM.
-  # Forcing disko.devices empty drops that, so fileSystems below is set directly instead.
+  # disko.nix points at a real disk; emptying disko.devices drops its fileSystems, set below.
   disko.devices = lib.mkForce { };
 
   fileSystems = lib.mkForce {
@@ -29,8 +25,7 @@
     };
   };
 
-  # Convenience overrides (autologin, no real password), applied only for the VM variant build,
-  # never the plain toplevel used for the UEFI eval/build check. Touches no real host or secret.
+  # Autologin and a throwaway password, for the VM variant build only.
   virtualisation.vmVariant = {
     virtualisation = {
       memorySize = 8192;
@@ -43,7 +38,6 @@
       user = config.krane.user.name;
     };
 
-    # Throwaway login for the interactive smoke test only. Never used on real hardware.
     users.users.${config.krane.user.name}.initialPassword = "krane";
   };
 }

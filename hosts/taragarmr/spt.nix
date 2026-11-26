@@ -1,21 +1,14 @@
-# SPT 4.1.6 + Fika: the server and two headless raid hosts, as home-manager user services of the
-# login account (lingering, so they run without a session), plus the daily profile backup timer.
-# The unit files follow the old Fedora host's ~/.config/systemd/user, minus everything Vagabond.
+# SPT 4.1.6 + Fika: the server and two headless raid hosts as lingering home-manager user
+# services, plus the daily profile backup timer.
 #
-# The data is not managed by Nix: ~/spt-server (SPT_Runtime, backup-profiles.sh, backups),
-# ~/spt-headless and ~/spt-headless-2 (game, pfx, HeadlessConfig.json, run-headless.sh) are
-# restored from the old host. Note the second headless unit runs ~/spt-headless/run-headless.sh
-# with SPT_HEADLESS_ROOT=~/spt-headless-2, as the old unit did.
+# The data is not managed by Nix: ~/spt-server, ~/spt-headless and ~/spt-headless-2. The second
+# headless unit runs ~/spt-headless/run-headless.sh with SPT_HEADLESS_ROOT=~/spt-headless-2.
+# Proton comes from nixpkgs proton-ge-bin through PROTONPATH instead of umu's own download.
 #
-# Runtime deps replace the Fedora system packages on the units' PATH: ASP.NET Core 10 (the old
-# host had 10.0.12; SPT 4.1 targets .NET 10), umu-launcher, xvfb-run, jq and what the scripts call
-# (ss, grep, tar, gzip, xargs). Proton comes from the nixpkgs proton-ge-bin through PROTONPATH
-# instead of umu's own download; unset it in the unit to let umu fetch its default again.
-#
-# Ports: the server listens on TCP 6969, 7828, 7829 and 38473 (dotnet, inventory); the
-# headless clients are Fika raid hosts on UDP 25565 and 25566 that players connect to. Players
-# arrive through wg1 (manual start, see the wireguard module) or wg0, which is trusted, so the
-# ports are opened on wg1 only. The headless clients reach the server over loopback.
+# Ports: the server listens on TCP 6969, 7828, 7829 and 38473; the headless clients are Fika
+# raid hosts on UDP 25565 and 25566. Players arrive through wg1 (manual start, see the wireguard
+# module) or wg0, which is trusted, so the ports are opened on wg1 only. The headless clients
+# reach the server over loopback.
 {
   config,
   lib,
@@ -38,9 +31,8 @@ let
   dotnet = pkgs.dotnet-aspnetcore_10;
   proton = pkgs.proton-ge-bin.steamcompattool;
 
-  # Everything the restored scripts call (run-headless.sh: jq, xvfb-run, umu-run; backup-profiles.sh:
-  # tar, gzip, date, ls, tail, xargs, rm; the wait below: ss, grep), plus bash for their
-  # `#!/usr/bin/env bash` / `#!/bin/bash` shebangs. One list for all units: they are small.
+  # Everything the restored scripts call (run-headless.sh, backup-profiles.sh, the wait below),
+  # plus bash for their shebangs.
   sptPath = lib.makeBinPath [
     dotnet
     pkgs.bash
@@ -58,8 +50,7 @@ let
     pkgs.xvfb-run
     pkgs.umu-launcher
   ];
-  # The restored scripts may carry a Fedora `#!/bin/bash` shebang, and NixOS has no /bin/bash,
-  # so the units run them through bash explicitly instead of exec'ing them.
+  # NixOS has no /bin/bash: run the restored scripts through bash instead of exec'ing them.
   bash = "${pkgs.bash}/bin/bash";
 
   # The server takes ~30 s to listen after a (re)start, which systemd also restarts the
@@ -117,10 +108,9 @@ in
   hardware.graphics.enable = true;
 
   home-manager.users.${user} = {
-    # The three SPT services share this slice. The host has 27 GiB: the slice's 20G/22G is what
-    # actually protects the system, CouchDB and Caddy (~5 GiB left). The per-unit caps are
-    # lower than the slice's, and they sum to more than it on purpose: one leaking instance
-    # is throttled on its own first, while the slice stops all three together from exceeding RAM.
+    # The three SPT services share this slice; its 20G/22G protects the system, CouchDB and Caddy
+    # on the 27 GiB host. Per-unit caps sit below it but sum above: one leaking instance is
+    # throttled first, the slice stops all three together from exceeding RAM.
     systemd.user.slices.spt = {
       Unit.Description = "SPT server and headless clients";
       Slice = {
@@ -131,9 +121,7 @@ in
 
     systemd.user.services = {
       spt-server = {
-        # No network ordering (network-online.target is not part of the user manager, so it
-        # would be ignored): the server and backup-profiles.sh only touch local files and bind
-        # local ports, and Restart=on-failure covers anything else.
+        # No network ordering: network-online.target is not part of the user manager.
         Unit.Description = "SPT 4.1.6 server (Fika backend, TCP 6969)";
         Service = {
           Type = "simple";

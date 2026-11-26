@@ -1,7 +1,5 @@
-# Mic chain for the Razer Seiren V2 Pro (replaces Vesktop's noise suppression and input
-# sensitivity): high-pass, RNNoise voice detection as a speech gate, level gate, compressor, EQ,
-# limiter. DeepFilterNet was dropped: under game load it fell behind and delayed the mic.
-# Tuned in the EasyEffects GUI, then exported here.
+# Mic chain for the Razer Seiren V2 Pro: high-pass, RNNoise voice detection as a speech gate,
+# level gate, compressor, EQ, limiter.
 # EasyEffects itself is started by ii's hyprland/execs.lua on every host; this only ships the
 # preset and an autoload entry that applies it whenever the Seiren is the input device.
 # The preset is a read-only store symlink: to retune, change it in the GUI, "Save as" a new
@@ -17,7 +15,7 @@ in
 {
   # Under full CPU load (shader compiles) EasyEffects' worker threads fall behind at the default
   # priority. Every EasyEffects thread inherits this nice value, the same one PipeWire runs at.
-  # Needs the nice limit in default.nix; without it, nice prints a warning and starts EasyEffects at the default priority.
+  # Needs the nice limit in default.nix; without it nice warns and EasyEffects runs at default priority.
   home.packages = [
     (lib.hiPrio (
       pkgs.writeShellScriptBin "easyeffects" ''exec nice -n -11 ${pkgs.easyeffects}/bin/easyeffects "$@"''

@@ -1,5 +1,5 @@
 # taronychus: Raspberry Pi 5 (8 GB), boots from a 1 TB NVMe (Lexar NM710). Service node: the
-# base server role plus its wg0 spoke (192.168.82.2), nothing else yet.
+# base server role plus its wg0 spoke (192.168.82.2).
 #
 # Image: nix build .#image-taronychus, then write it straight to the NVMe (USB-NVMe adapter on a
 # desktop): `zstd -dc ... | dd of=/dev/sdX`. The sd-image module mounts / by label (NIXOS_SD),
@@ -8,9 +8,8 @@
 # without an SD card. The sops age key derives from this host's pre-generated SSH host key
 # (stored encrypted in the password manager, recipient &host_taronychus in .sops.yaml):
 # before first boot, copy ssh_host_ed25519_key (root:root 0600) and .pub (0644) from there into
-# /etc/ssh on the flashed root partition; sshd keeps an existing key. Do not run
-# scripts/bootstrap-sops.sh. Secrets: wireguard/wg0-private-key; without that section wg0
-# stays unconfigured.
+# /etc/ssh on the flashed root partition. Secrets: wireguard/wg0-private-key; without that
+# section wg0 stays unconfigured.
 # krane's password is not in the repo or sops. After first boot, ssh in as krane (key auth) and
 # run `passwd`: the empty initial password needs no current one (pam_unix nullok). Until then
 # sudo is unusable, so deploys fail.
@@ -21,19 +20,13 @@
 
   system.stateVersion = "26.05";
 
-  # Reboots after a kernel-changing upgrade only inside this hour, one host per hour (the
-  # Pis first, the WireGuard hub last).
+  # One host per hour: the Pis first, the WireGuard hub last.
   krane.autoUpgrade.rebootWindow = {
     lower = "03:59";
     upper = "05:00";
   };
 
-  # Never-booted image has no /etc yet, so the password cannot be set before first boot.
-  # Empty initial password, applied at user creation only (mutableUsers = true).
+  # Empty initial password (a never-booted image has no /etc to set one); applied at user
+  # creation only (mutableUsers = true).
   users.users.${config.krane.user.name}.initialHashedPassword = "";
-
-  # Pi 5: the sd-image module selects the generational "kernel" bootloader. No other
-  # bootloader is enabled for Pis.
-
-  # Firewall: ssh only (server module). wg0 is outbound to the hub.
 }

@@ -1,6 +1,5 @@
-# Secondary 4 TB HDD, left over from Windows dual-boot: an NTFS data partition ("Kranische Daten")
-# and a btrfs partition. Both mount at boot, so udisks/Dolphin see them as mounted and
-# never ask for a password. nofail keeps boot from waiting on the disk.
+# Secondary HDD (NTFS + btrfs), mounted at boot so udisks/Dolphin never ask for a password.
+# nofail keeps boot from waiting on the disk.
 { ... }:
 let
   hddOptions = [

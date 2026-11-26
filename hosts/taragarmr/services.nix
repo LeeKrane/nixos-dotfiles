@@ -1,10 +1,7 @@
-# The watermarks-remover plugin backend (127.0.0.1:8765), another user service of the old host.
-# It runs lingering, like the SPT units (spt.nix), and so does the teamclaude proxy every host
-# gets from modules/home/common/teamclaude.nix.
+# The watermarks-remover plugin backend (127.0.0.1:8765), a lingering user service.
 { config, pkgs, ... }:
 let
-  # The plugin cache holds one directory per installed version; run the newest, so a plugin
-  # update (which adds a version directory) needs no change here.
+  # The plugin cache holds one directory per version; run the newest.
   watermarksRemover = pkgs.writeShellScript "watermarks-remover" ''
     set -u
     export PATH=${
@@ -30,8 +27,6 @@ let
 in
 {
   home-manager.users.${config.krane.user.name} = {
-    # Runs the python service out of the Claude Code plugin cache (restored with ~/.claude),
-    # newest installed version; it does not start until the plugin directory exists.
     systemd.user.services.watermarks-remover = {
       Unit = {
         Description = "watermarks-remover HTTP service (Claude Code plugin backend)";

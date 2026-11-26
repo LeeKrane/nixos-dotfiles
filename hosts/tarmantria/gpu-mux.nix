@@ -8,9 +8,8 @@
 # firmware only flags that a change is waiting (attributes/pending_reboot). So every write also
 # records its value in /run/gpu-mux/next, which a reboot clears along with the pending change.
 #
-# gpu-mux-auto sets the mode for the next boot from the power state: dgpu on external power,
-# hybrid on battery. It runs at boot and on every plug or unplug, so a manual `gpu-mux` choice
-# lasts only until the power state next changes.
+# gpu-mux-auto sets the mode for the next boot from the power state (dgpu on external power,
+# hybrid on battery), at boot and on every plug or unplug.
 { pkgs, ... }:
 let
   attr = "/sys/class/firmware-attributes/asus-armoury/attributes/gpu_mux_mode/current_value";
@@ -61,7 +60,6 @@ let
     # Without a write since boot, the next boot keeps the active mode.
     upcoming=$(cat ${attr})
     [ -f ${next} ] && upcoming=$(cat ${next})
-    # Write only on a change, to leave the firmware setting alone otherwise.
     if [ "$upcoming" != "$want" ]; then
       echo "$want" | tee ${attr} ${next} >/dev/null
       echo "MUX for next boot: $want (external power: $ac)"

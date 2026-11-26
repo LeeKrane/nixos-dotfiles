@@ -1,4 +1,4 @@
-# Sound BlasterX G6 mic fix, tarmantria only (the G6 is only used here).
+# Sound BlasterX G6 mic fix.
 { config, pkgs, ... }:
 let
   acpPaths = "${config.services.pipewire.package}/share/alsa-card-profile/mixer/paths";

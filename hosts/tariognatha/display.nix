@@ -1,12 +1,9 @@
-# home-manager module: desktop display / input layout for tariognatha, imported at the user
-# level from hosts/tariognatha/default.nix, rendered to Lua by modules/home/desktop/hypr-config.nix.
 { ... }:
 {
   krane.hypr = {
-    # Positions are GUI-owned (hosts/tariognatha/ii-settings.json, settings app > Displays).
-    # They depend on DP-2's scale: after changing it here, re-drag the positions there.
+    # Positions are GUI-owned (ii-settings.json, settings app > Displays); re-drag them after
+    # changing DP-2's scale.
     monitors = [
-      # Primary, straight ahead.
       {
         output = "DP-2";
         mode = "3840x2160@240";
@@ -32,7 +29,6 @@
     # 4K240 panel for seconds and warns about 8-bit output. Keep SDR.
     settings.render.cm_auto_hdr = 0;
 
-    # Desktop stays awake once booted: no idle lock, DPMS off or suspend.
     idleTimeouts = false;
     extraGeneralLua = ''
       hl.workspace_rule({ workspace = "1", monitor = "DP-2", default = true })
@@ -50,8 +46,8 @@
       }
     ];
 
-    # Upstream defaults these to launch_first_available.sh probe chains. Naming the binaries
-    # skips that. Plain command names, not store paths: Hyprland runs them through a shell.
+    # Naming the binaries skips upstream's launch_first_available.sh probe chains. Plain command
+    # names: Hyprland runs them through a shell.
     variables = {
       terminal = "kitty";
       browser = "zen-beta";

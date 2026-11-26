@@ -1,13 +1,10 @@
 # ntfy for the automatic server upgrades (modules/nixos/server/auto-upgrade.nix): failure and
-# recovery pushes to the phone and the desktops. Listens only on the WireGuard address, no
-# Caddy vhost; wg0 is a trusted firewall interface (modules/nixos/server/wireguard.nix), so
-# the port is reachable there and nowhere else. Everything is denied by default; two
-# provisioned users each get one right on the topic, so a leaked token can do one thing:
+# recovery pushes. Listens only on the WireGuard address (wg0 is a trusted interface), no Caddy
+# vhost. Deny by default; two users each get one right on the topic:
 #   upgrade-publisher  write-only  token on the servers (ntfy/publish-token)
 #   krane              read-only   token on the desktops (ntfy/read-token), password on the phone
-# Users, ACLs and tokens are provisioned declaratively (ntfy 2.26: NTFY_AUTH_USERS,
-# NTFY_AUTH_ACCESS, NTFY_AUTH_TOKENS) from the sops secret ntfy/server-env, so no CLI step on
-# the host. See secrets/README.md for how to generate the values.
+# Users, ACLs and tokens come from the sops secret ntfy/server-env (NTFY_AUTH_USERS,
+# NTFY_AUTH_ACCESS, NTFY_AUTH_TOKENS); see secrets/README.md.
 {
   config,
   lib,

@@ -1,7 +1,4 @@
-# disko layout for taragarmr's 512 GB NVMe: GPT, 1 GiB ESP, btrfs for the rest.
-# Subvolumes: @ /, @home /home (SPT data, restored backups), @nix /nix, @srv /srv (CouchDB).
-# No swap partition: 27 GiB of RAM plus zram (modules/nixos/server/zram.nix), and a server
-# does not hibernate. A disk swap would only slow an OOM down; the SPT units carry MemoryMax.
+# No swap partition: RAM plus zram (modules/nixos/server/zram.nix); the SPT units carry MemoryMax.
 { ... }:
 let
   opts = [

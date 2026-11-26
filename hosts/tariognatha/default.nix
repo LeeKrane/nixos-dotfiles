@@ -18,13 +18,10 @@ in
 
   system.stateVersion = "26.05";
 
-  # Build the Raspberry Pi servers' images and closures here (qemu-user for the aarch64 steps
-  # that cannot be cross-built; the vendor kernels come from nixos-raspberrypi's cache).
+  # For building the Raspberry Pi servers' images (aarch64 steps that cannot be cross-built).
   boot.binfmt.emulatedSystems = [ "aarch64-linux" ];
 
-  # display.nix sets krane.hypr.*, a home-manager module, imported at the user level.
-  # tarkov.nix, spt.nix, stalker-gamma.nix and heuristiclab.nix are also home-manager,
-  # here and not in modules/home/desktop/default.nix: only the hosts that use them.
+  # tarkov, spt, stalker-gamma and heuristiclab are imported only on the hosts that use them.
   home-manager.users.${config.krane.user.name} = {
     imports = [
       ./display.nix
@@ -48,9 +45,7 @@ in
   # browser JavaScript, reading other processes' memory through speculative execution.
   boot.kernelParams = [ "mitigations=off" ];
 
-  # Lets the session raise priority to nice -11, the PipeWire level, for EasyEffects
-  # (easyeffects.nix). greetd's session includes the login PAM service, which loads these.
-  # Applies from the next login.
+  # Allows nice -11, the PipeWire level, for EasyEffects (easyeffects.nix); applies from the next login.
   security.pam.loginLimits = [
     {
       domain = config.krane.user.name;
@@ -63,8 +58,7 @@ in
   # Desktop only: peripherals.nix defaults this false via mkDefault, so plain `true` wins.
   services.hardware.openrgb.enable = true;
 
-  # Fika (SPT co-op, spt.nix): the SPT server runs on the home server, so only the raid host's
-  # UDP 25565 is opened, for when this machine hosts a raid. home-manager cannot open ports.
+  # Fika raid host port (spt.nix); home-manager cannot open ports.
   networking.firewall.allowedUDPPorts = [ 25565 ];
 
   # Wake-on-LAN: tarronax runs `wake-tariognatha`. Only from suspend: the onboard I219-V is

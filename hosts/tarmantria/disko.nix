@@ -1,10 +1,6 @@
-# disko disk layout for tarmantria (laptop): GPT + ESP + btrfs with subvolumes, zstd-compressed.
-# See docs/INSTALL.md.
 { ... }:
 {
   disko.devices.disk.main = {
-    # CHANGE-ME: fill in the real target disk at install time, such as
-    # "/dev/disk/by-id/nvme-Samsung_SSD_..." (prefer by-id over /dev/sdX so it survives reordering).
     device = "/dev/disk/by-id/nvme-WD_PC_SN560_SDDPNQE-1T00-1002_22504Z804975";
     type = "disk";
     content = {

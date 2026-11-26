@@ -70,3 +70,36 @@ For each: keep, trim, or delete. This file is deleted before `doc-cleanup` merge
 - `tests/lang_rust_spec.lua:42` crates.nvim 0.7.x keeps config in crates.state.cfg. Bytecode only.
 - `tests/options_spec.lua:59` vim.v.progpath is unwrapped binary (missing lz.n); use nvim on PATH. Runtime.
 - `lang/default.nix:30` (lead-in restored for the :34 note above).
+
+## hosts and templates
+
+- `hosts/taractias/default.nix:49` QCA9377 on ath10k_pci floods AMD-Vi IO_PAGE_FAULT (before `iommu=pt`). Hardware quirk.
+- `hosts/taractias/display.nix:1` VERIFY ON TARGET: IdeaPad 330S ships in several panel resolutions. Hardware fact.
+- `hosts/taragarmr/couchdb.nix:~14` Entrypoint chowns `/opt/couchdb`, fails on read-only bind mount; ini copied first. Docker image.
+- `hosts/taragarmr/couchdb.nix:~27` 5984 is couchdb uid/gid in image. Image internals.
+- `hosts/taragarmr/spt.nix:~55` Server takes ~30 s to listen; headless gets Connection refused. Runtime timing.
+- `hosts/taragarmr/spt.nix:~83` Headless leaks memory over raids; restart on exit. Runtime.
+- `hosts/taragarmr/spt.nix:~98` Old /etc/hosts entry: server hands this name out as backend address. SPT server.
+- `hosts/taragarmr/spt.nix:~106` Wine and headless software rendering (PROTON_USE_WINED3D) need Mesa/GL. Upstream.
+- `hosts/tariognatha/default.nix:~31`, `hosts/tarmantria/default.nix:~39` SPT server hands out spt-tarkov.krane.dev as backend. SPT server.
+- `hosts/tariognatha/default.nix:~35` No CPU mitigations: i9-9900KS pays heavily. Perf/security trade-off.
+- `hosts/tariognatha/default.nix:~60` Wake-on-LAN block (I219-V PHY dead, board cuts USB power, poweroff suspends). Hardware.
+- `hosts/tariognatha/display.nix:~22` Hyprland has no primary monitor: lowest monitor ID. Upstream.
+- `hosts/tariognatha/display.nix:~26` Auto-HDR modesets DP-2, blanks 4K240 panel. Hardware/Hyprland.
+- `hosts/tariognatha/easyeffects.nix:1-6` EasyEffects started by ii's hyprland/execs.lua on every host. Upstream ii source.
+- `hosts/tariognatha/easyeffects.nix:~9` Autoload file naming `<node>:<route description>.json`. EasyEffects.
+- `hosts/tariognatha/easyeffects.nix:~13` Worker threads fall behind at default priority under load. Perf claim.
+- `hosts/tariognatha/easyeffects.nix:~22` `processAllOutputs` / `listenToMic` rationale. EasyEffects.
+- `hosts/tarmantria/audio.nix:6-12` ACP mic path names; G6 exposes "External Mic"; ACP search order. ACP/hardware.
+- `hosts/tarmantria/default.nix:~19` zram 200: Tarkov keeps ~9 GiB resident on 16 GiB laptop. Measurement.
+- `hosts/tarmantria/default.nix:~22` lz4 vs zstd stutter. Perf claim.
+- `hosts/tarmantria/default.nix:~27` nvidia-powerd 80 W base, 140 W max. Hardware figures.
+- `hosts/tarmantria/default.nix:~45` i7-13700H P-cores / E-cores 12-19. Hardware fact.
+- `hosts/tarmantria/display.nix:~21` MSI MAG322CQRV EDID 143.97 Hz over HDMI; Hyprland picks 59.95 Hz. EDID.
+- `hosts/tarmantria/display.nix:~5` Panel eDP-1 in hybrid, eDP-2 in dgpu mode. Hardware.
+- `hosts/tarmantria/ec-wake.nix:1-9` ACPI/EC wake explanation (GPE 0x02, `_L02`, `_PRW`). Firmware.
+- `hosts/tarmantria/gpu-mux.nix:1-9` MUX hybrid/dgpu behaviour, `pending_reboot`. Firmware.
+- `hosts/tarmantria/gpu-mux.nix:~86` SYSTEMD_WANTS fires only on add; BAT0 sends change per capacity update. udev/hardware.
+- `hosts/taronychus/default.nix:~7` BOOT_ORDER 0xf461 / 0xf416 both reach NVMe. Pi firmware.
+- `hosts/taragarmr/default.nix`, `hosts/tarritator/default.nix`, `hosts/tarronax/default.nix` Headers: board specs and install steps. External state.
+- `hosts/tariognatha/display.nix:38` VERIFY ON TARGET: name must match `hyprctl devices`. Needs physical device.

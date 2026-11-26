@@ -1,27 +1,7 @@
-# restic backup to a local repository on the external drive mounted at /mnt/backup
-# (backup-drive.nix; modules/nixos/server/backup.nix). The repository is created on the first
-# run. Pruning is a separate weekly unit (restic-prune, below), so the nightly CouchDB stop only
-# lasts as long as the backup itself.
-#
-# What goes in:
-#   /srv/couchdb               Obsidian LiveSync data. A running CouchDB writes its append-only
-#                              files continuously, so the job stops the container for the run
-#                              and starts it again afterwards (also after a failed backup, as
-#                              cleanup is ExecStopPost). Downtime: the length of the run, a
-#                              minute or so after the first one; sync clients retry. With the
-#                              drive missing the unit fails on RequiresMountsFor before the
-#                              prepare command runs, so CouchDB is never stopped for nothing.
-#   /home/krane/spt-server     profiles, mods and their configs (SPT_Runtime/user), the profile
-#                              archives in backups/, web-admin-credentials.txt, the scripts. The
-#                              reproducible server runtime and download cache are excluded.
-#   /var/lib/krane-backup-stage  small files copied in before each run: the headless clients'
-#                              HeadlessConfig.json and scripts (the 73 GB game/pfx trees are
-#                              reproducible and stay out) and teamclaude's config. Copies are
-#                              best effort, so a file that does not exist yet fails nothing.
-# Not backed up: /var/lib/caddy (certificates reissue), docker images, ~/.claude.
-#
-# Secrets (secrets/taragarmr.yaml, section `restic`): repo-password (the repository's
-# password). Without the section the job is off.
+# restic backup to the external drive (backup-drive.nix). CouchDB writes append-only files
+# continuously, so the job stops its container for the run and the cleanup command restarts it,
+# also after a failed backup. Pruning is a separate weekly unit so the stop lasts only as long
+# as the backup. Secret `restic/repo-password`; without the `restic` section the job is off.
 {
   config,
   lib,
@@ -66,13 +46,12 @@ in
       mode = "0400";
     };
 
-    # The repository is on the external drive: do not run without it mounted.
     systemd.services.restic-backups-default.unitConfig.RequiresMountsFor = [ "/mnt/backup" ];
 
     krane.backup = {
       enable = true;
       inherit repository passwordFile;
-      # restic-prune below does it, outside the CouchDB downtime.
+      # restic-prune below does this, outside the CouchDB downtime.
       pruneOpts = [ ];
       paths = [
         "/srv/couchdb"
@@ -87,14 +66,12 @@ in
         "${home}/spt-server/SPT_Runtime/user/logs"
         "${home}/spt-server/SPT_Runtime/*.dll"
       ];
-      # Only the weekly prune takes an exclusive lock; keep the wait (and so the CouchDB
-      # downtime) bounded if the two ever overlap.
+      # Only the prune takes an exclusive lock; bounds the CouchDB downtime if they overlap.
       retryLock = "10m";
       backupPrepareCommand = "${prepare}";
       backupCleanupCommand = "${cleanup}";
     };
 
-    # Weekly forget + prune with the primary retention, CouchDB untouched.
     systemd.services.restic-prune = {
       description = "restic forget --prune of ${repository}";
       after = [ "restic-backups-default.service" ];
