@@ -4,6 +4,5 @@
   (import ./ani-cli.nix)
   (import ./dolphin-darkly-selection.nix)
   (import ./gsr-ui-fractional-scale.nix)
-  # Exposes pkgs/ as top-level packages, so boot.nix can use pkgs.plymouth-lone.
   (final: _prev: import ../pkgs { pkgs = final; })
 ]

@@ -1,12 +1,8 @@
 # WireGuard peer table for modules/nixos/server/wireguard.nix and the ssh host aliases in
-# modules/home/common/cli.nix. Public keys only, and no peer's public endpoint IP. The
-# private keys live in secrets/<host>.yaml (wireguard/wg0-private-key, wireguard/wg1-private-key).
-#
-# Not under hosts/: every directory there is a host. Desktops keep their own wg0 client
-# config from secrets (modules/nixos/desktop/networking.nix), this table only feeds servers.
+# modules/home/common/cli.nix. Public keys only. Desktops keep their own wg0 client config
+# (modules/nixos/desktop/networking.nix); this table only feeds servers.
 {
-  # wg0: the hub-and-spoke network of all machines. Every peer reaches every other one
-  # through the hub, which forwards between them.
+  # wg0: hub-and-spoke network of all machines.
   wg0 = {
     network = "192.168.82.0/24";
     prefixLength = 24;
@@ -51,21 +47,16 @@
         publicKey = "IScNK6RCHQHARQHG+XaZDs4aAHds5vPuEjKCFvKW5EM=";
       };
     };
-    # Machines that run sshd for the login account; home-manager adds a `Host` alias for
-    # each so desktops reach them over wg0.
     sshServers = [
       "taragarmr"
       "taronychus"
       "tarritator"
       "tarronax"
     ];
-    # Desktops that accept SSH from each other, only on wg0 and only from each other's wg0
-    # address (modules/nixos/desktop/ssh.nix). They get `Host` aliases like the servers.
     desktopSsh = [
       "tariognatha"
       "tarmantria"
     ];
-    # Extra wg0 peers a desktop in desktopSsh accepts SSH from (key from lib/ssh-keys.nix).
     desktopSshClients.tariognatha = [ "taryonyx" ];
   };
 

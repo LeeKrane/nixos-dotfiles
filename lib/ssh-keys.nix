@@ -1,6 +1,4 @@
 # Public SSH keys allowed to log in as the login account on servers (modules/nixos/server/ssh.nix).
-# name -> public key. Public keys are not secret. Only the interactive devices: no old
-# server-dotfiles keys, no tarodactyl, no Coolify key.
 {
   tariognatha = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDEEwSYC++RLte0ICie6EpouGb0gYQdfLD0UA/uITz3895KDYlX0r63HBEZhLdH5qdVQGInAE3uRelj8FkB6F5sLEvpCPI9AgsgtOdjmpYE3VV4T4g/s98ugqw/0VR09oJ8Ofi+XtSqOsa7IkoOADKfZ1nQtyNCYbC1mR16th4cmd5s9hty5JU+0TOn+6k/Wbb59uMdWqGid8ljHRz03irMZRbewuGIvfWabpRY1uZsr8d23dpd2v2nsU6TIMUbOOaZusCjMPTn3xFZiNAb0G+uSTLhb3vcPPMJQEcJmSsJPMIgFvXlEVNCIMFsdFuVA5StuE5s4bSYDc0KFSQuSpxzUkM0MMO9Bxn4GlTwSnR3SiI87aYVxiEXcbDqd7qaxG8yO3oJtyZnT7dfVg+RDS4QKe67wlpuqUa1PvSCIt23mGro22gdCwNsNE7JImmc1y9WLelISlY37ugkefhQeuBT9WWMKG5Ty+PuYL6mOutQ+nE1J2tpVfszW3JKdmthcZrAh11fa8ndPZHmOmkgO3ppSHmQHSu82rQyxi+8HKmnpX1hNAIsYVoWXqlQqT9KXdXjE/wv9YYa15ZIwrnkrGb3niOhtoBfnCInlQwMPpYvMfoVPrfEu58qmHAJtV/FrVyOL1v8X7S+bG+EVu8gUomc6XijpLz9+Jin9WEkgONanQ==";
   # Termux app.

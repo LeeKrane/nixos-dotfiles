@@ -9,11 +9,8 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # Stable channel for role = "server" hosts (lib/mk-host.nix swaps these in under the
-    # names nixpkgs/home-manager/nixvim). Bump all three together at each NixOS release.
-    # Follows nixos-raspberrypi's pin (nixos-26.05) so every server, the Pis included, shares
-    # one nixpkgs revision and the Pi kernels/firmware come from their binary cache. The pin
-    # is checked against nixos-26.05 when bumping.
+    # Stable channel for server hosts; mk-host.nix swaps these in under the unstable names.
+    # Follows nixos-raspberrypi's pin so the Pis use its binary cache.
     nixpkgs-stable.follows = "nixos-raspberrypi/nixpkgs";
     nixos-raspberrypi = {
       url = "github:nvmd/nixos-raspberrypi/main";
@@ -25,14 +22,11 @@
     };
     nixvim-stable.url = "github:nix-community/nixvim/nixos-26.05";
 
-    # end-4's dots-hyprland is a git checkout, pinned here as `dotfiles`.
     dots-hyprland = {
       url = "git+https://github.com/end-4/dots-hyprland?submodules=1";
       flake = false;
     };
 
-    # soymou/illogical-flake wraps dots-hyprland. NUR isn't followed, to avoid
-    # pulling in unvetted changes.
     illogical-flake = {
       url = "github:soymou/illogical-flake";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -52,20 +46,14 @@
     zen-browser.url = "github:0xc000022070/zen-browser-flake";
     nix-index-database.url = "github:nix-community/nix-index-database";
 
-    # No `nixpkgs.follows`, per nixvim's advice: it is tested against its
-    # own pin. The editor still builds with this flake's pkgs, see nvimEval.
+    # No `nixpkgs.follows`: nixvim is tested against its own pin.
     nixvim.url = "github:nix-community/nixvim";
 
-    # No `nixpkgs.follows`: nixos-hardware's modules aren't pinned to a
-    # nixpkgs revision. Imported by taractias and by hosts scaffolded from
-    # templates/host/ (GPU profile and form-factor imports).
+    # No `nixpkgs.follows`: its modules aren't pinned to a nixpkgs revision.
     nixos-hardware.url = "github:NixOS/nixos-hardware/master";
   };
 
-  # No flake-level nix config here: nix prompts to accept it on every invocation,
-  # which hangs direnv (`use flake`). Caches belong in nix.settings instead; the
-  # nixos-raspberrypi cache is in modules/nixos/common/nix-settings.nix.
-  # checks.no-flake-nixconfig enforces this.
+  # No flake-level nix config: nix prompts to accept it on every invocation, which hangs direnv.
 
   outputs =
     { self, nixpkgs, ... }@inputs:
@@ -79,10 +67,7 @@
       };
       mkHost = import ./lib/mk-host.nix { inherit inputs; };
 
-      # Standalone NixVim build, see modules/nixvim/. Uses this flake's pkgs
-      # so overlays and allowUnfree apply; nixvim's own nixpkgs pin (see the
-      # `nixvim` input above) is used only to evaluate its library, not to
-      # build the editor.
+      # Built with this flake's pkgs so overlays and allowUnfree apply; nixvim's pin only evaluates its library.
       nvimEval = inputs.nixvim.lib.evalNixvim {
         modules = [
           ./modules/nixvim
@@ -91,8 +76,6 @@
       };
       nvim = nvimEval.config.build.package;
 
-      # The same editor for role = "server" hosts: nixvim and nixpkgs both from the stable
-      # inputs (modules/home/common/neovim.nix picks it by role).
       nvimStableEvalFor =
         sys:
         inputs.nixvim-stable.lib.evalNixvim {
@@ -111,24 +94,10 @@
       nvimStableFor = sys: (nvimStableEvalFor sys).config.build.package;
       nvim-stable = nvimStableEval.config.build.package;
 
-      # Every directory under hosts/ is a host. install.sh's new-host flow adds one by
-      # scaffolding hosts/<name>/ from templates/host/. install.sh, bootstrap-sops.sh's
-      # known_hosts() glob the same directories; docker-check.sh and CI read lib.hostMeta. Plain files
-      # under hosts/ are ignored.
       hosts = nixpkgs.lib.attrNames (
         nixpkgs.lib.filterAttrs (_: type: type == "directory") (builtins.readDir ./hosts)
       );
 
-      # Per-host metadata: an optional hosts/<name>/host.nix attrset `{ system, role, board, image }`. A
-      # missing file, or a missing attribute in it, takes the default: x86_64-linux, role
-      # "desktop", no board. role picks the module set mk-host.nix imports
-      # (modules/{nixos,home}/{common,<role>}). board ("rpi4" | "rpi5") marks a Raspberry Pi:
-      # it adds the nixos-raspberrypi modules, and defaults system to aarch64-linux and role
-      # to "server" (both may only be given as those values). image ("sd" or absent/null) says the
-      # host builds a flashable SD image (it imports the nixos-raspberrypi sd-image module);
-      # it needs a board and is what `packages.image-<host>` is derived from, so listing the
-      # packages does not evaluate every Pi. Unknown attribute names, roles
-      # or boards fail evaluation instead of silently falling back to the defaults.
       hostMeta = nixpkgs.lib.genAttrs hosts (
         name:
         let
@@ -177,16 +146,11 @@
           "hosts/${name}/host.nix: board ${toString meta.board} needs system aarch64-linux and role \"server\"";
         meta
       );
-      # Raspberry Pi hosts (aarch64-linux). Never built here: CI builds x86_64 hosts only
-      # (scripts/hosts.nix), but they are evaluated by checks.pi-eval, and their images are
-      # exposed as packages (`nix build .#image-<host>`, via qemu binfmt or an aarch64 builder).
+      # Pi hosts: CI builds x86_64 only, so they are evaluated (checks.pi-eval) and exposed as image packages.
       piHosts = builtins.filter (name: hostMeta.${name}.board != null) hosts;
-      # Pis that build an SD image, from host.nix metadata (no evaluation of the Pi configs).
       sdImageHosts = builtins.filter (name: hostMeta.${name}.image == "sd") piHosts;
       desktopHosts = builtins.filter (name: hostMeta.${name}.role == "desktop") hosts;
       serverHosts = builtins.filter (name: hostMeta.${name}.role == "server") hosts;
-      # Expectations for one server host's automatic upgrade (modules/nixos/server/auto-upgrade.nix),
-      # shared by checks.server-eval (x86_64 servers) and checks.pi-eval (the Pis).
       upgradeExpectationsFor =
         name:
         let
@@ -213,8 +177,6 @@
         ];
     in
     {
-      # Per-host metadata (above), for scripts/hosts.nix and docker-check.sh: readable without
-      # instantiating any host's nixpkgs.
       lib.hostMeta = hostMeta;
 
       nixosConfigurations =
@@ -226,31 +188,23 @@
           }
         )
         // {
-          # QEMU/UEFI check target: tariognatha with GPU/disko/real fs
-          # switched off.
           tariognatha-vm = mkHost {
             hostName = "tariognatha";
             inherit (hostMeta.tariognatha) system role;
             extraModules = [
               ./hosts/tariognatha/vm-overrides.nix
-              # mkForce: overrides mk-host.nix's plain hostName definition.
               { networking.hostName = nixpkgs.lib.mkForce "tariognatha-vm"; }
             ];
           };
         };
 
-      # aarch64-linux: only the server editor, which the Pi hosts' home-manager installs
-      # (modules/home/common/neovim.nix reads inputs.self.packages.<hostPlatform>).
       packages.aarch64-linux.nvim-stable = nvimStableFor "aarch64-linux";
 
-      # The Pi images below sit under x86_64-linux on purpose: they are built from this machine
-      # (qemu binfmt or a remote aarch64 builder), so `nix build .#image-<host>` works where
-      # the flake is used; nothing keys them under packages.aarch64-linux.
+      # Pi images sit under x86_64-linux: built from this machine via qemu binfmt or a remote aarch64 builder.
       packages.${system} =
         import ./pkgs { inherit pkgs; }
         // {
           inherit nvim nvim-stable;
-          # nixos-raspberrypi's installer SD images.
           image-installer-rpi4 = inputs.nixos-raspberrypi.installerImages.rpi4;
           # rpi5 with root's authorized keys from lib/ssh-keys.nix, so nixos-anywhere reaches it
           # headless (the stock image has no keys and an empty root password: console only).
@@ -261,7 +215,6 @@
               ];
             }).config.system.build.sdImage;
         }
-        # Ready-to-flash SD images of the Pi hosts that use the sd-image module.
         // nixpkgs.lib.genAttrs (map (h: "image-${h}") sdImageHosts) (
           name: self.nixosConfigurations.${nixpkgs.lib.removePrefix "image-" name}.config.system.build.sdImage
         );
@@ -287,10 +240,8 @@
       };
 
       checks.${system} = {
-        # A top-level nix config attribute in this file makes every nix command, and so
-        # direnv's `use flake`, stop at an interactive "do you want to allow configuration
-        # setting" prompt. It was dropped once (451e2af) and came back (fde342b); fail here
-        # so it cannot return unnoticed. The pattern is split so this file doesn't match.
+        # A top-level nix config attribute makes direnv's `use flake` stop at an interactive prompt.
+        # The pattern is split so this file doesn't match.
         no-flake-nixconfig =
           let
             src = builtins.readFile ./flake.nix;
@@ -300,8 +251,7 @@
             "checks.no-flake-nixconfig: flake.nix sets a top-level nix config attribute; move it to nix.settings (modules/nixos/common/nix-settings.nix)"
             (pkgs.runCommand "krane-no-flake-nixconfig" { } "touch $out");
 
-        # overlays/ii-fixes.nix aliases the dropped gnome-icon-theme to adwaita-icon-theme.
-        # Checks the NixOS pkgs; home-manager shares them through useGlobalPkgs (lib/mk-host.nix).
+        # Checks the NixOS pkgs; home-manager shares them through useGlobalPkgs.
         ii-overlay =
           let
             pname = self.nixosConfigurations.tariognatha.pkgs.gnome-icon-theme.pname;
@@ -310,9 +260,8 @@
             "checks.ii-overlay: gnome-icon-theme is '${pname}', expected the ii-fixes alias to adwaita-icon-theme"
             (pkgs.runCommand "krane-ii-overlay" { } "touch $out");
 
-        # custom/*.lua is parsed only at Hyprland session start. Catch
-        # syntax errors here instead. Parse-only, undefined globals are fine. Desktop
-        # hosts only: other roles have no krane.hypr.
+        # custom/*.lua is parsed only at Hyprland session start. Parse-only, undefined globals are fine.
+        # Desktop hosts only: other roles have no krane.hypr.
         lua-syntax =
           let
             renderedFiles = nixpkgs.lib.concatMap (
@@ -323,8 +272,6 @@
               nixpkgs.lib.attrValues cfg.home-manager.users.${cfg.krane.user.name}.krane.hypr._rendered
             ) desktopHosts;
           in
-          # Refuse an empty `_rendered` list here, at eval time, and
-          # again in the builder, so this check can't pass vacuously.
           nixpkgs.lib.throwIf (renderedFiles == [ ])
             "checks.lua-syntax: krane.hypr._rendered is empty for all hosts; the check would pass vacuously"
             (
@@ -344,10 +291,6 @@
               ''
             );
 
-        # krane.user wiring (modules/nixos/common/user.nix): the stock hosts keep "krane", and
-        # overriding it moves the account, the home-manager user, the git identity,
-        # nix trusted-users and greetd autologin with it. Eval-only: the derivation is
-        # trivial, the assertions run while evaluating it.
         user-option =
           let
             base = self.nixosConfigurations.taractias.config;
@@ -440,11 +383,7 @@
             "checks.user-option: ${nixpkgs.lib.concatStringsSep "; " failed}"
             (pkgs.runCommand "krane-user-option" { } "touch $out");
 
-        # Evaluates role = "server" configs built from tests/server-host/ (not under hosts/, so
-        # they are no nixosConfigurations) on the stable channel, so server-role regressions
-        # surface here before a real server host exists: a plain fixture, the WireGuard hub
-        # (taragarmr) and a spoke (tarronax), each with the fixture's dummy secret paths. Eval-only:
-        # nothing is built, the assertions run while evaluating.
+        # Server-role configs from tests/server-host/ (not under hosts/) on the stable channel; eval-only.
         server-eval =
           let
             inherit (nixpkgs) lib;
@@ -540,8 +479,7 @@
                 what = "a spoke's wg0 is not a keepalive client of the hub with address 192.168.82.4/24 and no wg1";
               }
               {
-                # Spokes on the hub's LAN (lib/lan.nix) reach it over the switch, not through
-                # the Fritzbox's NAT loopback; tarronax, on another LAN, keeps wg.krane.dev above.
+                # Spokes on the hub's LAN reach it over the switch, not through the Fritzbox's NAT loopback.
                 ok =
                   map (p: p.endpoint) lanSpoke.networking.wg-quick.interfaces.wg0.peers == [
                     "192.168.178.23:13231"
@@ -584,7 +522,6 @@
                   ntfy.listen-http == "192.168.82.1:2586"
                   && ntfy.auth-default-access == "deny-all"
                   && builtins.elem "wg-quick-wg0.service" tg.systemd.services.ntfy-sh.after
-                  # wg0 is a trusted interface (all ports open there), so 2586 stays closed elsewhere.
                   && builtins.elem "wg0" tg.networking.firewall.trustedInterfaces
                   && !builtins.elem 2586 tg.networking.firewall.allowedTCPPorts;
                 what = "ntfy does not listen on taragarmr's WireGuard address alone with deny-all as the default, ordered after wg0 and closed on other interfaces";
@@ -594,8 +531,7 @@
                 what = "a desktop has system.autoUpgrade enabled";
               }
               {
-                # The subscriber is only defined once the host has the ntfy/read-token secret,
-                # so give each desktop one for this evaluation.
+                # The subscriber needs the ntfy/read-token secret, so give each desktop one.
                 ok = lib.all (
                   n:
                   let
@@ -612,8 +548,6 @@
                 what = "a desktop has no server-upgrade-notify user service once it has the ntfy/read-token secret";
               }
               {
-                # The converse: a desktop whose secrets file has no `ntfy` section (as evaluated,
-                # without the stub) defines neither the secret nor the unit.
                 ok = lib.all (
                   n:
                   let
@@ -632,8 +566,6 @@
                 what = "a desktop without an ntfy secrets section defines the ntfy/read-token secret or the server-upgrade-notify unit";
               }
               {
-                # Desktops in wg0.desktopSsh accept SSH only on wg0, and only from each other's
-                # wg0 address with that host's key. Other desktops keep port 22 closed.
                 ok =
                   let
                     wg = (import ./lib/wireguard.nix).wg0;
@@ -651,7 +583,7 @@
                     !c.services.openssh.openFirewall
                     && !builtins.elem 22 fw.allowedTCPPorts
                     && (builtins.elem 22 wgPorts) == enabled
-                    # A key in ~/.ssh/authorized_keys would skip the from= restriction.
+                    # authorized_keys in the home dir would skip the from= restriction.
                     && c.services.openssh.authorizedKeysInHomedir == !enabled
                     && (
                       if enabled then
@@ -694,10 +626,7 @@
             } "echo \"$toplevel $hubToplevel $spokeToplevel\" > $out"
           );
 
-        # Evaluates every Raspberry Pi host (aarch64-linux, role server) on the stable channel and
-        # forces its toplevel (and sdImage) derivation paths: the x86_64 CI cannot build them, but
-        # evaluating works. Also asserts the Pi boot setup: nixos-raspberrypi's loader, the
-        # Pi 5 on the generational "kernel" one, Pi 4 on u-boot, and no systemd-boot/grub.
+        # The x86_64 CI cannot build the Pi hosts, so force their toplevel (and sdImage) derivation paths.
         pi-eval =
           let
             inherit (nixpkgs) lib;
@@ -755,8 +684,6 @@
                 ''
             );
 
-        # pkgs/krane-ii-settings unit tests: schema validation, sparse writes, no-op on
-        # unchanged content, refusals (bad JSON, Nix-owned or unknown key), render goldens.
         ii-settings-writer =
           pkgs.runCommand "ii-settings-writer-tests" { nativeBuildInputs = [ pkgs.python3 ]; }
             ''
@@ -766,10 +693,7 @@
               touch "$out"
             '';
 
-        # Every schema key and every monitor field, rendered against one host's real manifest
-        # and parsed. Any host works here: this exercises the render machinery, not host-specific
-        # values, and checks.lua-syntax already checks every host's own JSON separately. A fixed
-        # stock host, so a new host that sorts first cannot break this check.
+        # Fixed stock host: this exercises the render machinery, not host values.
         ii-settings-render =
           let
             writer = pkgs.callPackage ./pkgs/krane-ii-settings { };
@@ -785,42 +709,14 @@
             touch "$out"
           '';
 
-        # NixVim's own startup test: fails on errors or warnings at startup.
         nvim = nvimEval.config.build.test;
 
-        # The same startup test against the stable nixvim and nixpkgs (role = "server" hosts).
         nvim-stable = nvimStableEval.config.build.test;
 
-        # Headless Lua specs in modules/nixvim/tests/, one fresh nvim each.
-        # Each run is bounded by `timeout 120` (a hung spec, e.g. from an
-        # unresolved async callback, fails the build instead of hanging it
-        # forever) and, after letting scheduled callbacks flush, checks
-        # :messages for an escaped scheduled-callback error, so an error
-        # raised from vim.schedule(...)/vim.defer_fn(...) -- which pcall
-        # around dofile can't see, since it escapes on the event loop after
-        # dofile returns -- still fails the spec.
-        #
-        # This replaced an earlier vim.v.errmsg-based check (round 2):
-        # v:errmsg is also set by LuaSnip 2.5.0's internal `silent!` calls
-        # (`silent! call repeat#set(...)` in luasnip/init.lua:667,
-        # `:silent! foldopen!` in luasnip/util/feedkeys.lua:119), which
-        # `silent!` suppresses on screen but not in v:errmsg, false-failing
-        # any spec that expands/jumps a snippet. :messages does not record
-        # `silent!`-suppressed errors at all (confirmed: a throwaway
-        # `vim.cmd("silent! call nosuch#fn()")` spec exits 0 against this
-        # check), so it needs no such workaround and catches strictly more:
-        # a scheduled error crashes with "Error in command line: vim.schedule
-        # callback: ..." (or E5108 for some deferred-callback paths), both
-        # matched below. Errors raised inside a spec's own internal
-        # vim.wait() window are also caught now, since :messages accumulates
-        # for the whole nvim session rather than being reset per-window.
-        #
-        # Specs run with a 10 s format_on_save budget (vim.g.format_on_save_timeout_ms,
-        # read by modules/nixvim/lang/default.nix; interactive default 500 ms): a
-        # loaded CI runner once missed 500 ms for prettierd, and conform then saves
-        # unformatted without an error, failing a formatting assertion for a
-        # reason unrelated to the gating logic under test. A failing spec also
-        # prints :messages and conform.log, so the next failure shows its cause.
+        # Each spec runs in a fresh nvim under `timeout 120`, then :messages is checked for an escaped
+        # vim.schedule/vim.defer_fn error, which pcall around dofile cannot see.
+        # :messages, not v:errmsg: LuaSnip's internal `silent!` calls set v:errmsg and false-fail snippet specs.
+        # format_on_save timeout is 10 s: a loaded CI runner missed 500 ms for prettierd and conform saved unformatted.
         nvim-specs =
           pkgs.runCommand "nvim-specs"
             {

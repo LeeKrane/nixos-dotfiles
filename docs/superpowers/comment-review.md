@@ -103,3 +103,17 @@ For each: keep, trim, or delete. This file is deleted before `doc-cleanup` merge
 - `hosts/taronychus/default.nix:~7` BOOT_ORDER 0xf461 / 0xf416 both reach NVMe. Pi firmware.
 - `hosts/taragarmr/default.nix`, `hosts/tarritator/default.nix`, `hosts/tarronax/default.nix` Headers: board specs and install steps. External state.
 - `hosts/tariognatha/display.nix:38` VERIFY ON TARGET: name must match `hyprctl devices`. Needs physical device.
+
+## lib, flake.nix, overlays
+
+- `flake.nix:43` Pinned past soymou's May 2026 quickshell (fails vs Qt 6.12), fixed upstream 5d5d498 / 1c1cc91. Unlinked upstream.
+- `flake.nix:255` rpi5 installer image: no keys, empty root password, console only. Upstream image.
+- `flake.nix:668` tariognatha suspends instead of poweroff (WoL); ii search runs bash -c ignoring aliases. ii/hardware.
+- `lib/mk-host.nix:43` RPi: only plain overlays injected, else miss nixos-raspberrypi cache. Upstream cache.
+- `lib/mk-host.nix:105` soymou activation replaces ~/.config/fish each switch. soymou module.
+- `lib/mk-host.nix:117` HM level, not NixOS: soymou #19 dconf error. Upstream issue.
+- `lib/wireguard.nix:42` Android WireGuard app needs PersistentKeepalive = 25. Android app.
+- `lib/lan.nix:13` Second LAN; tariognatha USB adapter wakes it; tarronax sends magic packet. Network/hardware.
+- `overlays/ani-cli.nix:1` nixpkgs ani-cli 5.0 provider down (503); master 5.1.4 moved to hianime.at. Upstream status.
+- `overlays/dolphin-darkly-selection.nix:1` Dolphin 26.08 selection-text colour note. Upstream.
+- `overlays/gsr-ui-fractional-scale.nix:1` gsr-ui fractional-scale note. Upstream.

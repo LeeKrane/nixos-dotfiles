@@ -1,5 +1,4 @@
-# Per-host secrets file lookup shared by modules that gate sops declarations on it.
-# `hostName` is the mk-host.nix specialArg, not `config.networking.hostName`:
+# Per-host secrets file lookup. `hostName` is the mk-host.nix specialArg, not `config.networking.hostName`:
 # tariognatha-vm overrides the latter but shares tariognatha's secrets file.
 { lib, hostName }:
 let
@@ -8,9 +7,8 @@ let
   file = ../secrets/${hostName}.yaml;
   exists = builtins.pathExists file;
 
-  # sops encrypts values, not key names, so the top-level sections are readable at eval time.
-  # A section absent from the file means that feature is off on this host; an empty value
-  # cannot be detected (it is encrypted like any other).
+  # sops encrypts values, not key names, so top-level sections are readable at eval time; an absent
+  # section means the feature is off on this host.
   lines = lib.optionals exists (lib.splitString "\n" (builtins.readFile file));
 in
 {

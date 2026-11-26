@@ -1,14 +1,7 @@
-# mkHost { hostName, system, role ? "desktop", board ? null, hostDir ? ../hosts/<hostName>,
-#          extraModules ? [ ] }
-#   -> nixosSystem
-# Shared host builder: wires disko, sops-nix, home-manager and the soymou
-# module, at the HM level to avoid a dconf eval error.
 { inputs }:
 let
-  # Servers follow the stable channel: the stable nixpkgs, home-manager and nixvim inputs
-  # stand in under their usual names, so every module that reads inputs.nixpkgs (for
-  # example the nix registry) sees stable on servers. Desktops get `inputs` unchanged.
-  # nixpkgs-unstable keeps the desktop pin reachable for single packages stable lacks.
+  # Servers get the stable nixpkgs, home-manager and nixvim under the usual input names, so modules
+  # reading inputs.nixpkgs see stable. nixpkgs-unstable keeps the desktop pin reachable.
   inputsFor =
     role:
     if role == "server" then
@@ -25,15 +18,8 @@ in
 {
   hostName,
   system,
-  # Picks modules/{nixos,home}/<role> next to common/; "desktop" also gets the
-  # illogical-impulse home-manager module.
   role ? "desktop",
-  # Raspberry Pi board ("rpi4" | "rpi5", from hosts/<name>/host.nix) or null for everything
-  # else. A board adds the nixos-raspberrypi modules (vendor kernel/firmware overlays,
-  # bootloader, board base profile, its binary cache); hosts add sd-image or disko themselves.
-  # Needs system = "aarch64-linux".
   board ? null,
-  # Host module directory; only the flake's server-eval check points this elsewhere.
   hostDir ? ../hosts/${hostName},
   extraModules ? [ ],
 }:
@@ -45,7 +31,6 @@ let
   # which would miss nixos-raspberrypi's cache and need emulated kernel builds.
   boardModules = {
     rpi4 = rpi.nixosModules.raspberry-pi-4.base;
-    # The bootloader is set per host (a Pi 5 uses the generational "kernel" loader).
     rpi5 = rpi.nixosModules.raspberry-pi-5.base;
   };
 in
@@ -64,27 +49,18 @@ roleInputs.nixpkgs.lib.nixosSystem {
   modules = [
     {
       networking.hostName = hostName;
-      # `nixos-version --configuration-revision` reads the commit a host runs; "dirty" for a
-      # build from an unclean tree (`just switch`). The server upgrade hooks compare it with `deploy`.
+      # Read by `nixos-version --configuration-revision`; the server upgrade hooks compare it with `deploy`.
       system.configurationRevision = inputs.self.rev or "dirty";
-      # mkDefault: the desktops' hardware-configuration.nix set the same value at the same
-      # priority (equal values merge without conflict). A non-x86 host would not import
-      # such a file, or would override.
+      # mkDefault: the desktops' hardware-configuration.nix set the same value.
       nixpkgs.hostPlatform = roleInputs.nixpkgs.lib.mkDefault system;
-      # useGlobalPkgs (not a second overlays list) gets ii-fixes to both
-      # NixOS and home-manager pkgs.
+      # useGlobalPkgs: ii-fixes reaches both NixOS and home-manager pkgs.
       nixpkgs.overlays = import ../overlays;
       nixpkgs.config.allowUnfree = true;
     }
     roleInputs.disko.nixosModules.disko
     roleInputs.sops-nix.nixosModules.sops
     roleInputs.home-manager.nixosModules.home-manager
-    # Role before common, so list-valued options (environment.systemPackages, extraGroups,
-    # shell init text, ...) merge with the role's entries first, as the pre-split flat module
-    # list ordered them for the modules where it matters. Common is not a strict prefix
-    # of the old order: nix-settings, locale, users, user and keyboard used to load before
-    # the desktop modules and now load after them, so only order-insensitive options may live
-    # there. The home-manager side below has no such constraint, its order is free.
+    # Role before common so list-valued options merge the role's entries first.
     ../modules/nixos/${role}
     ../modules/nixos/common
     hostDir
@@ -108,23 +84,16 @@ roleInputs.nixpkgs.lib.nixosSystem {
           extraSpecialArgs = {
             inherit hostName role;
             inputs = roleInputs;
-            # modules/nixos/common/user.nix's krane.user, so home-manager modules read the
-            # account name and git identity from the same per-host place.
             kraneUser = config.krane.user;
           };
           users.${config.krane.user.name}.imports =
             roleInputs.nixpkgs.lib.optional (role == "desktop")
               # HM level, not NixOS: soymou #19 dconf error.
-              # Imported from a patched copy of the flake source rather than
-              # homeManagerModules.default: illogical-flake pins Qt to qt6ct in three
-              # places (quickshell wrapper --set, home.sessionVariables, custom/env.lua),
-              # which detaches every Qt app from ii's kdeglobals theming. See
-              # patches/illogical-flake-kde-platformtheme.patch. `inputs` mirrors the
-              # flakeInputs set that illogical-flake's flake.nix hands to home-module.nix.
-              # applyPatches comes from the bare nixpkgs for `system`, not the module
-              # `pkgs` arg: the imported module's `imports` list is built from the
-              # patched path, and deriving it from `pkgs` (which depends on `config`)
-              # is an infinite recursion.
+              # Patched copy of the flake source, not homeManagerModules.default: illogical-flake pins Qt to
+              # qt6ct, which detaches Qt apps from ii's kdeglobals theming
+              # (patches/illogical-flake-kde-platformtheme.patch).
+              # applyPatches comes from bare nixpkgs: deriving it from the module `pkgs` (which depends on
+              # `config`) recurses infinitely.
               (
                 let
                   patched = roleInputs.nixpkgs.legacyPackages.${system}.applyPatches {
@@ -132,25 +101,10 @@ roleInputs.nixpkgs.lib.nixosSystem {
                     src = roleInputs.illogical-flake;
                     patches = [ ../patches/illogical-flake-kde-platformtheme.patch ];
                   };
-                  # dots-hyprland (`inputs.dotfiles` below), not illogical-flake
-                  # itself: home-modules/dotfiles.nix copies ~/.config from
-                  # `inputs.dotfiles` at HM activation, so everything patched here
-                  # lives in that separate source, not the one `patched` above
-                  # rewrites. Two things are patched in:
-                  # - Cheatsheet's number-key collapsing regex matches F-keys
-                  #   containing a "1" digit (F1, F10, F11), mangling their
-                  #   rendered label, and drops F9 entirely (digit 9, no "1").
-                  #   See patches/illogical-flake-cheatsheet-fkeys.patch.
-                  # - Changes carried from pctrade/end4-pC and this repo's own ii
-                  #   work, kept as `git format-patch` series, one directory per
-                  #   sub-project under patches/ii/ (01-fixes, 02-translator, ...).
-                  #   Directories apply in lexical order, and the patches in each
-                  #   directory in lexical (= commit) order. A new sub-project only
-                  #   adds a directory. See docs/II-INTEGRATION.md
-                  #   "Backported fork fixes" for the workflow.
-                  # `lib` is the bare nixpkgs lib for the same reason
-                  # `applyPatches` is taken from bare nixpkgs above: anything
-                  # derived from the module's `config` would recurse infinitely.
+                  # Patches dots-hyprland (`inputs.dotfiles`), which home-modules/dotfiles.nix copies to ~/.config:
+                  # - illogical-flake-cheatsheet-fkeys.patch: the number-key regex mangles F1/F10/F11 labels and drops F9.
+                  # - patches/ii/<dir>/*.patch: fork changes, applied in lexical order.
+                  # `lib` is bare nixpkgs lib, same reason as applyPatches.
                   iiSeries =
                     let
                       lib = roleInputs.nixpkgs.lib;
