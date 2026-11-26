@@ -1,9 +1,5 @@
-# Firecrawl's anydoc CLI: converts office documents, EPUB, CSV and PDF to
-# Markdown. The npm package is a JS wrapper around a prebuilt napi-rs addon
-# shipped as a per-platform package; the addon is copied next to index.js,
-# which loads it from there before trying node_modules. To bump: set
-# `version`, then take each hash from
-# `npm view @firecrawl/anydoc[-linux-x64-gnu]@<version> dist.integrity`.
+# The npm package wraps a prebuilt napi-rs addon shipped per platform; the addon is
+# copied next to index.js, which loads it from there before node_modules.
 {
   lib,
   stdenv,
@@ -47,7 +43,6 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     makeBinaryWrapper
   ];
 
-  # libgcc_s for the addon
   buildInputs = [ stdenv.cc.cc.lib ];
 
   dontBuild = true;

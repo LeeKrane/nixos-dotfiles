@@ -1,7 +1,5 @@
 """Boot-path fixes: pre-login lock fallback, always-emitted monitors table,
-hyprlock fallback wait and subprocess timeouts.
-Run from pkgs/krane-ii-settings: python3 -m unittest discover -s tests -v
-"""
+hyprlock fallback wait and subprocess timeouts."""
 
 import os
 import pathlib

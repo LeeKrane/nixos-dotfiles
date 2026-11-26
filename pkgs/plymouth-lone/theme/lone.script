@@ -3,37 +3,30 @@
 ## Github : @adi1090x
 ## Reddit : @adi1090x
 
-// Screen size
 screen.w = Window.GetWidth(0);
 screen.h = Window.GetHeight(0);
 screen.half.w = Window.GetWidth(0) / 2;
 screen.half.h = Window.GetHeight(0) / 2;
 
-// Question prompt
 question = null;
 answer = null;
 
-// Message
 message = null;
 
-// Password prompt
 bullets = null;
 prompt = null;
 bullet.image = Image.Text("*", 1, 1, 1);
 
-// Flow
 state.status = "play";
 state.time = 0.0;
 
-//--------------------------------- Refresh (Logo animation) --------------------------
+// Logo animation
 
-# cycle through all images
 for (i = 0; i < 64; i++)
   flyingman_image[i] = Image("progress-" + i + ".png");
 flyingman_sprite = Sprite();
 
-# set image position
-flyingman_sprite.SetX(Window.GetX() + (Window.GetWidth(0) / 2 - flyingman_image[0].GetWidth() / 2)); # Place images in the center
+flyingman_sprite.SetX(Window.GetX() + (Window.GetWidth(0) / 2 - flyingman_image[0].GetWidth() / 2));
 flyingman_sprite.SetY(Window.GetY() + (Window.GetHeight(0) / 2 - flyingman_image[0].GetHeight() / 2));
 
 progress = 0;
@@ -46,7 +39,7 @@ fun refresh_callback ()
   
 Plymouth.SetRefreshFunction (refresh_callback);
 
-//------------------------------------- Password prompt -------------------------------
+// Question prompt
 fun DisplayQuestionCallback(prompt, entry) {
     question = null;
     answer = null;
@@ -66,7 +59,7 @@ fun DisplayQuestionCallback(prompt, entry) {
 }
 Plymouth.SetDisplayQuestionFunction(DisplayQuestionCallback);
 
-//------------------------------------- Password prompt -------------------------------
+// Password prompt
 fun DisplayPasswordCallback(nil, bulletCount) {
     state.status = "pause";
     totalWidth = bulletCount * bullet.image.GetWidth();
@@ -77,7 +70,6 @@ fun DisplayPasswordCallback(nil, bulletCount) {
     prompt.sprite.SetX(screen.half.w - prompt.image.GetWidth() / 2);
     prompt.sprite.SetY(screen.h - 4 * prompt.image.GetHeight());
 
-    // Clear all bullets (user might hit backspace)
     bullets = null;
     for (i = 0; i < bulletCount; i++) {
         bullets[i].sprite = Sprite(bullet.image);
@@ -87,7 +79,7 @@ fun DisplayPasswordCallback(nil, bulletCount) {
 }
 Plymouth.SetDisplayPasswordFunction(DisplayPasswordCallback);
 
-//--------------------------- Normal display (unset all text) ----------------------
+// Normal display
 fun DisplayNormalCallback() {
     state.status = "play";
     bullets = null;
@@ -98,7 +90,7 @@ fun DisplayNormalCallback() {
 }
 Plymouth.SetDisplayNormalFunction(DisplayNormalCallback);
 
-//----------------------------------------- Message --------------------------------
+// Message
 fun MessageCallback(text) {
     message.image = Image.Text(text, 1, 1, 1);
     message.sprite = Sprite(message.image);

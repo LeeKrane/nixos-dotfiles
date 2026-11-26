@@ -1,6 +1,4 @@
-"""Render and schema tests for krane_ii_settings.
-Run from pkgs/krane-ii-settings: python3 -m unittest discover -s tests -v
-"""
+"""Render and schema tests for krane_ii_settings."""
 
 import copy
 import json
@@ -55,9 +53,7 @@ class TestRender(RenderBase):
         self.assertNotIn("bootConfirmed", out)
 
     def test_monitor_rule_is_stashed_in_krane_gui_monitors(self):
-        # hosts/<host>/display.nix's extraMonitorsLua (e.g. tarmantria's
-        # scale_internal) reads KRANE_GUI_MONITORS[output] back to merge
-        # GUI-owned fields into a rule it builds itself.
+        # hosts/<host>/display.nix's extraMonitorsLua reads KRANE_GUI_MONITORS back.
         out = k.render({"monitors": {"DP-2": {"cm": "hdr"}}}, self.manifest, SCHEMA)
         self.assertIn("KRANE_GUI_MONITORS = {}", out)
         self.assertIn('KRANE_GUI_MONITORS["DP-2"] = {', out)

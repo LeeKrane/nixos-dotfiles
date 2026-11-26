@@ -1,7 +1,4 @@
-# VoiceStudio: local-first voice cloning, dubbing and transcription (Electron
-# UI plus a Python backend it sets up and downloads models for at runtime).
-# Wraps the upstream AppImage. To bump: set `version`, then take the hash from
-# the release's SHA256SUMS.txt (`nix hash convert --to sri sha256:<hex>`).
+# Wraps the upstream AppImage.
 {
   lib,
   appimageTools,

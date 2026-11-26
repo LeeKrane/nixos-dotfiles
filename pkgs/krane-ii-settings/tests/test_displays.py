@@ -1,6 +1,4 @@
-"""Display tests for krane_ii_settings (try, confirm, boot check).
-Run from pkgs/krane-ii-settings: python3 -m unittest discover -s tests -v
-"""
+"""Display tests for krane_ii_settings (try, confirm, boot check)."""
 
 import pathlib
 import unittest
@@ -88,8 +86,6 @@ class TestMonitors(Base):
         self.assertIn("DP-2", self.s.boot_check(wait_seconds=5, poll=0))
 
     def test_boot_check_skips_disconnected_output(self):
-        # I1: an output Hyprland does not currently report connected stays
-        # bootConfirmed=false and is never added to the pending file.
         self.repo.write_text(
             '{"monitors": {"DP-2": {"bootConfirmed": false, "cm": "hdr"},'
             ' "HDMI-A-1": {"bootConfirmed": false, "cm": "srgb"}}}\n')
@@ -107,8 +103,6 @@ class TestMonitors(Base):
         self.assertNotIn(("open_settings",), self.runtime.calls)
 
     def test_revert_unconfirmed_only_touches_pending_outputs(self):
-        # I1 + Minor 1: revert_unconfirmed must act only on the outputs the
-        # pending file listed, and must stop the revert timer.
         self.repo.write_text(
             '{"monitors": {"DP-2": {"bootConfirmed": false, "cm": "hdr"},'
             ' "HDMI-A-1": {"bootConfirmed": false, "cm": "srgb"}}}\n')
@@ -227,7 +221,6 @@ class TestGuiOwnedPosition(Base):
                 k.validate_data({"monitors": {"DP-1": {"bootPrevious": prev}}}, self.s.schema)
 
     def test_seeded_position_is_confirmed(self):
-        # No bootConfirmed key: the boot check has nothing to ask about.
         self.repo.write_text('{"monitors": {"DP-1": {"position": "2560x0"}}}\n')
         self.assertEqual(self.s.boot_check(wait_seconds=0, poll=0), "nothing to check")
 

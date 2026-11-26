@@ -1,8 +1,4 @@
-# Vendored from nixpkgs (pkgs/by-name/cl/claude-code/package.nix) so
-# claude-code can be bumped on its own, without moving the whole nixpkgs
-# pin. manifest.zst.json holds the version and per-platform checksums;
-# `just update-claude` refetches it from downloads.claude.ai. Re-sync this
-# file from nixpkgs only if upstream changes how the binary is installed.
+# Vendored from nixpkgs so claude-code bumps without moving the nixpkgs pin.
 {
   lib,
   stdenvNoCC,

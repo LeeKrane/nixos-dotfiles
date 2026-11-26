@@ -15,8 +15,7 @@ stdenvNoCC.mkDerivation {
     mkdir -p $out/share/plymouth/themes/lone
     cp -r . $out/share/plymouth/themes/lone/
 
-    # plymouth's module doesn't rewrite this theme's hardcoded FHS path,
-    # so substitute it here at build time.
+    # The theme hardcodes an FHS path that plymouth's module doesn't rewrite.
     substituteInPlace $out/share/plymouth/themes/lone/lone.plymouth \
       --replace-fail /usr/share/plymouth/themes/lone $out/share/plymouth/themes/lone
 

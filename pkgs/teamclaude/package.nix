@@ -1,9 +1,5 @@
-# teamclaude, the multi-account Claude proxy that ~/.claude's settings.json
-# points ANTHROPIC_BASE_URL at (localhost:3456). Pinned to the release
-# ~/.claude/SETUP.md names. The npm tarball has no dependencies, so it is
-# installed as-is instead of through buildNpmPackage. To bump: set
-# `version`, then take `hash` from
-# `npm view @karpeleslab/teamclaude@<version> dist.integrity`.
+# The npm tarball has no dependencies, so it is installed as-is instead of through
+# buildNpmPackage.
 {
   lib,
   stdenvNoCC,

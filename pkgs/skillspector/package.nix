@@ -1,16 +1,3 @@
-# NVIDIA's static security scanner for Claude Code / Cursor agent skills
-# (SKILL.md files, tool manifests, etc). Not in nixpkgs. Pinned to the
-# latest release tag. To bump: check
-# `git ls-remote --tags https://github.com/NVIDIA/SkillSpector`, then set
-# `version` and take `hash` from `nix-prefetch-url --unpack
-# https://github.com/NVIDIA/SkillSpector/archive/refs/tags/v<version>.tar.gz`.
-#
-# Upstream's *required* dependency list (not just its optional `mcp` /
-# `langgraph-dev` extras) pulls in the full langchain/langgraph/boto3/openai
-# stack, used only for its optional `--llm-provider` semantic-analysis path
-# (`cli.py` imports it lazily, so `scan --no-llm` never touches it or any
-# API key at runtime). nixpkgs already carries all of it.
-#
 # pywhatwgurl is the one dependency missing from nixpkgs, so it's packaged
 # inline below straight from its PyPI wheel: its sdist relies on hatch-vcs
 # for its version string, which needs git metadata that isn't present when

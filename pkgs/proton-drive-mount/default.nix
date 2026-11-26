@@ -1,5 +1,3 @@
-# Wraps scripts/proton-drive-rclone-mount.sh as a package, so it can be
-# built and shellchecked on its own.
 {
   lib,
   writeShellApplication,
@@ -25,12 +23,10 @@ writeShellApplication {
   # `set -euo pipefail` from bashOptions would abort too early.
   bashOptions = [ ];
 
-  # SC2034: `yad_response=$(yad ...)` is unused on purpose. Only `$?`
-  # decides Retry vs Cancel. Control flow here must not change.
+  # SC2034: only `$?` of `yad_response=$(yad ...)` is used.
   excludeShellChecks = [ "SC2034" ];
 
-  # Strips the original `#!/bin/bash` line. writeShellApplication adds
-  # its own ahead of `text`.
+  # Drops the shebang; writeShellApplication adds its own.
   text = lib.concatStringsSep "\n" (
     lib.tail (lib.splitString "\n" (builtins.readFile ../../scripts/proton-drive-rclone-mount.sh))
   );

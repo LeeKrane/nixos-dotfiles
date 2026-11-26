@@ -1,8 +1,5 @@
-"""Tests for the activate command (C1): re-render the live GUI config from
-the repo file at every home-manager activation, without ever touching
-hyprctl, reload, the revert timer or the pending file.
-Run from pkgs/krane-ii-settings: python3 -m unittest discover -s tests -v
-"""
+"""Tests for the activate command: re-render the live GUI config from the repo file
+without touching hyprctl, reload, the revert timer or the pending file."""
 
 import pathlib
 import unittest
@@ -40,8 +37,7 @@ class TestActivate(Base):
         self.assertEqual(self.runtime.calls, [])
 
     def test_activate_on_nix_owned_rejection_changes_nothing_and_exits_clean(self):
-        # nixOwned.monitors.DP-2 includes "scale" in the fixture manifest; a
-        # repo file claiming to GUI-own that field is a rejected (owned) write.
+        # The fixture manifest makes "scale" Nix-owned on DP-2.
         self.repo.write_text('{"monitors": {"DP-2": {"scale": 2.0}}}\n')
         self.assertEqual(self.s.activate(), "activation skipped")
         self.assertFalse(pathlib.Path(self.manifest["liveFile"]).exists())

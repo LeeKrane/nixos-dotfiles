@@ -1,6 +1,4 @@
-"""Command tests for krane_ii_settings (set, reset, apply, get, idle, CLI).
-Run from pkgs/krane-ii-settings: python3 -m unittest discover -s tests -v
-"""
+"""Command tests for krane_ii_settings (set, reset, apply, get, idle, CLI)."""
 
 import json
 import os
@@ -20,9 +18,7 @@ SCHEMA = k.load_schema()
 
 
 class _AllConnected:
-    """Sentinel `in`-container standing in for "hyprctl reports every output
-    connected", so tests that never set FakeRuntime.connected keep their
-    existing behavior (I1 does not filter anything out for them)."""
+    """Stands in for "hyprctl reports every output connected"."""
 
     def __contains__(self, item):
         return True
@@ -43,8 +39,7 @@ class FakeRuntime:
         self.timer = False
         self.lock_states = []
         self.installed_idle = installed_idle
-        # None means "hyprctl unreadable" (I1); set to a set of output names,
-        # or leave as ALL_CONNECTED to mean every output is connected.
+        # None means "hyprctl unreadable".
         self.connected = ALL_CONNECTED
 
     def read_live(self):

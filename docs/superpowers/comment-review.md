@@ -140,3 +140,20 @@ For each: keep, trim, or delete. This file is deleted before `doc-cleanup` merge
 - `install.sh:181` LC_ALL=C keeps [@-~] a byte range under UTF-8 sed. sed locale.
 - `install.sh:1374` nixos-install resumes from copied paths; transient failure costs 10 s. Nix behaviour.
 - `.github/workflows/update-lane.yml:3` Called workflow sharing caller's concurrency group deadlocks. GitHub Actions.
+
+## pkgs
+
+- `pkgs/claude-code/package.nix:40` Otherwise bun runtime executes instead of binary. Binary internals.
+- `pkgs/claude-code/package.nix:68-73` node-tree-kill needs pgrep/ps; troubleshooting link; sandbox packages Linux only. Upstream binary.
+- `pkgs/proton-drive-mount/default.nix:24` Script handles rclone errors via retry/2FA prompts. Not confirmed.
+- `pkgs/krane-ii-settings/krane_ii_settings.py:351` Before login runtime dir may not exist: lock next to repo file. Boot timing.
+- `pkgs/krane-ii-settings/krane_ii_settings.py:489` Only the timer: service may be the caller. systemd runtime.
+- `pkgs/teamclaude/package.nix:30` Node happy-eyeballs gives each address 250 ms. Node dialer behaviour.
+- `pkgs/voicestudio/package.nix:21` App copies Python backend into runtime/ keeping read-only modes: EACCES. Upstream runtime.
+- `pkgs/heuristiclab/package.nix:2` wine-mono crashes on it; plain Mono breaks plugin loading. Upstream compatibility.
+- `pkgs/heuristiclab/package.nix:80` Wine DPI (96 = 100 %), WinForms scales from it. Wine behaviour.
+- `pkgs/skillspector/package.nix:1` pywhatwgurl missing from nixpkgs; sdist relies on hatch-vcs. Upstream packaging.
+- `pkgs/skillspector/package.nix:49` typer pin (<0.24) dodges click clash with dev-only tool. Upstream rationale.
+- `pkgs/skillspector/package.nix:81` Remaining tests want unpackaged `dev` extras. Upstream suite.
+- `pkgs/ani-cli-launcher/package.nix:49` Keystore in $XDG_DATA_HOME; new key means phone must uninstall. Android signing.
+- `pkgs/krane-ii-settings/tests/test_displays.py:209` DP-3 Nix-declared when position remembered. Historical scenario.

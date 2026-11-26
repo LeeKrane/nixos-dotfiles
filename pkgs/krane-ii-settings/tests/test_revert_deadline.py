@@ -1,6 +1,4 @@
-"""get() reports the revert deadline stored when the timer was started, so the GUI countdown matches it.
-Run from pkgs/krane-ii-settings: python3 -m unittest discover -s tests -v
-"""
+"""get() reports the revert deadline stored when the timer was started, so the GUI countdown matches it."""
 
 import json
 import subprocess

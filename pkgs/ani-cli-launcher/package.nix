@@ -8,7 +8,7 @@
   apksigner,
 }:
 let
-  # The Android SDK license is accepted for this package only, not in the flake's nixpkgs config.
+  # Accepts the Android SDK license for this package only.
   sdk = (androidenv.override { licenseAccepted = true; }).composeAndroidPackages {
     platformVersions = [ "35" ];
     buildToolsVersions = [ "35.0.0" ];
@@ -18,8 +18,7 @@ let
   root = "${sdk.androidsdk}/libexec/android-sdk";
   bt = "${root}/build-tools/35.0.0";
 
-  # Unsigned, zip-aligned. Signing needs a key that lives outside the repo and the store, so
-  # it is a separate step (`sign`, below).
+  # Unsigned: the signing key lives outside the repo and store (see `sign`).
   unsigned = stdenvNoCC.mkDerivation {
     pname = "ani-cli-launcher-unsigned";
     version = "1";
