@@ -1,1 +1,13 @@
-{}
+{
+  "monitors": {
+    "DP-1": {
+      "position": "-2560x-540"
+    },
+    "HDMI-A-1": {
+      "position": "-2560x-360"
+    },
+    "eDP-1": {
+      "position": "0x0"
+    }
+  }
+}

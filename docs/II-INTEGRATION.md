@@ -533,14 +533,19 @@ choices, derive consequences.
 
 Nix owns every key it sets: each `krane.hypr.settings` leaf, every entry of
 `krane.hypr.guiLocked`, the non-null fields of each `krane.hypr.monitors`
-entry (`output`, `mode`, `position`, `scale` and `disabled` always), and
+entry (`output`, `mode`, `scale` and `disabled` always; `position` only when set, and
+the GUI owns it otherwise), and
 `idle` when `krane.hypr.idle` or `idleTimeouts = false` is set. The settings
 window shows those controls disabled with "Set in Nix", and
 `krane-ii-settings` refuses them. Every other key in
 `pkgs/krane-ii-settings/schema.json` belongs to the GUI file. A key in
 both places fails evaluation, naming both files: delete it from one. To hand
 a key to the GUI, delete it from `display.nix` in the same commit that adds
-it to `ii-settings.json`. Keyboard layout stays in Nix because
+it to `ii-settings.json`. Monitor positions are handed over this way: `position`
+is null in every host's `display.nix`, and a host with a fixed layout keeps it in
+`ii-settings.json` (one without, such as taractias, renders `auto`). A
+position depends on the neighbours' Nix-owned scale, so after changing a scale
+in Nix, re-drag the positions in the settings window. Keyboard layout stays in Nix because
 `qwertz-binds.nix` depends on it.
 
 Only keys in `schema.json` can be written; each was checked against
@@ -602,8 +607,8 @@ it can hold the weather city, a booru username and AI endpoints.
 A host's `display.nix` can define `extraMonitorsLua` to re-send a monitor
 rule outside the GUI's own `monitors.<output>` block, for example to keep a
 laptop panel scaled correctly as external monitors come and go. That Lua
-runs with only the fields `display.nix` itself knows: `output`, `mode`,
-`position` and `scale`. Fields the settings window owns (transform, VRR,
+runs with only the fields `display.nix` itself knows: `output`, `mode` and
+`scale`. Fields the settings window owns (transform, VRR,
 color management, HDR) are not in scope there, so a naive re-send would
 silently drop them on every hotplug or `hyprctl reload`.
 
@@ -616,11 +621,13 @@ if the host defined one (`modules/home/desktop/hypr-config.nix`'s `monitorsFile`
 A host that needs its `extraMonitorsLua` to survive hotplug sets
 `krane_after_gui` to a function that merges `KRANE_GUI_MONITORS[output]`
 into each rule it re-sends before calling `hl.monitor`, skipping `output`,
-`mode`, `position` and `scale` itself so Nix's own computed values for
-those fields are not clobbered by the GUI's last-rendered ones.
+`mode` and `scale` itself so Nix's own computed values for those fields are
+not clobbered by the GUI's last-rendered ones. Position is the exception: it is
+GUI-owned, so the function reads it from `KRANE_GUI_MONITORS`.
 `hosts/tarmantria/display.nix`'s `scale_internal` is the example: it merges
-eDP-1's GUI fields back in, filtering out those four keys, whenever a
-monitor is added or removed, so a transform or color change set from the
+eDP-1's GUI fields back in, filtering out those keys, whenever a
+monitor is added or removed (the panel's position comes from the GUI entry of
+eDP-1 or, as the panel name flips with the GPU mux, eDP-2), so a transform or color change set from the
 settings window is not lost on the next hotplug.
 
 ### Escape hatches

@@ -23,7 +23,7 @@ class TestMonitors(Base):
     def test_try_then_confirm_persists_unconfirmed(self):
         self.s.try_monitor("DP-2", [("cm", "hdr"), ("bitdepth", "10")])
         self.s.confirm()
-        self.assertEqual(self.repo_data(), {"monitors": {"DP-2": {"bitdepth": 10, "bootConfirmed": False, "cm": "hdr"}}})
+        self.assertEqual(self.repo_data(), {"monitors": {"DP-2": {"bitdepth": 10, "bootConfirmed": False, "bootPrevious": {}, "cm": "hdr"}}})
         self.assertFalse(self.runtime.timer)
 
     def test_no_revert_timer_means_no_change(self):
@@ -138,6 +138,98 @@ class TestMonitors(Base):
             self.s.boot_check(wait_seconds=0, poll=0)
         self.assertIsNone(k.read_pending())
         self.assertNotIn(("open_settings",), self.runtime.calls)
+
+
+class TestGuiOwnedPosition(Base):
+    """A Nix-declared output whose position Nix leaves unset (null): position is the GUI's."""
+
+    def setUp(self):
+        super().setUp()
+        self.manifest["nixOwned"]["monitors"]["DP-1"] = ["disabled", "mode", "output", "scale"]
+        self.manifest["monitorBaselines"]["DP-1"] = {
+            "mode": "2560x1440@144", "output": "DP-1", "position": "auto", "scale": 1}
+
+    def test_try_position_writes_only_position(self):
+        self.s.try_monitor("DP-1", [("position", "2560x0")])
+        self.s.confirm()
+        self.assertEqual(self.repo_data(), {"monitors": {"DP-1": {"bootConfirmed": False, "bootPrevious": {}, "position": "2560x0"}}})
+        live = pathlib.Path(self.manifest["liveFile"]).read_text()
+        self.assertIn('position = "2560x0"', live)
+        self.assertIn('mode = "2560x1440@144"', live)
+        self.assertIn("scale = 1", live)
+
+    def test_nix_pinned_position_still_refused(self):
+        with self.assertRaisesRegex(k.SettingsError, "set in Nix"):
+            self.s.try_monitor("DP-2", [("position", "10x0")])
+        with self.assertRaisesRegex(k.SettingsError, "set in Nix"):
+            self.s.try_monitor("DP-1", [("scale", "2")])
+
+    def test_reset_position_falls_back_to_baseline(self):
+        self.repo.write_text('{"monitors": {"DP-1": {"position": "2560x0"}}}\n')
+        self.s.reset("monitor", "DP-1", ["position"])
+        self.assertEqual(self.repo_data(), {})
+        self.assertEqual(pathlib.Path(self.manifest["liveFile"]).read_text(), self.s.render({}))
+
+    def test_revert_unconfirmed_restores_seeded_position(self):
+        self.repo.write_text('{"monitors": {"DP-1": {"position": "2560x0"}}}\n')
+        self.s.try_monitor("DP-1", [("bitdepth", "10")])
+        self.s.confirm()
+        k.write_pending({"kind": "boot", "outputs": ["DP-1"]})
+        self.s.revert_unconfirmed()
+        self.assertEqual(self.repo_data(), {"monitors": {"DP-1": {"position": "2560x0"}}})
+        self.assertIn('position = "2560x0"', pathlib.Path(self.manifest["liveFile"]).read_text())
+
+    def test_reset_during_boot_check_is_not_undone_by_revert(self):
+        self.repo.write_text('{"monitors": {"DP-1": {"position": "2560x0"}}}\n')
+        self.s.try_monitor("DP-1", [("bitdepth", "10")])
+        self.s.confirm()
+        self.s.reset("monitor", "DP-1", ["position"])
+        k.write_pending({"kind": "boot", "outputs": ["DP-1"]})
+        self.s.revert_unconfirmed()
+        self.assertEqual(self.repo_data(), {})
+
+    def test_revert_unconfirmed_removes_entry_that_did_not_exist(self):
+        self.s.try_monitor("DP-1", [("position", "2560x0")])
+        self.s.confirm()
+        k.write_pending({"kind": "boot", "outputs": ["DP-1"]})
+        self.s.revert_unconfirmed()
+        self.assertEqual(self.repo_data(), {})
+
+    def test_boot_confirm_clears_previous(self):
+        self.repo.write_text('{"monitors": {"DP-1": {"position": "2560x0"}}}\n')
+        self.s.try_monitor("DP-1", [("bitdepth", "10")])
+        self.s.confirm()
+        k.write_pending({"kind": "boot", "outputs": ["DP-1"]})
+        self.s.confirm()
+        self.assertEqual(self.repo_data(), {"monitors": {"DP-1": {"bitdepth": 10, "position": "2560x0"}}})
+
+    def test_revert_unconfirmed_drops_nix_owned_previous_fields(self):
+        # Scale moved to Nix after the entry was remembered: restoring it would clash with Nix.
+        self.repo.write_text('{"monitors": {"DP-1": {"bitdepth": 10, "bootConfirmed": false, '
+                             '"bootPrevious": {"position": "2560x0", "scale": 2}}}}\n')
+        k.write_pending({"kind": "boot", "outputs": ["DP-1"]})
+        self.s.revert_unconfirmed()
+        self.assertEqual(self.repo_data(), {"monitors": {"DP-1": {"position": "2560x0"}}})
+
+    def test_revert_unconfirmed_drops_incomplete_gui_owned_previous(self):
+        # DP-3 was Nix-declared when its position was remembered, and has left krane.hypr.monitors
+        # since: a position-only rule would have no mode or scale.
+        self.repo.write_text('{"monitors": {"DP-3": {"bootConfirmed": false, '
+                             '"bootPrevious": {"position": "2560x0"}, "mode": "1x1@60", '
+                             '"position": "0x0", "scale": 1}}}\n')
+        k.write_pending({"kind": "boot", "outputs": ["DP-3"]})
+        self.s.revert_unconfirmed()
+        self.assertEqual(self.repo_data(), {})
+
+    def test_previous_fields_are_validated(self):
+        for prev in ({"nope": 1}, {"bootConfirmed": False}, {"scale": "x"}):
+            with self.assertRaises(k.SettingsError):
+                k.validate_data({"monitors": {"DP-1": {"bootPrevious": prev}}}, self.s.schema)
+
+    def test_seeded_position_is_confirmed(self):
+        # No bootConfirmed key: the boot check has nothing to ask about.
+        self.repo.write_text('{"monitors": {"DP-1": {"position": "2560x0"}}}\n')
+        self.assertEqual(self.s.boot_check(wait_seconds=0, poll=0), "nothing to check")
 
 
 if __name__ == "__main__":

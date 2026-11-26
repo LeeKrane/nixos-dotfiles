@@ -10,25 +10,25 @@ let
   ];
   internal = {
     mode = "2560x1440@240";
-    position = "0x0";
   };
 in
 {
   krane.hypr = {
     monitors = [
+      # Positions are GUI-owned (hosts/tarmantria/ii-settings.json, settings app > Displays),
+      # so they are not set here. A position depends on its neighbours' scale: after changing
+      # a scale here, re-drag the positions in the settings app.
       # External MSI MAG322CQRV, to the left of the internal panel. EDID advertises
       # 143.97 Hz over HDMI; Hyprland otherwise picks the 59.95 Hz preferred mode.
       {
         output = "HDMI-A-1";
         mode = "2560x1440@144";
-        position = "-2560x-360";
         scale = 1;
       }
       # External Dell U2724DE over DisplayPort, also to the left of the internal panel.
       # Bottom edges line up: the panel is 900 logical px tall at scale 1.6, the Dell 1440.
       {
         output = "DP-1";
-        position = "-2560x-540";
         scale = 1;
       }
     ]
@@ -46,7 +46,8 @@ in
     # Scale the internal panel to 1.25 alone and 1.6 while another output is connected. Hyprland
     # needs a scale that divides the mode into whole logical pixels; 1.6 gives
     # 1600x900 logical, 1.25 gives 2048x1152.
-    # The external monitor sits at a negative x, so the panel keeps its 0x0 origin.
+    # The panel's position comes from the GUI file, else from the other internal name (the panel
+    # is eDP-1 or eDP-2 depending on the GPU mux, and the GUI may only have one of them), else 0x0.
     extraMonitorsLua = ''
       local function is_internal(name)
           return name:match("^eDP%-") ~= nil
@@ -60,16 +61,23 @@ in
           end
           for _, m in ipairs(hl.get_monitors()) do
               if is_internal(m.name) then
+                  local gui = KRANE_GUI_MONITORS and KRANE_GUI_MONITORS[m.name]
+                  local other = KRANE_GUI_MONITORS
+                      and KRANE_GUI_MONITORS[m.name == "eDP-1" and "eDP-2" or "eDP-1"]
+                  -- A GUI entry without its own position carries Nix's "auto" baseline: skip it.
+                  local function gui_position(e)
+                      return e and e.position ~= "auto" and e.position or nil
+                  end
                   local rule = {
                       output = m.name,
                       mode = "${internal.mode}",
-                      position = "${internal.position}",
+                      position = gui_position(gui) or gui_position(other) or "0x0",
                       scale = external and 1.6 or 1.25,
                   }
                   -- Carry over whatever the GUI set for this panel (color management, HDR,
-                  -- transform, vrr, ...) so this reload does not clobber it. output,
-                  -- mode, position and scale stay Nix's: they depend on `external`.
-                  local gui = KRANE_GUI_MONITORS and KRANE_GUI_MONITORS[m.name]
+                  -- transform, vrr, ...) so this reload does not clobber it. output, mode
+                  -- and scale stay Nix's: scale depends on `external`. The position was
+                  -- picked above.
                   if gui then
                       for k, v in pairs(gui) do
                           if k ~= "output" and k ~= "mode" and k ~= "position" and k ~= "scale" then

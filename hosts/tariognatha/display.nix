@@ -3,23 +3,18 @@
 { ... }:
 {
   krane.hypr = {
+    # Positions are GUI-owned (hosts/tariognatha/ii-settings.json, settings app > Displays).
+    # They depend on DP-2's scale: after changing it here, re-drag the positions there.
     monitors = [
       # Primary, straight ahead.
       {
         output = "DP-2";
         mode = "3840x2160@240";
-        position = "0x0";
         scale = 1.5;
       }
       {
         output = "DP-1";
         mode = "2560x1440@144";
-        # If primary scaling is 1
-        #position = "3840x0";
-        # If primary scaling is 1.25
-        #position = "3072x0";
-        # If primary scaling is 1.25
-        position = "2560x0";
         scale = 1;
       }
     ];

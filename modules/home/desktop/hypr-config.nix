@@ -153,7 +153,7 @@ let
         }
         {
           name = "position";
-          value = m.position;
+          value = if m.position == null then "auto" else m.position;
         }
         {
           name = "scale";
@@ -303,10 +303,13 @@ let
         description = "Resolution and refresh rate, or `preferred`/`highres`/`highrr`.";
       };
       position = lib.mkOption {
-        type = lib.types.str;
-        default = "auto";
+        type = lib.types.nullOr lib.types.str;
+        default = null;
         example = "2560x0";
-        description = "Layout position, or `auto`/`auto-left`/...";
+        description = ''
+          Layout position, or `auto`/`auto-left`/.... null leaves it to the ii settings window
+          (hosts/<host>/ii-settings.json) and renders `auto` here.
+        '';
       };
       scale = lib.mkOption {
         type = lib.types.either lib.types.number lib.types.str;

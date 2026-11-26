@@ -42,13 +42,13 @@ let
   fixedMonitorFields = [
     "output"
     "mode"
-    "position"
     "scale"
     "disabled"
   ];
   # Nix-owned only when non-null. `or null` keeps this valid for fields the monitor submodule
   # does not have yet.
   optionalMonitorFields = [
+    "position"
     "transform"
     "vrr"
     "mirror"
@@ -74,9 +74,9 @@ let
           inherit (m)
             output
             mode
-            position
             scale
             ;
+          position = if m.position == null then "auto" else m.position;
         }
         // lib.optionalAttrs m.disabled { disabled = true; }
         // lib.genAttrs setFields (f: m.${f});

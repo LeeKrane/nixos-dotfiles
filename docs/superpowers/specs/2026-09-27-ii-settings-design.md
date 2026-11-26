@@ -613,12 +613,14 @@ standard-library only.
 - The JSON `monitors.<output>` holds fields for that output. Ownership
   follows the one rule, per field:
   - **For an output in `krane.hypr.monitors`,** Nix owns every field that is
-    non-null there. `output`, `mode`, `position` and `scale` always count as
-    set, since they have defaults. The GUI may only fill the null fields
-    (`transform`, `vrr`, `bitdepth`, `cm`, the SDR and HDR luminance
-    fields). So on any host today, HDR and color management are
-    GUI-editable, while resolution, scale and position are shown with "Set
-    in Nix".
+    non-null there. `output`, `mode` and `scale` always count as set, since
+    they have defaults. `position` defaults to null: the GUI owns it unless
+    Nix sets it. The GUI may fill the null fields (`position`, `transform`,
+    `vrr`, `bitdepth`, `cm`, the SDR and HDR luminance fields). So on the
+    hosts today, position, HDR and color management are GUI-editable, while
+    resolution and scale are shown with "Set in Nix". A position depends on
+    the neighbours' Nix-owned scale: after changing a scale in Nix, re-drag
+    the positions in the GUI.
   - **For an output not in `krane.hypr.monitors`,** the GUI owns the whole
     rule, and the writer stores a complete rule (output, mode, position,
     scale) taken from `hyprctl monitors all -j`. If that output is later
@@ -760,11 +762,11 @@ standard-library only.
 | Border colors | Enable custom colors, change the wallpaper: borders follow the palette. The repo `ii-settings.json` has no diff. After a switch, the custom colors are back with no qs restart. `shellOverrides/main.lua` is not rewritten in a loop (`inotifywait` shows at most one write per change). | any host |
 | Animation presets | Pick "fast": `krane_gui.lua` contains the require, and window-open animations change. There is no "add a require line" notice. Switch: it persists. | any host |
 | Idle | On a laptop, set lock 60 and suspend 0. `hypridle.conf` has one lock listener at 60 and no suspend listener. hypridle restarted (new PID). Idle 60 s locks. Switch twice: still so. On tariognatha, the idle controls are disabled with "Set in Nix". | tarmantria, tariognatha |
-| Displays: ownership | On any host, a Nix-declared output's resolution, scale and position are disabled ("Set in Nix"), and its HDR and color fields are editable. | any host |
-| Displays: revert | With a monitor that is not in `display.nix` (tarmantria's `HDMI-A-1` and tariognatha's `DP-1` and `DP-2` are declared, so a further output), change its position (on a laptop's Nix-declared eDP-1, change its transform instead: position is Nix-owned) and wait 15 s: it reverts and the repo has no diff. Change it again, then `pkill -f settings.qml` inside the window: it still reverts (the timer is outside the UI). Change it and confirm: the repo JSON has the entry with `bootConfirmed: false`. Reboot and unlock: the dialog appears. Keep clears the flag. Let a second change time out after reboot: it is removed from the repo. | tarmantria; any host with an extra display output beyond those in `display.nix` |
-| Displays: hotplug | tarmantria's `extraMonitorsLua` (`scale_internal`) re-sends eDP-1's rule with only output, mode, position and scale on every monitor add or remove. With a kept GUI transform on eDP-1, unplug and replug `HDMI-A-1`: the scale follows, and the transform either stays or is lost until the next reload. If it is lost, `docs/II-INTEGRATION.md` records it as a known limitation. | tarmantria |
+| Displays: ownership | On any host, a Nix-declared output's resolution and scale (and its position, if Nix sets one) are disabled ("Set in Nix"), and its position, HDR and color fields are editable. | any host |
+| Displays: revert | With a monitor that is not in `display.nix` (tarmantria's `HDMI-A-1` and tariognatha's `DP-1` and `DP-2` are declared, so a further output), change its position and wait 15 s: it reverts and the repo has no diff. Change it again, then `pkill -f settings.qml` inside the window: it still reverts (the timer is outside the UI). Change it and confirm: the repo JSON has the entry with `bootConfirmed: false`. Reboot and unlock: the dialog appears. Keep clears the flag. Let a second change time out after reboot: it is removed from the repo. | tarmantria; any host with an extra display output beyond those in `display.nix` |
+| Displays: hotplug | tarmantria's `extraMonitorsLua` (`scale_internal`) re-sends eDP-1's rule with only output, mode, scale and the GUI position on every monitor add or remove. With a kept GUI transform on eDP-1, unplug and replug `HDMI-A-1`: the scale follows, and the transform either stays or is lost until the next reload. If it is lost, `docs/II-INTEGRATION.md` records it as a known limitation. | tarmantria |
 | Displays: HDR | On an HDR-capable output, turn on HDR: `hyprctl monitors -j` shows `colorManagementPreset` `hdr` and a 10-bit format, or the change is reverted by the timer. If kept, it survives a cold boot (first-boot check confirmed). SDR brightness changes are visible. | any host with an HDR-capable display |
-| Displays: laptop | eDP-1 scale, mode and position are disabled ("Set in Nix"); a transform change and its revert work. HDR controls are hidden (no EDID HDR). | tarmantria; taractias once verified |
+| Displays: laptop | eDP-1 scale and mode are disabled ("Set in Nix"); position, transform changes and their revert work. HDR controls are hidden (no EDID HDR). | tarmantria; taractias once verified |
 | Parse error | Put a conflict marker in `ii-settings.json` and change gaps in the GUI. An error is shown, the file is untouched, and gaps are unchanged. | any host |
 | Hyprland rejects a value | Temporarily add a bad key to the schema in a dev build and set it. The writer reverts and reports the error, and `hyprctl configerrors` ends empty. | any host, dev only |
 

@@ -30,6 +30,7 @@
     "DP-2": {
       "bitdepth": 10,
       "bootConfirmed": false,
+      "bootPrevious": { "scale": 1 },
       "cm": "hdr",
       "max_avg_luminance": 400,
       "max_luminance": 1000,

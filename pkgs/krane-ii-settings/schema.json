@@ -33,6 +33,7 @@
   "monitor": {
     "bitdepth": { "type": "enum", "values": [8, 10] },
     "bootConfirmed": { "type": "bool", "internal": true },
+    "bootPrevious": { "type": "object", "internal": true },
     "cm": { "type": "enum", "values": ["adobe", "auto", "dcip3", "dp3", "edid", "hdr", "hdredid", "srgb", "wide"] },
     "disabled": { "type": "bool" },
     "max_avg_luminance": { "type": "int", "min": -1, "max": 10000 },

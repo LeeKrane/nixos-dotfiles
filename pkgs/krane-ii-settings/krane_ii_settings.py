@@ -107,6 +107,8 @@ def check_value(spec, value, what):
         ok = isinstance(value, int) and not isinstance(value, bool)
     elif kind == "float":
         ok = isinstance(value, (int, float)) and not isinstance(value, bool)
+    elif kind == "object":
+        ok = isinstance(value, dict)
     elif kind == "enum":
         ok = value in spec["values"] and not isinstance(value, bool)
     elif kind == "str":
@@ -158,6 +160,12 @@ def validate_data(data, schema):
             if field not in schema["monitor"]:
                 raise SettingsError(f"monitors.{output}.{field}: unknown field")
             check_value(schema["monitor"][field], value, f"monitors.{output}.{field}")
+            if field == "bootPrevious":
+                for f, v in value.items():
+                    spec = schema["monitor"].get(f)
+                    if spec is None or spec.get("internal"):
+                        raise SettingsError(f"monitors.{output}.bootPrevious.{f}: unknown field")
+                    check_value(spec, v, f"monitors.{output}.bootPrevious.{f}")
 
 
 def check_ownership(data, manifest):
@@ -240,6 +248,21 @@ def monitor_lua(output, rule):
     )
 
 
+INTERNAL_FIELDS = ("bootConfirmed", "bootPrevious")
+
+
+def mark_unconfirmed(old, entry):
+    """Flag `entry` for a boot check, remembering the entry to restore if it
+    is never confirmed: `old` as it was before, or the one it already
+    remembered if `old` was itself still unconfirmed."""
+    if old and old.get("bootConfirmed") is False:
+        prev = old.get("bootPrevious", {})
+    else:
+        prev = {k: v for k, v in (old or {}).items() if k not in INTERNAL_FIELDS}
+    entry["bootConfirmed"] = False
+    entry["bootPrevious"] = prev
+
+
 def render(data, manifest, schema):
     validate_data(data, schema)
     out = [HEADER]
@@ -254,7 +277,7 @@ def render(data, manifest, schema):
     baselines = manifest.get("monitorBaselines", {})
     for output in sorted(monitors):
         rule = dict(baselines.get(output, {}))
-        rule.update({k: v for k, v in monitors[output].items() if k != "bootConfirmed"})
+        rule.update({k: v for k, v in monitors[output].items() if k not in INTERNAL_FIELDS})
         rule["output"] = output
         out.append(monitor_lua(output, rule))
     return "".join(out)
@@ -585,10 +608,12 @@ def edit_reset(data, section, key, fields, manifest):
             else:
                 for field in fields:
                     monitors[key].pop(field, None)
+                    # Else a boot revert would bring the reset field back.
+                    monitors[key].get("bootPrevious", {}).pop(field, None)
     else:
         raise SettingsError(f"unknown section {section!r}")
     for output in list(new.get("monitors", {})):
-        if not set(new["monitors"][output]) - {"bootConfirmed"}:
+        if not set(new["monitors"][output]) - set(INTERNAL_FIELDS):
             del new["monitors"][output]
     for name in ("hyprland", "idle", "monitors"):
         if name in new and not new[name]:
@@ -681,7 +706,7 @@ class Settings:
             new = edit_set(data, section, key, pairs, self.schema)
             if section == "monitor":
                 new = complete_rule(new, key, self.manifest, self.runtime)
-                new["monitors"][key]["bootConfirmed"] = False
+                mark_unconfirmed(data.get("monitors", {}).get(key), new["monitors"][key])
             return self.commit(text, new, full_reload=section == "monitor")
 
     def reset(self, section, key, fields):
@@ -751,7 +776,7 @@ class Settings:
             new = copy.deepcopy(data)
             if pending["kind"] == "try":
                 entry = dict(pending["fields"])
-                entry["bootConfirmed"] = False
+                mark_unconfirmed(data.get("monitors", {}).get(pending["output"]), entry)
                 new.setdefault("monitors", {})[pending["output"]] = entry
             else:
                 # Only the outputs the pending boot check actually listed, not
@@ -762,6 +787,7 @@ class Settings:
                     entry = monitors.get(output)
                     if entry is not None:
                         entry.pop("bootConfirmed", None)
+                        entry.pop("bootPrevious", None)
             # Everything that can fail happens before the timer is stopped, so a
             # broken repo file or a rejected merge leaves the revert timer armed.
             validate_data(new, self.schema)
@@ -788,14 +814,25 @@ class Settings:
             data, text = read_repo(self.repo)
             new = copy.deepcopy(data)
             monitors = new.get("monitors", {})
+            owned = self.manifest["nixOwned"]["monitors"]
             for output in outputs:
-                monitors.pop(output, None)
+                prev = (monitors.pop(output, None) or {}).get("bootPrevious") or {}
+                # A field Nix took over since it was remembered stays Nix's.
+                prev = {k: v for k, v in prev.items() if k not in owned.get(output, [])}
+                # An output Nix no longer declares needs a complete rule (see complete_rule).
+                if output not in self.manifest["monitorBaselines"] and not all(
+                        f in prev for f in ("mode", "position", "scale")):
+                    prev = {}
+                if prev:
+                    monitors[output] = prev
             if "monitors" in new and not new["monitors"]:
                 del new["monitors"]
+            # Render (which validates) before writing, so a bad file is left as it was.
+            live = self.render(new)
             new_text = dump(new)
             if new_text != text:
                 atomic_write(self.repo, new_text)
-            self.runtime.write_live(self.render(new))
+            self.runtime.write_live(live)
             self.runtime.stop_revert_timer()
             clear_pending()
             self.runtime.reload(full=True)

@@ -1,5 +1,13 @@
 {
   "hyprland": {
     "general:layout": "dwindle"
+  },
+  "monitors": {
+    "DP-1": {
+      "position": "2560x0"
+    },
+    "DP-2": {
+      "position": "0x0"
+    }
   }
 }
