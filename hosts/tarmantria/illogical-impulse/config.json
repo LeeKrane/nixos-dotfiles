@@ -234,6 +234,21 @@
   "hacks": {
     "arbitraryRaceConditionDelay": 20
   },
+  "hyprland": {
+    "autostartApps": {
+      "apps": [],
+      "enable": false
+    },
+    "general": {
+      "borderColor": {
+        "activeOpacity": 0.47,
+        "activeRole": "layer0Border",
+        "enable": false,
+        "inactiveOpacity": 0.2,
+        "inactiveRole": "layer0Border"
+      }
+    }
+  },
   "interactions": {
     "deadPixelWorkaround": {
       "enable": false
@@ -334,6 +349,12 @@
     "ai": 1,
     "weeb": 0
   },
+  "profile": {
+    "avatarPath": "",
+    "avatarPicture": "",
+    "descriptionText": "::distro::",
+    "displayName": ""
+  },
   "regionSelector": {
     "annotation": {
       "useSatty": false
@@ -387,6 +408,9 @@
       "webSearch": "?"
     },
     "sloppy": false
+  },
+  "settings": {
+    "collapsedSections": []
   },
   "sidebar": {
     "agents": {
@@ -442,12 +466,20 @@
             "type": "mic"
           },
           {
-            "size": 2,
+            "size": 1,
             "type": "audio"
           },
           {
-            "size": 2,
+            "size": 1,
             "type": "nightLight"
+          },
+          {
+            "size": 1,
+            "type": "gameMode"
+          },
+          {
+            "size": 1,
+            "type": "notifications"
           }
         ]
       },
