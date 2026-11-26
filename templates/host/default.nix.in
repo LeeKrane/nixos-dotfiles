@@ -1,3 +1,5 @@
+# @HOST@: scaffolded by install.sh from templates/host/ (GPU profile @PROFILE_NAME@,
+# form factor @FORM_FACTOR@). From here on it is an ordinary host config: edit it freely.
 { config, inputs, ... }:
 {
   imports = [

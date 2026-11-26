@@ -19,6 +19,9 @@ in
   hostName,
   system,
   role ? "desktop",
+  # Raspberry Pi board ("rpi4" | "rpi5", from hosts/<name>/host.nix) or null for everything
+  # else. A board adds the nixos-raspberrypi modules; hosts add sd-image or disko themselves.
+  # Needs system = "aarch64-linux" and role = "server".
   board ? null,
   hostDir ? ../hosts/${hostName},
   extraModules ? [ ],

@@ -1,5 +1,7 @@
-# Mic chain for the Razer Seiren V2 Pro: high-pass, RNNoise voice detection as a speech gate,
-# level gate, compressor, EQ, limiter.
+# Mic chain for the Razer Seiren V2 Pro (replaces Vesktop's noise suppression and input
+# sensitivity): high-pass, RNNoise voice detection as a speech gate, level gate, compressor, EQ,
+# limiter. DeepFilterNet was dropped: under game load it fell behind and delayed the mic.
+# Tuned in the EasyEffects GUI, then exported here.
 # EasyEffects itself is started by ii's hyprland/execs.lua on every host; this only ships the
 # preset and an autoload entry that applies it whenever the Seiren is the input device.
 # The preset is a read-only store symlink: to retune, change it in the GUI, "Save as" a new

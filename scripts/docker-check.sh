@@ -17,8 +17,9 @@ cd "$REPO_ROOT"
 IMAGE="nixos/nix:latest"
 VOLUME="nixstore"
 
-# filter-syscalls=false works around seccomp restrictions on the Nix sandbox. max-jobs/cores match the cgroup limits
-# below, so Nix backs off instead of being OOM-killed.
+# filter-syscalls=false works around seccomp restrictions on the Nix
+# sandbox. max-jobs/cores match the cgroup limits below, so Nix backs off
+# instead of the cgroup OOM-killing it. Override with NIX_MAX_JOBS/NIX_CORES.
 NIX_CONFIG_VALUE="experimental-features = nix-command flakes
 filter-syscalls = false
 max-jobs = ${NIX_MAX_JOBS:-2}

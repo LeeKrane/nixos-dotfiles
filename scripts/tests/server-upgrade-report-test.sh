@@ -9,6 +9,8 @@ trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/bin" "$WORK/fix" "$WORK/log"
 printf 'test-token' >"$WORK/token"
 
+# curl stub: logs "METHOD PATH BODY" per request and answers from $FIX/<METHOD>_<PATH>[.N].json,
+# the Nth call to that endpoint first, else the endpoint's catch-all, else {}.
 command cat >"$WORK/bin/curl" <<'EOF'
 #!/usr/bin/env bash
 method=GET url="" data=""

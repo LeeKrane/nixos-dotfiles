@@ -45,8 +45,8 @@ in
       # ii themes Qt through ~/.config/kdeglobals, which only the "kde" platform theme reads.
       # lib/mk-host.nix patches illogical-flake to keep QT_QPA_PLATFORMTHEME=kde.
       kdePackages.plasma-integration
-      darkly
-      kdePackages.breeze-icons
+      darkly # widgetStyle=Darkly named in ii's kdeglobals
+      kdePackages.breeze-icons # Icons Theme=breeze-dark named in ii's kdeglobals
 
       # Media
       qview

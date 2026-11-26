@@ -2078,6 +2078,7 @@ self_test() {
     fi
 
     echo "== self-test: ERR trap fires inside a function ==" >&2
+    # A separate bash "$0" process, not a subshell, so the real ERR trap fires.
     local out rc2=0
     out=$(bash "$0" --self-test-trigger-err 2>&1) || rc2=$?
     if [ "$rc2" -ne 0 ] && printf '%s' "$out" | grep -q "false" \

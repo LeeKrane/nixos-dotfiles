@@ -1,3 +1,4 @@
+# install.sh's patch_prime detects the `krane.prime.<key> = "...";` form.
 #== imports
     ../../modules/nixos/gpu/nvidia-prime.nix
 #== body

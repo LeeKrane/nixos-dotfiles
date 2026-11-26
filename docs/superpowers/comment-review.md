@@ -49,6 +49,7 @@ For each: keep, trim, or delete. This file is deleted before `doc-cleanup` merge
 - `desktop/recording.nix:165-167` Power plug events arrive as `power_supply` change uevents; 30 s read timeout. Kernel.
 - `desktop/recording.nix:226-229` gsr-ui rewrites config_ui when settings page closes. Upstream source.
 - `desktop/illogical-impulse.nix:31-32` Hardcoded `$HOME/.config` must match soymou module's `targetPath` (also a keep-in-sync rule). External flake input.
+- `desktop/apps.nix:48-49` darkly and breeze-icons: ii's kdeglobals names them. kdeglobals not in repo.
 
 ## modules/nixvim
 

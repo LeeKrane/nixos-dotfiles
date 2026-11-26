@@ -1,3 +1,4 @@
+# install.sh's host_uses_cuda greps default.nix for this import.
 #== imports
     ../../modules/nixos/gpu/nvidia-desktop.nix
 #== body
