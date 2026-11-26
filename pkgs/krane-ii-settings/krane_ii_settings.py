@@ -361,8 +361,6 @@ def run(cmd, timeout=10, **kwargs):
         raise SettingsError(f"{os.path.basename(cmd[0])} timed out after {timeout}s")
 
 
-
-
 def hyprland_signatures():
     sig = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")
     if sig:
