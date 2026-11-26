@@ -14,14 +14,14 @@ search.prefix.math next to Emojis, and an Enable switch for bar.weather.enable
 at the top of the Weather section
 Drop when: upstream ships an equivalent page, or the settings port is abandoned.
 ---
- .../ii/modules/settings/ServicesConfig.qml    | 539 +++++++++++-------
- 1 file changed, 322 insertions(+), 217 deletions(-)
+ .../ii/modules/settings/ServicesConfig.qml    | 538 +++++++++++-------
+ 1 file changed, 321 insertions(+), 217 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/settings/ServicesConfig.qml b/dots/.config/quickshell/ii/modules/settings/ServicesConfig.qml
-index aec8dc98..7e779b0e 100644
+index aec8dc98..605a771e 100644
 --- a/dots/.config/quickshell/ii/modules/settings/ServicesConfig.qml
 +++ b/dots/.config/quickshell/ii/modules/settings/ServicesConfig.qml
-@@ -5,274 +5,379 @@ import qs.modules.common
+@@ -5,274 +5,378 @@ import qs.modules.common
  import qs.modules.common.widgets
  
  ContentPage {
@@ -32,7 +32,6 @@ index aec8dc98..7e779b0e 100644
 -    ContentSection {
 -        icon: "neurology"
 -        title: Translation.tr("AI")
-+    //This was intended to go into the results more deeply but in the end I didn't like it but I left it just in case lol
 +    function goTo(term) {
 +        const t = term.toLowerCase().trim()
  

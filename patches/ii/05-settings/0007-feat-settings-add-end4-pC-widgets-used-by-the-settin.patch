@@ -12,7 +12,7 @@ Drop when: never on its own; drop together with the pages that use them.
 ---
  .../ii/modules/common/widgets/AboutCard.qml   |  80 ++++
  .../modules/common/widgets/AndroidClock.qml   | 129 +++++
- .../ii/modules/common/widgets/Carousel.qml    | 168 +++++++
+ .../ii/modules/common/widgets/Carousel.qml    | 166 +++++++
  .../common/widgets/ColorSelectionArray.qml    |  98 ++++
  .../modules/common/widgets/ConfigComboBox.qml |  70 +++
  .../widgets/ConfigSelectionShapeArray.qml     | 106 ++++
@@ -20,10 +20,10 @@ Drop when: never on its own; drop together with the pages that use them.
  .../ii/modules/common/widgets/GroupedList.qml |  50 ++
  .../modules/common/widgets/LayoutSection.qml  | 219 +++++++++
  .../common/widgets/WidgetsMonitorSelector.qml |  48 ++
- .../ii/modules/common/widgets/WorldCities.js  | 206 ++++++++
+ .../ii/modules/common/widgets/WorldCities.js  | 204 ++++++++
  .../ii/modules/common/widgets/WorldMap.qml    | 160 +++++++
- .../ii/modules/common/widgets/WorldMapDots.js | 452 ++++++++++++++++++
- 13 files changed, 1942 insertions(+)
+ .../ii/modules/common/widgets/WorldMapDots.js | 451 ++++++++++++++++++
+ 13 files changed, 1937 insertions(+)
  create mode 100644 dots/.config/quickshell/ii/modules/common/widgets/AboutCard.qml
  create mode 100644 dots/.config/quickshell/ii/modules/common/widgets/AndroidClock.qml
  create mode 100644 dots/.config/quickshell/ii/modules/common/widgets/Carousel.qml
@@ -262,10 +262,10 @@ index 00000000..eb1c66a4
 +}
 diff --git a/dots/.config/quickshell/ii/modules/common/widgets/Carousel.qml b/dots/.config/quickshell/ii/modules/common/widgets/Carousel.qml
 new file mode 100644
-index 00000000..d493f4f1
+index 00000000..b452805e
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/modules/common/widgets/Carousel.qml
-@@ -0,0 +1,168 @@
+@@ -0,0 +1,166 @@
 +import qs.modules.common
 +import qs.modules.common.widgets
 +import qs.modules.common.functions
@@ -344,7 +344,7 @@ index 00000000..d493f4f1
 +            }
 +        }
 +
-+        Timer { // just in case =P
++        Timer {
 +            id: debounceTimer
 +            interval: 80
 +            onTriggered: wheelHandler.coolingDown = false
@@ -378,7 +378,7 @@ index 00000000..d493f4f1
 +                    property real fixedHeight: listView.height
 +                }
 +
-+                Rectangle { // later I'll see if I remove it
++                Rectangle {
 +                    id: currentIndicator
 +                    visible: itemRoot.index === 0 && root.showCurrentIndicator
 +                    anchors.centerIn: parent
@@ -420,8 +420,6 @@ index 00000000..d493f4f1
 +
 +    Component {
 +        id: defaultImageDelegate
-+        // Freedesktop thumbnails rather than the full wallpapers. The wallpaper selector keeps
-+        // the x-large ones up to date and missing ones are generated on the fly.
 +        ThumbnailImage {
 +            id: img
 +            property real fixedWidth: parent?.fixedWidth ?? width
@@ -1232,14 +1230,12 @@ index 00000000..fadf13eb
 \ No newline at end of file
 diff --git a/dots/.config/quickshell/ii/modules/common/widgets/WorldCities.js b/dots/.config/quickshell/ii/modules/common/widgets/WorldCities.js
 new file mode 100644
-index 00000000..a4c68c8f
+index 00000000..bc74326a
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/modules/common/widgets/WorldCities.js
-@@ -0,0 +1,206 @@
+@@ -0,0 +1,204 @@
 +.pragma library
 +
-+// Curated list of major world cities for approximate weather-location marker placement.
-+// Not exhaustive, not geocoding-grade precise -- close enough for pin placement on a dot map.
 +var cityCoords = {
 +    "abu dhabi": { lat: 24.5, lon: 54.4 },
 +    "abuja": { lat: 9.1, lon: 7.5 },
@@ -1612,14 +1608,13 @@ index 00000000..1c627355
 \ No newline at end of file
 diff --git a/dots/.config/quickshell/ii/modules/common/widgets/WorldMapDots.js b/dots/.config/quickshell/ii/modules/common/widgets/WorldMapDots.js
 new file mode 100644
-index 00000000..1abf0e21
+index 00000000..b72734c1
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/modules/common/widgets/WorldMapDots.js
-@@ -0,0 +1,452 @@
+@@ -0,0 +1,451 @@
 +.pragma library
 +
 +// Auto-generated from Natural Earth 110m admin-0 countries (public domain)
-+// Flat array: [lon0, lat0, lon1, lat1, ...]
 +var landDots = [
 +    -72.0,-54.2,-70.2,-54.2,-68.4,-54.2,-73.8,-52.4,-72.0,-52.4,-70.2,-52.4,-73.8,-50.6,-72.0,-50.6,-70.2,-50.6,
 +    -73.8,-48.8,-72.0,-48.8,-70.2,-48.8,-68.4,-48.8,-73.8,-47.0,-72.0,-47.0,-70.2,-47.0,-68.4,-47.0,-73.8,-45.2,

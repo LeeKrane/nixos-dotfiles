@@ -14,7 +14,7 @@ Drop when: the Profile page is dropped.
  1 file changed, 5 insertions(+)
 
 diff --git a/dots/.config/quickshell/ii/settings.qml b/dots/.config/quickshell/ii/settings.qml
-index a2fce2c9..01d6e02b 100644
+index fd2f2a51..934539cb 100644
 --- a/dots/.config/quickshell/ii/settings.qml
 +++ b/dots/.config/quickshell/ii/settings.qml
 @@ -54,6 +54,11 @@ ApplicationWindow {

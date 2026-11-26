@@ -48,7 +48,7 @@ index edc63191..6dee45ee 100644
          id: slider
          configuration: StyledSlider.Configuration.XS
 diff --git a/dots/.config/quickshell/ii/modules/common/widgets/ConfigSwitch.qml b/dots/.config/quickshell/ii/modules/common/widgets/ConfigSwitch.qml
-index 53e6a27c..8f45b950 100644
+index 53e6a27c..0a9624ec 100644
 --- a/dots/.config/quickshell/ii/modules/common/widgets/ConfigSwitch.qml
 +++ b/dots/.config/quickshell/ii/modules/common/widgets/ConfigSwitch.qml
 @@ -8,9 +8,11 @@ RippleButton {
@@ -59,7 +59,7 @@ index 53e6a27c..8f45b950 100644
  
      Layout.fillWidth: true
 -    implicitHeight: contentItem.implicitHeight + 8 * 2
-+    Layout.bottomMargin: 6 //Visually it works and I don't know why this should be handled by the parent.
++    Layout.bottomMargin: 6
 +    implicitHeight: contentItem.implicitHeight + 8 
      font.pixelSize: Appearance.font.pixelSize.small
      

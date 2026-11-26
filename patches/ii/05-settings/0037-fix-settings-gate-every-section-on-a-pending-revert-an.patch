@@ -14,26 +14,25 @@ HyprlandConfigOption gets a 5 s watchdog (`available`); every monitor field
 control checks monitorLocked; the banner reads state.revertDeadline.
 Drop when: the Hyprland page is dropped.
 ---
- .../models/hyprland/HyprlandConfigOption.qml       |  16 ++
- .../ii/modules/settings/HyprlandConfig.qml         | 161 +++++++++++----------
- 2 files changed, 103 insertions(+), 74 deletions(-)
+ .../models/hyprland/HyprlandConfigOption.qml  |  14 ++
+ .../ii/modules/settings/HyprlandConfig.qml    | 154 ++++++++++--------
+ 2 files changed, 96 insertions(+), 72 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/common/models/hyprland/HyprlandConfigOption.qml b/dots/.config/quickshell/ii/modules/common/models/hyprland/HyprlandConfigOption.qml
-index 00f96ce..b4a70f8 100644
+index 3efcb71f..f4188a59 100644
 --- a/dots/.config/quickshell/ii/modules/common/models/hyprland/HyprlandConfigOption.qml
 +++ b/dots/.config/quickshell/ii/modules/common/models/hyprland/HyprlandConfigOption.qml
-@@ -18,6 +18,8 @@ NestableObject {
-     // decoration:*_opacity left at its compiled-in default) has `set: false`
-     // forever and would permanently block writes if gated on `set`.
+@@ -14,6 +14,7 @@ NestableObject {
+     // True after the first getoption response (even "no such option" or a parse
+     // failure). `set` stays false for options left at their default, so it can't gate writes.
      property bool loaded: false
-+    // False when the last fetch got no answer from hyprctl within the watchdog interval.
 +    property bool available: true
      property var value
-     // Nix owns this key (krane.hypr.settings or krane.hypr.guiLocked): show the
-     // control disabled with lockedReason.
-@@ -38,8 +40,21 @@ NestableObject {
+     readonly property bool locked: KraneSettings.isLocked("hyprland", root.key)
+     readonly property string lockedReason: KraneSettings.nixReason
+@@ -31,8 +32,20 @@ NestableObject {
      }
-
+ 
      function fetch() {
 +        root.available = true;
          fetchProc.command = fetchProc.baseCommand.concat([root.key]);
@@ -41,7 +40,6 @@ index 00f96ce..b4a70f8 100644
 +        watchdog.restart();
 +    }
 +
-+    // hyprctl did not answer: stop waiting so controls show it instead of staying inert.
 +    Timer {
 +        id: watchdog
 +        interval: 5000
@@ -51,9 +49,9 @@ index 00f96ce..b4a70f8 100644
 +            root.available = false;
 +        }
      }
-
-     // Persistent: written to hosts/<host>/ii-settings.json by krane-ii-settings.
-@@ -57,6 +72,7 @@ NestableObject {
+ 
+     function setValue(newValue) {
+@@ -48,6 +61,7 @@ NestableObject {
          property list<string> baseCommand: ["hyprctl", "getoption", "-j"]
          stdout: StdioCollector {
              onStreamFinished: {
@@ -62,37 +60,24 @@ index 00f96ce..b4a70f8 100644
                      root.loaded = true;
                      return;
 diff --git a/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml b/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
-index 25ec44e..cc45e86 100644
+index 5d5b6083..d5258c61 100644
 --- a/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
 +++ b/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
-@@ -44,8 +44,9 @@ ContentPage {
+@@ -43,6 +43,8 @@ ContentPage {
          return KraneSettings.isMonitorFieldLocked(monitorConfig.monitors[monitorCanvas.selectedIndex]?.name ?? "", field)
      }
-
--    // A try is pending confirm-or-revert: every Displays control is disabled
--    // until the user keeps or reverts it (the keep/revert banner stays enabled).
-+    // A try is pending confirm-or-revert: every settings section is disabled
-+    // until the user keeps or reverts it (the keep/revert banner stays enabled),
-+    // since any other write would re-render the live file over the tried rule.
+ 
++    // A try is pending: every section except the keep/revert banner is disabled, since
++    // any other write would re-render the live file over the tried rule.
      readonly property bool revertPending: KraneSettings.state.revertPending === true
-
+ 
      MonitorConfigOption { id: monitorConfig }
-@@ -87,19 +88,25 @@ ContentPage {
-             title: Translation.tr("Displays")
-             visible: monitorConfig.monitors.length > 0
-
-+            // No VRR control yet: add one only with enabled: !page.monitorLocked("vrr").
-+
-             // Shown while krane-ii-settings' revert timer runs: after a try, or after
-             // boot-check found display settings not yet confirmed since this boot.
-             NoticeBox {
+@@ -87,13 +89,15 @@ ContentPage {
                  id: keepBanner
                  Layout.fillWidth: true
                  visible: KraneSettings.state.revertPending === true
 -                property int countdown: 15
 -                onVisibleChanged: if (visible) countdown = 15
-+                // Seconds left on the real timer (state.revertDeadline), so a reopened
-+                // window or restarted shell shows what will actually happen.
 +                property real now: Date.now() / 1000
 +                readonly property var deadline: KraneSettings.state.revertDeadline
                  Timer {
@@ -107,8 +92,8 @@ index 25ec44e..cc45e86 100644
                  Item { Layout.fillWidth: true }
                  RippleButtonWithIcon {
                      Layout.fillWidth: false
-@@ -279,9 +286,9 @@ ContentPage {
-
+@@ -273,9 +277,9 @@ ContentPage {
+ 
                          ConfigSpinBox {
                              Layout.fillWidth: true
 -                            enabled: monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm === "hdr" || monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm === "hdredid"
@@ -119,8 +104,8 @@ index 25ec44e..cc45e86 100644
                              value: Math.round((monitorConfig.monitors[monitorCanvas.selectedIndex]?.sdrBrightness ?? 1.0) * 100)
                              from: 50; to: 300; stepSize: 5
                              onValueModified: {
-@@ -294,9 +301,9 @@ ContentPage {
-
+@@ -288,9 +292,9 @@ ContentPage {
+ 
                          ConfigSpinBox {
                              Layout.fillWidth: true
 -                            enabled: monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm === "hdr" || monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm === "hdredid"
@@ -131,7 +116,7 @@ index 25ec44e..cc45e86 100644
                              value: Math.round((monitorConfig.monitors[monitorCanvas.selectedIndex]?.sdrSaturation ?? 1.0) * 100)
                              from: 0; to: 200; stepSize: 5
                              onValueModified: {
-@@ -315,10 +322,10 @@ ContentPage {
+@@ -309,10 +313,10 @@ ContentPage {
                          ConfigSpinBox {
                              Layout.fillWidth: true
                              icon: "wb_twilight"
@@ -144,7 +129,7 @@ index 25ec44e..cc45e86 100644
                              onValueModified: {
                                  const newVal = value
                                  if (newVal === (monitorConfig.monitors[monitorCanvas.selectedIndex]?.sdrMinLuminance ?? 0)) return
-@@ -330,10 +337,10 @@ ContentPage {
+@@ -324,10 +328,10 @@ ContentPage {
                          ConfigSpinBox {
                              Layout.fillWidth: true
                              icon: "wb_sunny"
@@ -157,7 +142,7 @@ index 25ec44e..cc45e86 100644
                              onValueModified: {
                                  const newVal = value
                                  if (newVal === (monitorConfig.monitors[monitorCanvas.selectedIndex]?.sdrMaxLuminance ?? 250)) return
-@@ -350,10 +357,10 @@ ContentPage {
+@@ -344,10 +348,10 @@ ContentPage {
                          ConfigSpinBox {
                              Layout.fillWidth: true
                              icon: "nightlight"
@@ -170,7 +155,7 @@ index 25ec44e..cc45e86 100644
                              onValueModified: {
                                  if (value === (monitorConfig.monitors[monitorCanvas.selectedIndex]?.minLuminance ?? 0)) return
                                  monitorConfig.updateMonitor(monitorCanvas.selectedIndex, { minLuminance: value })
-@@ -364,10 +371,10 @@ ContentPage {
+@@ -358,10 +362,10 @@ ContentPage {
                          ConfigSpinBox {
                              Layout.fillWidth: true
                              icon: "hdr_strong"
@@ -183,8 +168,8 @@ index 25ec44e..cc45e86 100644
                              onValueModified: {
                                  if (value === (monitorConfig.monitors[monitorCanvas.selectedIndex]?.maxLuminance ?? 1000)) return
                                  monitorConfig.updateMonitor(monitorCanvas.selectedIndex, { maxLuminance: value })
-@@ -378,10 +385,10 @@ ContentPage {
-
+@@ -372,10 +376,10 @@ ContentPage {
+ 
                      ConfigSpinBox {
                          icon: "hdr_weak"
 -                        text: Translation.tr("HDR max average luminance (nits)")
@@ -196,12 +181,12 @@ index 25ec44e..cc45e86 100644
                          onValueModified: {
                              if (value === (monitorConfig.monitors[monitorCanvas.selectedIndex]?.maxAvgLuminance ?? 250)) return
                              monitorConfig.updateMonitor(monitorCanvas.selectedIndex, { maxAvgLuminance: value })
-@@ -397,13 +404,14 @@ ContentPage {
+@@ -391,13 +395,14 @@ ContentPage {
              icon: "auto_awesome_mosaic"
              shape: MaterialShape.Shape.Gem
              title: Translation.tr("Layout")
 +            enabled: !page.revertPending
-
+ 
              GroupedList {
                  ConfigSelectionArray {
                      HyprlandConfigOption { id: optLayout; key: "general:layout" }
@@ -213,15 +198,15 @@ index 25ec44e..cc45e86 100644
                      currentValue: optLayout.value
                      onSelected: newValue => optLayout.setValue(newValue)
                      options: [
-@@ -420,6 +428,7 @@ ContentPage {
+@@ -414,6 +419,7 @@ ContentPage {
              icon: "trackpad_input"
              shape: MaterialShape.Shape.Pentagon
              title: Translation.tr("Input")
 +            enabled: !page.revertPending
-
+ 
              ContentSubsection {
                  title: Translation.tr("Keyboard")
-@@ -430,9 +439,9 @@ ContentPage {
+@@ -424,9 +430,9 @@ ContentPage {
                          id: kbLayoutField
                          Layout.fillWidth: true
                          buttonIcon: "keyboard"
@@ -232,8 +217,8 @@ index 25ec44e..cc45e86 100644
 +                        enabled: !optKbLayout.locked && optKbLayout.available
                          value: optKbLayout.value ?? ""
                          onValueChanged: kbLayoutDebounceTimer.restart()
-
-@@ -449,8 +458,8 @@ ContentPage {
+ 
+@@ -443,8 +449,8 @@ ContentPage {
                      ConfigSwitch {
                          HyprlandConfigOption { id: optNumlock; key: "input:numlock_by_default" }
                          buttonIcon: "numbers"
@@ -244,7 +229,7 @@ index 25ec44e..cc45e86 100644
                          checked: optNumlock.boolean
                          onCheckedChanged: {
                              if (optNumlock.fetching || !optNumlock.loaded || checked === optNumlock.boolean) return
-@@ -461,11 +470,11 @@ ContentPage {
+@@ -455,11 +461,11 @@ ContentPage {
                      ConfigSpinBox {
                          HyprlandConfigOption { id: optRepeatDelay; key: "input:repeat_delay" }
                          icon: "keyboard_return"
@@ -259,7 +244,7 @@ index 25ec44e..cc45e86 100644
                              if (optRepeatDelay.fetching || !optRepeatDelay.loaded || value === optRepeatDelay.number) return
                              optRepeatDelay.setValue(value)
                          }
-@@ -474,20 +483,20 @@ ContentPage {
+@@ -468,20 +474,20 @@ ContentPage {
                      ConfigSpinBox {
                          HyprlandConfigOption { id: optRepeatRate; key: "input:repeat_rate" }
                          icon: "speed"
@@ -285,7 +270,7 @@ index 25ec44e..cc45e86 100644
                          currentValue: optFollowMouse.number
                          onSelected: newValue => optFollowMouse.setValue(newValue)
                          options: [
-@@ -506,8 +515,8 @@ ContentPage {
+@@ -500,8 +506,8 @@ ContentPage {
                      ConfigSwitch {
                          HyprlandConfigOption { id: optNaturalScroll; key: "input:touchpad:natural_scroll" }
                          buttonIcon: "swap_vert"
@@ -296,7 +281,7 @@ index 25ec44e..cc45e86 100644
                          checked: optNaturalScroll.boolean
                          onCheckedChanged: {
                              if (optNaturalScroll.fetching || !optNaturalScroll.loaded || checked === optNaturalScroll.boolean) return
-@@ -518,8 +527,8 @@ ContentPage {
+@@ -512,8 +518,8 @@ ContentPage {
                      ConfigSwitch {
                          HyprlandConfigOption { id: optDisableWhileTyping; key: "input:touchpad:disable_while_typing" }
                          buttonIcon: "keyboard_hide"
@@ -307,7 +292,7 @@ index 25ec44e..cc45e86 100644
                          checked: optDisableWhileTyping.boolean
                          onCheckedChanged: {
                              if (optDisableWhileTyping.fetching || !optDisableWhileTyping.loaded || checked === optDisableWhileTyping.boolean) return
-@@ -530,8 +539,8 @@ ContentPage {
+@@ -524,8 +530,8 @@ ContentPage {
                      ConfigSwitch {
                          HyprlandConfigOption { id: optClickfinger; key: "input:touchpad:clickfinger_behavior" }
                          buttonIcon: "touch_app"
@@ -318,7 +303,7 @@ index 25ec44e..cc45e86 100644
                          checked: optClickfinger.boolean
                          onCheckedChanged: {
                              if (optClickfinger.fetching || !optClickfinger.loaded || checked === optClickfinger.boolean) return
-@@ -542,11 +551,11 @@ ContentPage {
+@@ -536,11 +542,11 @@ ContentPage {
                      ConfigSpinBox {
                          HyprlandConfigOption { id: optScrollFactor; key: "input:touchpad:scroll_factor" }
                          icon: "swipe"
@@ -333,15 +318,15 @@ index 25ec44e..cc45e86 100644
                              if (optScrollFactor.fetching || !optScrollFactor.loaded || value === Math.round(optScrollFactor.number * 10)) return
                              optScrollFactor.setValue(value / 10.0)
                          }
-@@ -561,6 +570,7 @@ ContentPage {
+@@ -555,6 +561,7 @@ ContentPage {
              icon: "timer"
              shape: MaterialShape.Shape.Cookie12Sided
              title: Translation.tr("Idle")
 +            enabled: !page.revertPending
-
+ 
              readonly property list<var> unitOptions: [
                  { displayName: Translation.tr("Seconds"), icon: "timer",    value: 1    },
-@@ -607,7 +617,7 @@ ContentPage {
+@@ -601,7 +608,7 @@ ContentPage {
                          from: 0
                          to: 9999
                          stepSize: 1
@@ -350,12 +335,12 @@ index 25ec44e..cc45e86 100644
                              if (!timerRow.loaded) return
                              timerRow.displayValue = value
                              timerRow.edited(value * timerRow.displayUnit)
-@@ -688,16 +698,17 @@ ContentPage {
+@@ -682,16 +689,17 @@ ContentPage {
              icon: "deblur"
              shape: MaterialShape.Shape.PixelCircle
              title: Translation.tr("Visual & Aesthetics")
 +            enabled: !page.revertPending
-
+ 
              GroupedList {
                  ConfigSpinBox {
                      HyprlandConfigOption { id: optRounding; key: "decoration:rounding" }
@@ -371,7 +356,7 @@ index 25ec44e..cc45e86 100644
                          if (optRounding.fetching || !optRounding.loaded || value === optRounding.number) return
                          optRounding.setValue(value)
                      }
-@@ -706,8 +717,8 @@ ContentPage {
+@@ -700,8 +708,8 @@ ContentPage {
                  ConfigSwitch {
                      HyprlandConfigOption { id: optBlur; key: "decoration:blur:enabled" }
                      buttonIcon: "blur_on"
@@ -382,7 +367,7 @@ index 25ec44e..cc45e86 100644
                      checked: optBlur.boolean
                      onCheckedChanged: {
                          if (optBlur.fetching || !optBlur.loaded || checked === optBlur.boolean) return
-@@ -718,11 +729,11 @@ ContentPage {
+@@ -712,11 +720,11 @@ ContentPage {
                  ConfigSpinBox {
                      HyprlandConfigOption { id: optBlurSize; key: "decoration:blur:size" }
                      icon: "blur_circular"
@@ -397,7 +382,7 @@ index 25ec44e..cc45e86 100644
                          if (optBlurSize.fetching || !optBlurSize.loaded || value === optBlurSize.number) return
                          optBlurSize.setValue(value)
                      }
-@@ -731,11 +742,11 @@ ContentPage {
+@@ -725,11 +733,11 @@ ContentPage {
                  ConfigSpinBox {
                      HyprlandConfigOption { id: optBlurPasses; key: "decoration:blur:passes" }
                      icon: "layers"
@@ -412,7 +397,7 @@ index 25ec44e..cc45e86 100644
                          if (optBlurPasses.fetching || !optBlurPasses.loaded || value === optBlurPasses.number) return
                          optBlurPasses.setValue(value)
                      }
-@@ -744,11 +755,11 @@ ContentPage {
+@@ -738,11 +746,11 @@ ContentPage {
                  ConfigSpinBox {
                      HyprlandConfigOption { id: optGapsIn; key: "general:gaps_in" }
                      icon: "margin"
@@ -427,7 +412,7 @@ index 25ec44e..cc45e86 100644
                          if (optGapsIn.fetching || !optGapsIn.loaded || value === optGapsIn.number) return
                          optGapsIn.setValue(value)
                      }
-@@ -757,11 +768,11 @@ ContentPage {
+@@ -751,11 +759,11 @@ ContentPage {
                  ConfigSpinBox {
                      HyprlandConfigOption { id: optGapsOut; key: "general:gaps_out" }
                      icon: "open_in_full"
@@ -442,7 +427,7 @@ index 25ec44e..cc45e86 100644
                          if (optGapsOut.fetching || !optGapsOut.loaded || value === optGapsOut.number) return
                          optGapsOut.setValue(value)
                      }
-@@ -770,11 +781,11 @@ ContentPage {
+@@ -764,11 +772,11 @@ ContentPage {
                  ConfigSpinBox {
                      HyprlandConfigOption { id: optActiveOpacity; key: "decoration:active_opacity" }
                      icon: "opacity"
@@ -457,7 +442,7 @@ index 25ec44e..cc45e86 100644
                          if (optActiveOpacity.fetching || !optActiveOpacity.loaded || value === Math.round(optActiveOpacity.number * 100)) return
                          optActiveOpacity.setValue(value / 100)
                      }
-@@ -783,11 +794,11 @@ ContentPage {
+@@ -777,11 +785,11 @@ ContentPage {
                  ConfigSpinBox {
                      HyprlandConfigOption { id: optInactiveOpacity; key: "decoration:inactive_opacity" }
                      icon: "opacity"
@@ -472,7 +457,7 @@ index 25ec44e..cc45e86 100644
                          if (optInactiveOpacity.fetching || !optInactiveOpacity.loaded || value === Math.round(optInactiveOpacity.number * 100)) return
                          optInactiveOpacity.setValue(value / 100)
                      }
-@@ -795,11 +806,11 @@ ContentPage {
+@@ -789,11 +797,11 @@ ContentPage {
                  ConfigSpinBox {
                      HyprlandConfigOption { id: optBorderSize; key: "general:border_size" }
                      icon: "border_outer"
@@ -487,33 +472,33 @@ index 25ec44e..cc45e86 100644
                          if (optBorderSize.fetching || !optBorderSize.loaded || value === optBorderSize.number) return
                          optBorderSize.setValue(value)
                      }
-@@ -842,7 +853,7 @@ ContentPage {
+@@ -836,7 +844,7 @@ ContentPage {
                          text: Translation.tr("Active border opacity")
                          value: Math.round(Config.options.hyprland.general.borderColor.activeOpacity * 100)
                          from: 0; to: 100; stepSize: 5
 -                        onValueChanged: {
 +                        onValueModified: {
-                             // Compared as integers: the spin box only holds whole percents.
                              if (value === Math.round(Config.options.hyprland.general.borderColor.activeOpacity * 100)) return
                              Config.options.hyprland.general.borderColor.activeOpacity = value / 100.0
-@@ -866,7 +877,7 @@ ContentPage {
+                             HyprlandConfig.applyBorderColors()
+@@ -859,7 +867,7 @@ ContentPage {
                          text: Translation.tr("Inactive border opacity")
                          value: Math.round(Config.options.hyprland.general.borderColor.inactiveOpacity * 100)
                          from: 0; to: 100; stepSize: 5
 -                        onValueChanged: {
 +                        onValueModified: {
-                             // Compared as integers: the spin box only holds whole percents.
                              if (value === Math.round(Config.options.hyprland.general.borderColor.inactiveOpacity * 100)) return
                              Config.options.hyprland.general.borderColor.inactiveOpacity = value / 100.0
-@@ -882,6 +893,7 @@ ContentPage {
+                             HyprlandConfig.applyBorderColors()
+@@ -874,6 +882,7 @@ ContentPage {
              icon: "app_registration"
              shape: MaterialShape.Shape.Sunny
              title: Translation.tr("Autostart Apps")
 +            enabled: !page.revertPending
              Layout.fillWidth: true
-
+ 
              AutostartApps {}
-@@ -892,12 +904,13 @@ ContentPage {
+@@ -884,12 +893,13 @@ ContentPage {
              icon: "animation"
              shape: MaterialShape.Shape.Oval
              title: Translation.tr("Animations")

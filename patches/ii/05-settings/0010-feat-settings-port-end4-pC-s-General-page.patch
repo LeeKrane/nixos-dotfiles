@@ -13,7 +13,7 @@ Drop when: upstream ships an equivalent General page, or the settings port is ab
  1 file changed, 320 insertions(+), 290 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/settings/GeneralConfig.qml b/dots/.config/quickshell/ii/modules/settings/GeneralConfig.qml
-index 6b83f9cf..e736119b 100644
+index 6b83f9cf..c5b422b7 100644
 --- a/dots/.config/quickshell/ii/modules/settings/GeneralConfig.qml
 +++ b/dots/.config/quickshell/ii/modules/settings/GeneralConfig.qml
 @@ -8,351 +8,381 @@ import qs.modules.common.functions
@@ -203,7 +203,7 @@ index 6b83f9cf..e736119b 100644
 -                            value: lang
 -                        };
 -                    })]
-+                gradient: Gradient { // I didn't like how it turned out but in case I regret it 
++                gradient: Gradient {
 +                    orientation: Gradient.Horizontal
 +                    GradientStop { position: 0.0; color: Appearance.colors.colLayer1  }
 +                    GradientStop { position: 0.6; color: Appearance.colors.colLayer1  }

@@ -12,26 +12,25 @@ Port: hand-ported (online presets removed; imported presets cannot set
 command keys)
 Drop when: the Profile page is dropped.
 ---
- .../ii/modules/common/Directories.qml         |   3 +
- .../ii/modules/common/widgets/PresetPopup.qml |  63 +++
- .../ii/modules/common/widgets/PresetsCard.qml | 203 ++++++++++
- dots/.config/quickshell/ii/scripts/presets.sh | 369 ++++++++++++++++++
- .../quickshell/ii/services/Presets.qml        | 129 ++++++
- 5 files changed, 767 insertions(+)
+ .../ii/modules/common/Directories.qml         |   2 +
+ .../ii/modules/common/widgets/PresetPopup.qml |  63 ++++
+ .../ii/modules/common/widgets/PresetsCard.qml | 199 ++++++++++++
+ dots/.config/quickshell/ii/scripts/presets.sh | 294 ++++++++++++++++++
+ .../quickshell/ii/services/Presets.qml        | 128 ++++++++
+ 5 files changed, 686 insertions(+)
  create mode 100644 dots/.config/quickshell/ii/modules/common/widgets/PresetPopup.qml
  create mode 100644 dots/.config/quickshell/ii/modules/common/widgets/PresetsCard.qml
  create mode 100755 dots/.config/quickshell/ii/scripts/presets.sh
  create mode 100644 dots/.config/quickshell/ii/services/Presets.qml
 
 diff --git a/dots/.config/quickshell/ii/modules/common/Directories.qml b/dots/.config/quickshell/ii/modules/common/Directories.qml
-index 78b0a9ed..fbab5dff 100644
+index 78b0a9ed..adeb8fb4 100644
 --- a/dots/.config/quickshell/ii/modules/common/Directories.qml
 +++ b/dots/.config/quickshell/ii/modules/common/Directories.qml
-@@ -45,6 +45,9 @@ Singleton {
+@@ -45,6 +45,8 @@ Singleton {
      property string defaultAiPrompts: Quickshell.shellPath("defaults/ai/prompts")
      property string userAiPrompts: FileUtils.trimFileProtocol(`${Directories.shellConfig}/ai/prompts`)
      property string userActions: FileUtils.trimFileProtocol(`${Directories.shellConfig}/actions`)
-+    // Profile page presets (patches/ii/05-settings). Inside the config dir, so in the repo.
 +    property string userPresetsPath: FileUtils.trimFileProtocol(`${Directories.shellConfig}/presets`)
 +    property string presetsScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/presets.sh`)
      property string aiChats: FileUtils.trimFileProtocol(`${Directories.state}/user/ai/chats`)
@@ -108,10 +107,10 @@ index 00000000..56f5ee9e
 +}
 diff --git a/dots/.config/quickshell/ii/modules/common/widgets/PresetsCard.qml b/dots/.config/quickshell/ii/modules/common/widgets/PresetsCard.qml
 new file mode 100644
-index 00000000..f31149cd
+index 00000000..9eff5e18
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/modules/common/widgets/PresetsCard.qml
-@@ -0,0 +1,203 @@
+@@ -0,0 +1,199 @@
 +import QtQuick
 +import QtQuick.Controls
 +import QtQuick.Layouts
@@ -150,7 +149,6 @@ index 00000000..f31149cd
 +        }
 +        spacing: 6
 +
-+        // Header
 +        RowLayout{
 +            Layout.leftMargin: 10
 +            Layout.topMargin: 6
@@ -178,7 +176,6 @@ index 00000000..f31149cd
 +                    wrapMode: Text.NoWrap
 +                }
 +
-+                // Description
 +                StyledText {
 +                    Layout.fillWidth: true
 +                    visible: root.description.length > 0
@@ -220,7 +217,6 @@ index 00000000..f31149cd
 +            }
 +        }
 +
-+        // Wall
 +        Rectangle {
 +            id: imageRect
 +            Layout.fillWidth: true
@@ -258,7 +254,6 @@ index 00000000..f31149cd
 +            }
 +        }
 +
-+        // Buttons
 +        RowLayout {
 +            Layout.fillWidth: true
 +            Layout.rightMargin: 8
@@ -318,18 +313,11 @@ index 00000000..f31149cd
 \ No newline at end of file
 diff --git a/dots/.config/quickshell/ii/scripts/presets.sh b/dots/.config/quickshell/ii/scripts/presets.sh
 new file mode 100755
-index 00000000..0a2e7a90
+index 00000000..f592f371
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/scripts/presets.sh
-@@ -0,0 +1,369 @@
+@@ -0,0 +1,294 @@
 +#!/usr/bin/env bash
-+# presets.sh - manage shell config presets | just for fun I could have done it from quickshell directly =P
-+# Usage:
-+#   presets.sh --save <name> [description]
-+#   presets.sh --remove <name> [--online]
-+#   presets.sh --apply <name> [--online]
-+#   presets.sh --export-zip <name>
-+#   presets.sh --import-zip <zip_path>
 +
 +CONFIG_DIR="$HOME/.config/illogical-impulse"
 +CONFIG_FILE="$CONFIG_DIR/config.json"
@@ -341,39 +329,19 @@ index 00000000..0a2e7a90
 +
 +mkdir -p "$LOCAL_PRESETS_DIR" "$ONLINE_PRESETS_DIR" "$IMPORTED_PRESETS_DIR"
 +
-+# Blacklist: General (time/battery/audio/sounds/language/workSafety) + Services (ai/networking/musicRecognition/search/screenRecord/screenSnip/updates/bar.weather) + Hyprland non-styling
-+# Keep: appearance/background/bar(non-weather)/dock/lock/overview/panelFamily etc. + hyprland.decoration/gaps/animations
-+# Note: apps/profile/wallpaperSelector are NOT blacklisted here (would make preset look empty) - only General+Services per Settings tabs
 +BLACKLIST_FILTER='del(._presetMeta)
 +  | del(.time, .battery, .audio, .sounds, .language, .workSafety)
 +  | del(.ai, .networking, .musicRecognition, .search, .screenRecord, .screenSnip, .updates)
 +  | del(.bar.weather)
 +  | del(.hyprland.input, .hyprland.autostartApps, .hyprland.general.layout)'
 +
-+# Imported presets are untrusted (they come from a ZIP someone else built).
-+# .apps.* (bluetooth/network/taskManager/volumeMixer/terminal/...) are read by
-+# the shell and run via `bash -c` on the next toggle/button click, so an
-+# imported/applied preset must never be allowed to set any of them.
++# .apps.* commands run via `bash -c`, so imported presets must not set them.
 +IMPORTED_COMMAND_STRIP_FILTER='del(.apps)'
 +
-+# A preset's own file name, and any asset name it bundles, end up spliced into
-+# paths (asset cache dir) and, via switchwall.sh, into a script Hyprland runs
-+# unattended on every start (the video-wallpaper restore script). Anything
-+# that isn't a plain file-name character must never reach either.
++# Preset and asset names reach paths and the restore script Hyprland runs at start (switchwall.sh); allow only plain file-name characters.
 +SAFE_NAME_RE='^[A-Za-z0-9._ -]+$'
 +
-+# Imported presets are untrusted JSON. A blacklist of known-dangerous keys
-+# keeps missing the next one (background.thumbnailPath, found after
-+# wallpaperPath/apps were already blacklisted), so imported presets are
-+# filtered by an ALLOWLIST instead: every boolean/number survives anywhere in
-+# the tree, the six image keys below are handled by the rewrite step, and any
-+# other string (or array) survives only if its own full dotted key path is
-+# listed here. Every path below was checked against its consumers in
-+# modules/common: it never reaches bash -c/sh -c/execDetached/Process
-+# command/a generated script/Hyprland exec, either directly or only after
-+# validation against a small fixed set with a safe fallback (see
-+# task-10-report.md's audit table for the per-key trace). When in doubt, a
-+# key is left off this list and its value is dropped on import.
++# Imported presets are filtered by allowlist: booleans and numbers survive; other strings and arrays only if their dotted key path is listed.
 +IMPORTED_ALLOWED_STRING_PATHS='[
 +  "panelFamily",
 +  "profile.displayName",
@@ -407,10 +375,6 @@ index 00000000..0a2e7a90
 +  "sidebar.quickToggles.style"
 +]'
 +
-+# The six keys the import/apply rewrite step above already resolves to a
-+# verified, safely-named path under our own asset cache (or deletes). Their
-+# rewritten value must survive the allowlist walk below even though it is
-+# not itself on IMPORTED_ALLOWED_STRING_PATHS.
 +IMPORTED_KEPT_IMAGE_PATHS='[
 +  "background.wallpaperPath",
 +  "background.lockWall",
@@ -420,11 +384,6 @@ index 00000000..0a2e7a90
 +  "profile.avatarPath"
 +]'
 +
-+# Walks the whole tree: booleans/numbers always survive; the rewritten image
-+# paths always survive; any other string, or array, survives only if its own
-+# full dotted key path is on the allowlist (an array of only booleans/numbers
-+# always survives). Everything else - including any string or array this
-+# list doesn't name - is dropped rather than passed through unexamined.
 +IMPORTED_ALLOWLIST_FILTER='
 +def prune($allow; $keep; $path; $val):
 +  ($val) as $v
@@ -452,11 +411,7 @@ index 00000000..0a2e7a90
 +    end;
 +. as $root | prune($allow; $keep; []; $root)'
 +
-+# A literal "." or ".." is accepted by SAFE_NAME_RE (every one of its
-+# characters is in the allowed set) but must never be used as a preset name:
-+# it is joined into "$PRESETS_DIR/${name}.json" and "$PRESETS_DIR/assets/$name"
-+# below, so "." or ".." there would point the assets dir straight at
-+# $PRESETS_DIR or its parent.
++# SAFE_NAME_RE accepts "." and "..", which would point the assets dir at $PRESETS_DIR or its parent.
 +is_unsafe_name() {
 +    local n="$1"
 +    [ "$n" = "." ] || [ "$n" = ".." ] || ! [[ "$n" =~ $SAFE_NAME_RE ]]
@@ -498,55 +453,33 @@ index 00000000..0a2e7a90
 +    else
 +        python3 -c "import zipfile, sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$zip_path" "$tmpdir"
 +    fi
-+    # Refuse zips containing symlinks before reading anything else out of the
-+    # extracted tree - a symlink could point outside $tmpdir (or at an
-+    # arbitrary file on the importing machine) and get treated as if it were
-+    # the zip's own content.
++# A symlink could point outside $tmpdir.
 +    if find "$tmpdir" -type l | grep -q .; then
 +        echo "Error: zip contains symlinks, refusing to import" >&2
 +        trap - EXIT
 +        rm -rf "$tmpdir"
 +        exit 1
 +    fi
-+    # Find json (first *.json not meta.json)
 +    json_file=$(find "$tmpdir" -maxdepth 4 -name "*.json" ! -name "meta.json" | head -n1)
 +    if [ -z "$json_file" ]; then
 +        echo "Error: no preset json in zip" >&2
 +        exit 1
 +    fi
 +    base=$(basename "$json_file" .json)
-+    # The preset's own file name becomes part of cache paths below
-+    # ($IMPORTED_PRESETS_DIR/${base}.json, .../assets/$base) - refuse names
-+    # that could escape those directories or inject shell metacharacters
-+    # into a path built from them.
 +    if is_unsafe_name "$base"; then
 +        echo "Error: unsafe preset file name in zip: $base" >&2
 +        trap - EXIT
 +        rm -rf "$tmpdir"
 +        exit 1
 +    fi
-+    # Collect assets from the same folder as the json (images etc, exclude json/meta).
-+    # Anchoring to the json dir (instead of the zip root) supports flat zips as well
-+    # as folder-wrapped ones (e.g. Blapples' assets/ layout).
++# Anchored to the json dir so flat and folder-wrapped zips both work.
 +    json_dir=$(dirname "$json_file")
 +    asset_files=$(find "$json_dir" -maxdepth 1 -type f ! -name "*.json" ! -name "meta.json" -exec basename {} \; | jq -R . | jq -s .)
-+    # Only asset names safe enough to end up in the restore script Hyprland
-+    # runs unattended (see switchwall.sh create_restore_script) are eligible
-+    # for the json-path rewrite below - anything else is dropped from the
-+    # candidate list, not merely left un-rewritten.
 +    safe_asset_files=$(echo "$asset_files" | jq --arg re "$SAFE_NAME_RE" '[.[] | select(test($re))]')
 +    asset_cache="$IMPORTED_PRESETS_DIR/assets/$base"
 +    mkdir -p "$asset_cache"
-+    # Copy assets to cache (plug-and-play like online presets)
 +    find "$json_dir" -maxdepth 1 -type f ! -name "*.json" ! -name "meta.json" -exec cp -L {} "$asset_cache/" \; 2>/dev/null || true
-+    # Rewrite json paths to point to cached assets (reuse online jqFilter Profile.qml:250).
-+    # Only touch the known image-path keys (same keys --export-zip collects
-+    # assets from, below) - NOT a generic walk() over every string - so a
-+    # preset can't redirect a bare command name (e.g. apps.terminal) at an
-+    # executable shipped inside the ZIP. A key is kept only if it resolves to
-+    # a safely-named asset that actually exists in $asset_cache; otherwise
-+    # the key is dropped entirely rather than left pointing at an unverified
-+    # (and possibly unsafely-named) path.
++# Rewrite only known image keys (not every string) so a preset can't point e.g. apps.terminal at an executable from the zip.
 +    jq --arg dir "$asset_cache" --argjson files "$safe_asset_files" '
 +      def rewritten: if type == "string" then ((split("/") | last) as $b | if ($b != "." and $b != ".." and ($files | index($b))) then ($dir + "/" + $b) else null end) else null end;
 +      (if .background.wallpaperPath != null then (.background.wallpaperPath |= rewritten | if .background.wallpaperPath == null then del(.background.wallpaperPath) else . end) else . end)
@@ -580,9 +513,6 @@ index 00000000..0a2e7a90
 +
 +case "$action" in
 +    --remove|--apply)
-+        # $name is joined into "$PRESETS_DIR/${name}.json" and (for --remove)
-+        # "*_imported/assets/${name}" below; "." or ".." there would target
-+        # the presets/assets directory itself or its parent.
 +        if is_unsafe_name "$name"; then
 +            echo "Error: unsafe preset name: $name" >&2
 +            exit 1
@@ -613,10 +543,6 @@ index 00000000..0a2e7a90
 +            echo "Error: preset not found: $name" >&2
 +            exit 1
 +        fi
-+        # Filter preset input before merge so blacklisted keys never overwrite local config.
-+        # Imported presets additionally get .apps stripped here too (defense in
-+        # depth - the import step above already strips it, but this path is what
-+        # actually merges into config.json, so it must not trust the cache file alone).
 +        tmp=$(mktemp)
 +        apply_filter="$BLACKLIST_FILTER"
 +        if $imported; then
@@ -639,10 +565,8 @@ index 00000000..0a2e7a90
 +        fi
 +        tmpdir=$(mktemp -d)
 +        trap 'rm -rf "$tmpdir"' EXIT
-+        # Use filtered preset for export
 +        filtered="$tmpdir/${name}.json"
 +        jq "$BLACKLIST_FILTER" "$preset_file" > "$filtered"
-+        # Build meta.json + collect all image assets like online presets (ahri/meta.json)
 +        collect_asset() {
 +            local src="$1"; local key="$2"
 +            if [ -n "$src" ] && [ -f "$src" ]; then
@@ -655,11 +579,9 @@ index 00000000..0a2e7a90
 +        banner=$(jq -r '.sidebar.bannerImage // empty' "$filtered")
 +        customImg=$(jq -r '.background.widgets.customImage.path // empty' "$filtered")
 +        avatar=$(jq -r '.profile.avatarPicture // .profile.avatarPath // empty' "$filtered")
-+        # avatar path may be empty or not a file
 +        wallpapers="[]"
 +        if [ -n "$wallpaper" ] && [ -f "$wallpaper" ]; then wallpapers=$(jq -n --arg b "$(basename "$wallpaper")" '[$b]'); fi
 +
-+        # copy assets and build meta fields
 +        meta_avatar=""; meta_banner=""; meta_custom=""; meta_lock=""
 +        [ -n "$wallpaper" ] && collect_asset "$wallpaper" >/dev/null
 +        if [ -n "$lockwall" ] && [ -f "$lockwall" ]; then meta_lock=$(collect_asset "$lockwall"); fi
@@ -674,8 +596,6 @@ index 00000000..0a2e7a90
 +               + (if $banner != "" then {banner: $banner} else {} end)
 +               + (if $custom != "" then {customImage: $custom} else {} end)
 +               + (if $lock != "" then {lockWall: $lock} else {} end)' > "$tmpdir/meta.json"
-+        # preview: try to generate or copy existing preview if exists in assets
-+        # Just include filtered json + meta + wallpaper basename
 +        zip_name="${name}.zip"
 +        if command -v zip >/dev/null 2>&1; then
 +            (cd "$tmpdir" && zip -r "$LOCAL_PRESETS_DIR/$zip_name" . >/dev/null)
@@ -693,10 +613,10 @@ index 00000000..0a2e7a90
 +esac
 diff --git a/dots/.config/quickshell/ii/services/Presets.qml b/dots/.config/quickshell/ii/services/Presets.qml
 new file mode 100644
-index 00000000..ce292b46
+index 00000000..39b1c1da
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/services/Presets.qml
-@@ -0,0 +1,129 @@
+@@ -0,0 +1,128 @@
 +pragma Singleton
 +pragma ComponentBehavior: Bound
 +
@@ -810,7 +730,6 @@ index 00000000..ce292b46
 +    }
 +
 +    function overwrite(name) {
-+        // Overwrite with same name (presets.sh --save filters General+Services)
 +        overwriteProc.command = ["bash", Directories.presetsScriptPath, "--save", name]
 +        overwriteProc.running = true
 +    }

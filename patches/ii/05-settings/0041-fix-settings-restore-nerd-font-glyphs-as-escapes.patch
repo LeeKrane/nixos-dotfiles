@@ -9,7 +9,7 @@ Subject: [PATCH] fix(settings): restore Nerd Font glyphs as ASCII escapes
  2 files changed, 3 insertions(+), 3 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/settings/GeneralConfig.qml b/dots/.config/quickshell/ii/modules/settings/GeneralConfig.qml
-index e736119..3a16e8b 100644
+index c5b422b7..ace088b9 100644
 --- a/dots/.config/quickshell/ii/modules/settings/GeneralConfig.qml
 +++ b/dots/.config/quickshell/ii/modules/settings/GeneralConfig.qml
 @@ -349,7 +349,7 @@ ContentPage {
@@ -22,12 +22,12 @@ index e736119..3a16e8b 100644
                          mainText: enabled ? Translation.tr("Generate\nTypically takes 2 minutes") : Translation.tr("Generating...\nDon't close this window!")
                          onClicked: {
 diff --git a/dots/.config/quickshell/ii/modules/settings/InterfaceConfig.qml b/dots/.config/quickshell/ii/modules/settings/InterfaceConfig.qml
-index e0b9e91..bdf8fdf 100644
+index 3da043e5..2c1640dc 100644
 --- a/dots/.config/quickshell/ii/modules/settings/InterfaceConfig.qml
 +++ b/dots/.config/quickshell/ii/modules/settings/InterfaceConfig.qml
-@@ -520,8 +520,8 @@ ContentPage {
+@@ -519,8 +519,8 @@ ContentPage {
+                             Config.options.cheatsheet.superKey = newValue;
                          }
-                         // Use a nerdfont to see the icons
                          options: ([
 -                          "󰖳", "", "󰨡", "", "󰌽", "󰣇", "", "", "",
 -                          "", "", "󱄛", "", "", "", "⌘", "󰀲", "󰟍", ""
@@ -36,5 +36,3 @@ index e0b9e91..bdf8fdf 100644
                          ]).map(icon => { return {
                            displayName: icon,
                            value: icon
---
-2.56.0

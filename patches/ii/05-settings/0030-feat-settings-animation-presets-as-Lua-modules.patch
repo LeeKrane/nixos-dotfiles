@@ -9,23 +9,21 @@ Problem: the fork kept presets as Python strings and asked the user to add a req
 Port: hand-ported (moved to hypr/hyprland/animationPresets/*.lua, loaded from krane_gui.lua)
 Drop when: upstream ships animation presets.
 ---
- .../hypr/hyprland/animationPresets/fast.lua     | 16 ++++++++++++++++
- .../hypr/hyprland/animationPresets/niri.lua     | 16 ++++++++++++++++
- .../hypr/hyprland/animationPresets/normal.lua   | 17 +++++++++++++++++
- 3 files changed, 49 insertions(+)
+ .../hypr/hyprland/animationPresets/fast.lua        | 14 ++++++++++++++
+ .../hypr/hyprland/animationPresets/niri.lua        | 14 ++++++++++++++
+ .../hypr/hyprland/animationPresets/normal.lua      | 13 +++++++++++++
+ 3 files changed, 41 insertions(+)
  create mode 100644 dots/.config/hypr/hyprland/animationPresets/fast.lua
  create mode 100644 dots/.config/hypr/hyprland/animationPresets/niri.lua
  create mode 100644 dots/.config/hypr/hyprland/animationPresets/normal.lua
 
 diff --git a/dots/.config/hypr/hyprland/animationPresets/fast.lua b/dots/.config/hypr/hyprland/animationPresets/fast.lua
 new file mode 100644
-index 00000000..4875b7d9
+index 00000000..755bf3d9
 --- /dev/null
 +++ b/dots/.config/hypr/hyprland/animationPresets/fast.lua
-@@ -0,0 +1,16 @@
-+-- Animation preset "fast" for the ii settings window (patches/ii/05-settings).
-+-- Loaded by custom/krane_gui.lua when hosts/<host>/ii-settings.json sets
-+-- "animationPreset": "fast". Ported from pctrade/end4-pC hyprconfigurator.py.
+@@ -0,0 +1,14 @@
++-- Ported from pctrade/end4-pC hyprconfigurator.py.
 +hl.curve("pc_wobble", { type = "bezier", points = { {0.15, 1.15}, {0.35, 1.0}  } })
 +hl.curve("pc_decel",  { type = "bezier", points = { {0.05, 0.9},  {0.1,  1.05} } })
 +hl.curve("pc_accel",  { type = "bezier", points = { {0.3,  0},    {0.8,  0.15} } })
@@ -41,13 +39,11 @@ index 00000000..4875b7d9
 +hl.animation({ leaf = "specialWorkspaceOut", enabled = true, speed = 2, bezier = "pc_accel",  style = "slidevert" })
 diff --git a/dots/.config/hypr/hyprland/animationPresets/niri.lua b/dots/.config/hypr/hyprland/animationPresets/niri.lua
 new file mode 100644
-index 00000000..3a0f8092
+index 00000000..72875a4b
 --- /dev/null
 +++ b/dots/.config/hypr/hyprland/animationPresets/niri.lua
-@@ -0,0 +1,16 @@
-+-- Animation preset "niri" for the ii settings window (patches/ii/05-settings).
-+-- Loaded by custom/krane_gui.lua when hosts/<host>/ii-settings.json sets
-+-- "animationPreset": "niri". Ported from pctrade/end4-pC hyprconfigurator.py.
+@@ -0,0 +1,14 @@
++-- Ported from pctrade/end4-pC hyprconfigurator.py.
 +hl.curve("niri_wobble", { type = "bezier", points = { {0.15, 1.15}, {0.35, 1.0}  } })
 +hl.curve("niri_decel",  { type = "bezier", points = { {0.05, 0.9},  {0.1,  1.05} } })
 +hl.curve("niri_accel",  { type = "bezier", points = { {0.3,  0},    {0.8,  0.15} } })
@@ -63,14 +59,10 @@ index 00000000..3a0f8092
 +hl.animation({ leaf = "specialWorkspaceOut", enabled = true, speed = 4, bezier = "niri_accel",  style = "slidevert" })
 diff --git a/dots/.config/hypr/hyprland/animationPresets/normal.lua b/dots/.config/hypr/hyprland/animationPresets/normal.lua
 new file mode 100644
-index 00000000..615bef51
+index 00000000..cc068e5c
 --- /dev/null
 +++ b/dots/.config/hypr/hyprland/animationPresets/normal.lua
-@@ -0,0 +1,17 @@
-+-- Animation preset "normal" for the ii settings window (patches/ii/05-settings).
-+-- Loaded by custom/krane_gui.lua when hosts/<host>/ii-settings.json sets
-+-- "animationPreset": "normal". Ported from pctrade/end4-pC hyprconfigurator.py.
-+-- Uses curves already defined in general.lua: emphasizedDecel, emphasizedAccel, menu_decel, menu_accel, stall.
+@@ -0,0 +1,13 @@
 +hl.animation({ leaf = "windowsIn",           enabled = true, speed = 3,   bezier = "emphasizedDecel", style = "popin 80%" })
 +hl.animation({ leaf = "windowsOut",          enabled = true, speed = 2,   bezier = "emphasizedDecel", style = "popin 90%" })
 +hl.animation({ leaf = "windowsMove",         enabled = true, speed = 3,   bezier = "emphasizedDecel", style = "slide"     })

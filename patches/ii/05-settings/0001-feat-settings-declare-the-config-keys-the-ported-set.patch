@@ -10,23 +10,21 @@ Problem: the ported ContentSection stores collapsed sections in settings.collaps
 Port: hand-ported. Only these two objects; settings.style/borderColor/borderSize (fork panel styling) and profile.onlinePresets (online presets) are dropped.
 Drop when: the pinned Config.qml declares settings.collapsedSections and profile.displayName.
 ---
- .../.config/quickshell/ii/modules/common/Config.qml | 13 +++++++++++++
- 1 file changed, 13 insertions(+)
+ dots/.config/quickshell/ii/modules/common/Config.qml | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
 
 diff --git a/dots/.config/quickshell/ii/modules/common/Config.qml b/dots/.config/quickshell/ii/modules/common/Config.qml
-index ac0851f3..48830dd0 100644
+index ac0851f3..a63bed5d 100644
 --- a/dots/.config/quickshell/ii/modules/common/Config.qml
 +++ b/dots/.config/quickshell/ii/modules/common/Config.qml
-@@ -80,6 +80,19 @@ Singleton {
+@@ -80,6 +80,17 @@ Singleton {
  
              property string panelFamily: "ii" // "ii", "waffle"
  
-+            // Settings window state (patches/ii/05-settings): sections the user collapsed.
 +            property JsonObject settings: JsonObject {
 +                property list<string> collapsedSections: []
 +            }
 +
-+            // Settings window Profile page (patches/ii/05-settings).
 +            property JsonObject profile: JsonObject {
 +                property string avatarPath: ""
 +                property string avatarPicture: ""

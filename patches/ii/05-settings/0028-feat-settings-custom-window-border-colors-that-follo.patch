@@ -10,21 +10,19 @@ Problem: the Hyprland page's border colors are palette roles and must be re-reso
 Port: hand-ported (WM checks, setIdle and setAnimPreset dropped; scripts run through their venv shebang, not python3 from PATH; re-apply added on configreloaded; getColorFromName ported verbatim into Appearance.qml since this pin lacks it and the brief did not list this file)
 Drop when: upstream ii ships border colors from palette roles.
 ---
- .../ii/modules/common/Appearance.qml          |  18 +++
- .../quickshell/ii/services/HyprlandConfig.qml | 109 +++++++++++++-----
- .../ii/services/MaterialThemeLoader.qml       |   3 +
- 3 files changed, 99 insertions(+), 31 deletions(-)
+ .../ii/modules/common/Appearance.qml          | 16 +++
+ .../quickshell/ii/services/HyprlandConfig.qml | 99 +++++++++++++------
+ .../ii/services/MaterialThemeLoader.qml       |  2 +
+ 3 files changed, 86 insertions(+), 31 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/common/Appearance.qml b/dots/.config/quickshell/ii/modules/common/Appearance.qml
-index bedf01eb..892a6f94 100644
+index bedf01eb..6b88688c 100644
 --- a/dots/.config/quickshell/ii/modules/common/Appearance.qml
 +++ b/dots/.config/quickshell/ii/modules/common/Appearance.qml
-@@ -34,6 +34,24 @@ Singleton {
+@@ -34,6 +34,22 @@ Singleton {
      property real backgroundTransparency: Config?.options.appearance.transparency.enable ? Config?.options.appearance.transparency.automatic ? autoBackgroundTransparency : Config?.options.appearance.transparency.backgroundTransparency : 0
      property real contentTransparency: Config?.options.appearance.transparency.automatic ? autoContentTransparency : Config?.options.appearance.transparency.contentTransparency
  
-+    // Palette roles (patches/ii/05-settings): used by HyprlandConfig.qml to
-+    // resolve the settings window's border color role pickers.
 +    function getColorFromName(name) {
 +        switch (name) {
 +            case "primary":            return colors.colPrimary
@@ -45,18 +43,15 @@ index bedf01eb..892a6f94 100644
          property bool darkmode: true
          property bool transparent: false
 diff --git a/dots/.config/quickshell/ii/services/HyprlandConfig.qml b/dots/.config/quickshell/ii/services/HyprlandConfig.qml
-index 0f2f3f2c..46b97b7a 100644
+index 0f2f3f2c..45d9378d 100644
 --- a/dots/.config/quickshell/ii/services/HyprlandConfig.qml
 +++ b/dots/.config/quickshell/ii/services/HyprlandConfig.qml
-@@ -9,46 +9,90 @@ import qs.modules.common
+@@ -9,46 +9,80 @@ import qs.modules.common
  import qs.modules.common.functions
  
  /**
 - * Configs Hyprland
-+ * Transient Hyprland overrides: game mode, the anti-flashbang shader and
-+ * custom window border colors. They go to hyprland/shellOverrides/main.lua,
-+ * which loads last and which every switch wipes. Persistent settings go
-+ * through KraneSettings (krane-ii-settings) instead.
++ * Transient overrides in shellOverrides/main.lua; persistent settings go through KraneSettings.
   */
  Singleton {
      id: root
@@ -71,7 +66,6 @@ index 0f2f3f2c..46b97b7a 100644
 -        Quickshell.execDetached(["bash", "-c", //
 -            `${root.configuratorScriptPath} --file ${root.shellOverridesPath} --set "${key}" "${value}"` //
 -        ])
-+    // The script runs through its own venv shebang; argv, not a shell string.
 +    function _run(args: var): void {
 +        Quickshell.execDetached([root.configuratorScriptPath, "--file", root.shellOverridesPath].concat(args));
      }
@@ -122,18 +116,14 @@ index 0f2f3f2c..46b97b7a 100644
 +    readonly property string borderActiveKey: "general:col:active_border"
 +    readonly property string borderInactiveKey: "general:col:inactive_border"
 +
-+    // Hyprland wants rgba(RRGGBBAA) without a leading '#'. Only the RGB of the
-+    // palette color is kept: some Appearance colors carry an alpha that encodes
-+    // a layer opacity inside the shell, which has nothing to do with a border.
++    // Hyprland wants rgba(RRGGBBAA) without '#'. Only RGB is kept: Appearance colors can carry a layer-opacity alpha.
 +    function toHyprColor(color, opacity) {
 +        const c = Qt.color(color);
 +        const hex = v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, "0");
 +        return `rgba(${hex(c.r)}${hex(c.g)}${hex(c.b)}${hex(opacity)})`;
 +    }
 +
-+    // Custom window border colors, or {} when the option is off so the colors
-+    // matugen writes to hyprland/colors.lua keep applying. Roles are resolved
-+    // here rather than stored as colors, so the borders follow the wallpaper.
++    // {} when the option is off, so the colors matugen writes to hyprland/colors.lua keep applying.
 +    function borderColorEntries() {
 +        const opts = Config.options?.hyprland?.general?.borderColor;
 +        if (!Config.ready || !opts?.enable)
@@ -144,7 +134,6 @@ index 0f2f3f2c..46b97b7a 100644
 +        return entries;
 +    }
 +
-+    // Also called by MaterialThemeLoader on every palette change.
 +    function applyBorderColors(): void {
 +        const entries = root.borderColorEntries();
 +        if (Object.keys(entries).length > 0)
@@ -155,8 +144,7 @@ index 0f2f3f2c..46b97b7a 100644
 +        root.resetMany([root.borderActiveKey, root.borderInactiveKey]);
 +    }
 +
-+    // The palette can be loaded before the config, in which case the first
-+    // apply from MaterialThemeLoader was skipped.
++    // MaterialThemeLoader's first apply is skipped when the palette loads before the config.
 +    Connections {
 +        target: Config
 +        function onReadyChanged() {
@@ -169,7 +157,7 @@ index 0f2f3f2c..46b97b7a 100644
      }
  
      Connections {
-@@ -56,7 +100,10 @@ Singleton {
+@@ -56,7 +90,10 @@ Singleton {
  
          function onRawEvent(event) {
              if (event.name == "configreloaded") {
@@ -182,15 +170,14 @@ index 0f2f3f2c..46b97b7a 100644
          }
      }
 diff --git a/dots/.config/quickshell/ii/services/MaterialThemeLoader.qml b/dots/.config/quickshell/ii/services/MaterialThemeLoader.qml
-index 6012566d..e5ac92f5 100644
+index 6012566d..c88684f5 100644
 --- a/dots/.config/quickshell/ii/services/MaterialThemeLoader.qml
 +++ b/dots/.config/quickshell/ii/services/MaterialThemeLoader.qml
-@@ -31,6 +31,9 @@ Singleton {
+@@ -31,6 +31,8 @@ Singleton {
          }
          
          Appearance.m3colors.darkmode = (Appearance.m3colors.m3background.hslLightness < 0.5)
-+        // Custom window border colors are stored as palette roles, so they
-+        // have to be pushed to Hyprland again whenever the palette changes.
++        // Border colors are palette roles; re-push them when the palette changes.
 +        HyprlandConfig.applyBorderColors()
      }
  

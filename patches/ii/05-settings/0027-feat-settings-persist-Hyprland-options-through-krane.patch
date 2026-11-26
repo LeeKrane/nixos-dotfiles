@@ -10,44 +10,34 @@ Problem: Hyprland options set from the settings window must survive switches; sh
 Port: krane-only (calls the dotfiles repo's writer)
 Drop when: the dotfiles repo drops krane-ii-settings.
 ---
- .../models/hyprland/HyprlandConfigOption.qml  |  27 ++-
- .../quickshell/ii/services/KraneSettings.qml  | 190 ++++++++++++++++++
- 2 files changed, 214 insertions(+), 3 deletions(-)
+ .../models/hyprland/HyprlandConfigOption.qml  |  18 +-
+ .../quickshell/ii/services/KraneSettings.qml  | 166 ++++++++++++++++++
+ 2 files changed, 181 insertions(+), 3 deletions(-)
  create mode 100644 dots/.config/quickshell/ii/services/KraneSettings.qml
 
 diff --git a/dots/.config/quickshell/ii/modules/common/models/hyprland/HyprlandConfigOption.qml b/dots/.config/quickshell/ii/modules/common/models/hyprland/HyprlandConfigOption.qml
-index 0422aab0..00f96cef 100644
+index 0422aab0..3efcb71f 100644
 --- a/dots/.config/quickshell/ii/modules/common/models/hyprland/HyprlandConfigOption.qml
 +++ b/dots/.config/quickshell/ii/modules/common/models/hyprland/HyprlandConfigOption.qml
-@@ -11,7 +11,22 @@ NestableObject {
+@@ -11,7 +11,15 @@ NestableObject {
      required property string key
      property alias fetching: fetchProc.running
      property bool set
-+    // True once the first getoption response has been processed (success,
-+    // "no such option", or parse failure) — unlike `set` (hyprctl's own "this
-+    // option was explicitly configured" field), this is the "safe to write
-+    // now" signal, since a never-explicitly-set option (e.g. a
-+    // decoration:*_opacity left at its compiled-in default) has `set: false`
-+    // forever and would permanently block writes if gated on `set`.
++    // True after the first getoption response (even "no such option" or a parse
++    // failure). `set` stays false for options left at their default, so it can't gate writes.
 +    property bool loaded: false
      property var value
-+    // Nix owns this key (krane.hypr.settings or krane.hypr.guiLocked): show the
-+    // control disabled with lockedReason.
 +    readonly property bool locked: KraneSettings.isLocked("hyprland", root.key)
 +    readonly property string lockedReason: KraneSettings.nixReason
-+    // hyprctl reports CSS-gap options (general:gaps_in, gaps_out) as a
-+    // "top right bottom left" string and bools as true/false.
++    // hyprctl reports gaps_in/gaps_out as a "top right bottom left" string.
 +    readonly property real number: typeof root.value === "string" ? Number(root.value.split(" ")[0]) : Number(root.value ?? 0)
 +    readonly property bool boolean: root.value === true || Number(root.value) === 1
  
      Component.onCompleted: fetch()
  
-@@ -27,12 +42,14 @@ NestableObject {
-         fetchProc.running = true;
+@@ -28,11 +36,11 @@ NestableObject {
      }
  
-+    // Persistent: written to hosts/<host>/ii-settings.json by krane-ii-settings.
-+    // Transient overrides (game mode, anti-flashbang) call HyprlandConfig directly.
      function setValue(newValue) {
 -        HyprlandConfig.set(root.key, newValue)
 +        KraneSettings.set("hyprland", root.key, newValue)
@@ -59,7 +49,7 @@ index 0422aab0..00f96cef 100644
      }
  
      Process {
-@@ -40,8 +57,10 @@ NestableObject {
+@@ -40,8 +48,10 @@ NestableObject {
          property list<string> baseCommand: ["hyprctl", "getoption", "-j"]
          stdout: StdioCollector {
              onStreamFinished: {
@@ -71,7 +61,7 @@ index 0422aab0..00f96cef 100644
                  try {
                      const obj = JSON.parse(text);
                      // Note that the value is returned as "<data type>": <value>
-@@ -56,6 +75,8 @@ NestableObject {
+@@ -56,6 +66,8 @@ NestableObject {
                      }
                  } catch (e) {
                      console.log(`[HyprlandConfigOption] Failed to fetch option "${root.key}":\n  - Output: ${text.trim()}\n  - Error: ${e}`);
@@ -82,10 +72,10 @@ index 0422aab0..00f96cef 100644
          }
 diff --git a/dots/.config/quickshell/ii/services/KraneSettings.qml b/dots/.config/quickshell/ii/services/KraneSettings.qml
 new file mode 100644
-index 00000000..57823ae5
+index 00000000..74882cbe
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/services/KraneSettings.qml
-@@ -0,0 +1,190 @@
+@@ -0,0 +1,166 @@
 +pragma Singleton
 +pragma ComponentBehavior: Bound
 +
@@ -93,27 +83,12 @@ index 00000000..57823ae5
 +import Quickshell
 +import Quickshell.Io
 +
-+/**
-+ * Persistent settings, through krane-ii-settings from the dotfiles repo
-+ * (pkgs/krane-ii-settings). It validates each change against its schema,
-+ * refuses keys Nix owns, writes hosts/<host>/ii-settings.json and reloads
-+ * Hyprland. Transient overrides (game mode, anti-flashbang, border colors)
-+ * stay on HyprlandConfig.
-+ */
 +Singleton {
 +    id: root
 +
-+    // Output of `krane-ii-settings get`: host, repoFile, repo, error,
-+    // nixOwned, monitorBaselines, idle, idleBaseline, pending, revertPending,
-+    // unconfirmed.
 +    property var state: ({})
-+    // False until `get` has answered: the writer is missing from PATH (qs
-+    // started before the switch that installed it) or failed.
 +    property bool available: false
-+    // stderr of the last failed command, shown by the pages.
 +    property string lastError: ""
-+    // The repo file changed outside the settings window (hand edit, git
-+    // checkout). Nothing is applied until the user presses Apply.
 +    property bool externalChange: false
 +
 +    readonly property string nixReason: Translation.tr("Set in Nix (%1)").arg(`hosts/${root.state.host ?? "<host>"}/display.nix or modules/home`)
@@ -137,7 +112,6 @@ index 00000000..57823ae5
 +        root._enqueue(["set", section, key, String(value)]);
 +    }
 +
-+    // `field` only for section "monitor": one field of that output's entry.
 +    function reset(section, key, field) {
 +        const args = ["reset", section, key];
 +        if (field !== undefined)
@@ -150,9 +124,6 @@ index 00000000..57823ae5
 +        root._enqueue(["apply"]);
 +    }
 +
-+    // A refresh while a get is already in flight is not dropped: it sets
-+    // _getPending so getProc reruns once the in-flight one exits, instead of
-+    // leaving state stale from before whatever just changed it.
 +    property bool _getPending: false
 +
 +    function refresh() {
@@ -167,8 +138,6 @@ index 00000000..57823ae5
 +    property real _selfWriteUntil: 0
 +
 +    function _enqueue(args) {
-+        // A newer value for the same setting replaces a queued older one, so a
-+        // dragged slider ends on its final value without replaying every step.
 +        const same = a => a[0] === "set" && args[0] === "set" && a[1] === args[1] && a[2] === args[2];
 +        root._queue = root._queue.filter(a => !same(a)).concat([args]);
 +        root._next();
@@ -218,7 +187,6 @@ index 00000000..57823ae5
 +        }
 +    }
 +
-+    // A command that never started (not on PATH) emits nothing; do not wait forever.
 +    Timer {
 +        id: startWatchdog
 +        interval: 5000
@@ -260,8 +228,6 @@ index 00000000..57823ae5
 +        }
 +    }
 +
-+    // Say so in the log when the writer never answers (checked by the
-+    // settings smoke tests and useful in `qs log`).
 +    Timer {
 +        id: availabilityCheck
 +        interval: 5000

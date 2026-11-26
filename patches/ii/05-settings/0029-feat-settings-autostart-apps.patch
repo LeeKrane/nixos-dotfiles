@@ -10,9 +10,9 @@ Port: hand-ported (lock moved to $XDG_RUNTIME_DIR; venv shebang; launcher and th
 Drop when: autostart apps are configured some other way.
 ---
  .../modules/common/widgets/AutostartApps.qml  | 238 ++++++++++++++++++
- .../ii/scripts/hyprland/autostart.py          |  55 ++++
- dots/.config/quickshell/ii/shell.qml          |  16 ++
- 3 files changed, 309 insertions(+)
+ .../ii/scripts/hyprland/autostart.py          |  49 ++++
+ dots/.config/quickshell/ii/shell.qml          |  14 ++
+ 3 files changed, 301 insertions(+)
  create mode 100644 dots/.config/quickshell/ii/modules/common/widgets/AutostartApps.qml
  create mode 100755 dots/.config/quickshell/ii/scripts/hyprland/autostart.py
 
@@ -263,25 +263,19 @@ index 00000000..f239cccd
 \ No newline at end of file
 diff --git a/dots/.config/quickshell/ii/scripts/hyprland/autostart.py b/dots/.config/quickshell/ii/scripts/hyprland/autostart.py
 new file mode 100755
-index 00000000..ffc371bb
+index 00000000..54ea2dd1
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/scripts/hyprland/autostart.py
-@@ -0,0 +1,55 @@
+@@ -0,0 +1,49 @@
 +#!/usr/bin/env -S\_/bin/sh\_-c\_"source\_\$(eval\_echo\_\$ILLOGICAL_IMPULSE_VIRTUAL_ENV)/bin/activate&&exec\_python\_-E\_"\$0"\_"\$@""
 +import json, subprocess, sys, time, os
 +
 +
-+# Same escaping as krane-ii-settings' lua_str: hyprctl dispatch evaluates this
-+# as a Lua string literal, so cmd must never be spliced in unescaped.
 +def lua_str(text):
 +    escaped = text.replace("\\", "\\\\").replace('"', '\\"')
 +    escaped = escaped.replace("\n", "\\n").replace("\t", "\\t").replace("\r", "\\r")
 +    return '"' + escaped + '"'
 +
-+
-+# --manual: the settings window's "run now" button. Skips the lock so it
-+# works more than once per session; the boot-time run in shell.qml does not
-+# pass it, so it still runs once per login via the lock in XDG_RUNTIME_DIR.
 +manual = "--manual" in sys.argv[1:]
 +
 +if not manual:
@@ -323,16 +317,14 @@ index 00000000..ffc371bb
 +
 +    time.sleep(delay)
 diff --git a/dots/.config/quickshell/ii/shell.qml b/dots/.config/quickshell/ii/shell.qml
-index b9fe54f3..679fb5f3 100644
+index 947e5d8f..ab16fadc 100644
 --- a/dots/.config/quickshell/ii/shell.qml
 +++ b/dots/.config/quickshell/ii/shell.qml
-@@ -46,6 +46,22 @@ ShellRoot {
+@@ -44,6 +44,20 @@ ShellRoot {
          function onReloaded() { root.syncHyprlockClock() }
      }
  
-+    // Autostart apps from the settings window's Hyprland page (config.json,
-+    // hyprland.autostartApps). autostart.py keeps a lock in $XDG_RUNTIME_DIR, so
-+    // this runs once per boot, not on every shell restart.
++    // autostart.py keeps a lock in $XDG_RUNTIME_DIR: runs once per boot, not per shell restart.
 +    Process {
 +        id: autostartProc
 +        command: [Quickshell.shellPath("scripts/hyprland/autostart.py")]

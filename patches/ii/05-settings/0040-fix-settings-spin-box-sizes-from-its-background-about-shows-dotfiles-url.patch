@@ -5,12 +5,12 @@ Subject: [PATCH] fix(settings): spin box sizes from its background; About
  shows the dotfiles git URL
 
 ---
- .../ii/modules/common/widgets/StyledSpinBox.qml |  5 +++--
- .../quickshell/ii/modules/settings/About.qml    | 17 ++++++++++++++++-
- 2 files changed, 19 insertions(+), 3 deletions(-)
+ .../ii/modules/common/widgets/StyledSpinBox.qml  |  5 +++--
+ .../quickshell/ii/modules/settings/About.qml     | 16 +++++++++++++++-
+ 2 files changed, 18 insertions(+), 3 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/common/widgets/StyledSpinBox.qml b/dots/.config/quickshell/ii/modules/common/widgets/StyledSpinBox.qml
-index d2eadf6..d91a02e 100644
+index d2eadf60..d91a02e6 100644
 --- a/dots/.config/quickshell/ii/modules/common/widgets/StyledSpinBox.qml
 +++ b/dots/.config/quickshell/ii/modules/common/widgets/StyledSpinBox.qml
 @@ -19,6 +19,9 @@ SpinBox {
@@ -21,7 +21,7 @@ index d2eadf6..d91a02e 100644
 +        implicitWidth: 40 + 2 * root.baseHeight
 +        implicitHeight: root.baseHeight
      }
-
+ 
      // The TextInput is the contentItem itself, so Qt's own commit path applies a
 @@ -26,8 +29,6 @@ SpinBox {
      // an imperative `root.value = ...`, which would break any `value:` binding a
@@ -33,14 +33,13 @@ index d2eadf6..d91a02e 100644
          verticalAlignment: TextInput.AlignVCenter
          text: root.value // displayText would make the numbers weird like 1,000 instead of 1000
 diff --git a/dots/.config/quickshell/ii/modules/settings/About.qml b/dots/.config/quickshell/ii/modules/settings/About.qml
-index 631af21..5284d76 100644
+index 946714c3..33a196fb 100644
 --- a/dots/.config/quickshell/ii/modules/settings/About.qml
 +++ b/dots/.config/quickshell/ii/modules/settings/About.qml
-@@ -33,6 +33,19 @@ ContentPage {
+@@ -32,6 +32,18 @@ ContentPage {
          }
      }
-
-+    // The dotfiles web URL, from the git origin (ssh scp-style, ssh:// and https forms).
+ 
 +    property string dotfilesUrl: ""
 +    Process {
 +        running: dotfilesDir !== ""
@@ -56,7 +55,7 @@ index 631af21..5284d76 100644
      Component.onCompleted: {
          SystemInfo.refresh()
      }
-@@ -183,13 +196,15 @@ ContentPage {
+@@ -182,13 +194,15 @@ ContentPage {
                  label: "dots-hyprland"
                  iconShape: MaterialShape.Shape.Cookie9Sided
                  value: (kraneBuildInfo.rev ?? "unknown").slice(0, 12) + ` + ${kraneBuildInfo.patches ?? "?"} patches`
@@ -72,7 +71,4 @@ index 631af21..5284d76 100644
 +                clickAction: dotfilesUrl ? () => Qt.openUrlExternally(dotfilesUrl) : null
                  Layout.fillWidth: true
              }
-
---
-2.56.0
-
+ 

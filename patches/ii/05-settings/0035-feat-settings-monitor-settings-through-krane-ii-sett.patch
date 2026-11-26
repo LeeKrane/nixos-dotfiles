@@ -9,16 +9,16 @@ Problem: the Displays section needs a MonitorConfigOption that writes through kr
 Port: hand-ported (monitors.lua writer and direct hyprctl apply replaced by krane-ii-settings try/reset; saved fields read from its get)
 Drop when: the Displays section is dropped.
 ---
- .../models/hyprland/MonitorConfigOption.qml   | 209 ++++++++++++++++++
- 1 file changed, 209 insertions(+)
+ .../models/hyprland/MonitorConfigOption.qml   | 206 ++++++++++++++++++
+ 1 file changed, 206 insertions(+)
  create mode 100644 dots/.config/quickshell/ii/modules/common/models/hyprland/MonitorConfigOption.qml
 
 diff --git a/dots/.config/quickshell/ii/modules/common/models/hyprland/MonitorConfigOption.qml b/dots/.config/quickshell/ii/modules/common/models/hyprland/MonitorConfigOption.qml
 new file mode 100644
-index 00000000..37d706b4
+index 00000000..12daf4f1
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/modules/common/models/hyprland/MonitorConfigOption.qml
-@@ -0,0 +1,209 @@
+@@ -0,0 +1,206 @@
 +pragma ComponentBehavior: Bound
 +import QtQml
 +import QtQuick
@@ -116,9 +116,7 @@ index 00000000..37d706b4
 +        return { setPairs, resetKeys }
 +    }
 +
-+    // Set fields go through krane-ii-settings try: applied live with a full reload, then
-+    // reverted after 15 s by a systemd timer unless the page's Keep calls confirm. Resets
-+    // go straight to the repo file: they return a field to its Nix or Hyprland default.
++    // Set fields go through krane-ii-settings try (reverted after 15 s unless confirmed); resets write the repo file directly.
 +    function save(index) {
 +        const m = root.monitors[index]
 +        if (!m || !m.name) return
@@ -205,8 +203,7 @@ index 00000000..37d706b4
 +        }
 +    }
 +
-+    // Saved fields hyprctl does not report (bitdepth, luminance overrides) come from
-+    // krane-ii-settings get: the repo file over the Nix baseline.
++    // Saved fields hyprctl does not report (bitdepth, luminance overrides) come from krane-ii-settings get.
 +    function _mergeSaved() {
 +        const saved = KraneSettings.state.repo?.monitors ?? {}
 +        const base = KraneSettings.state.monitorBaselines ?? {}

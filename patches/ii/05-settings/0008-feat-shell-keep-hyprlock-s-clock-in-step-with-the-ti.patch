@@ -10,11 +10,11 @@ Problem: the settings page sed-edited hyprlock.conf once, but every switch copie
 Port: krane-only
 Drop when: hyprlock.conf is generated from config.json upstream.
 ---
- dots/.config/quickshell/ii/shell.qml | 24 ++++++++++++++++++++++++
- 1 file changed, 24 insertions(+)
+ dots/.config/quickshell/ii/shell.qml | 22 ++++++++++++++++++++++
+ 1 file changed, 22 insertions(+)
 
 diff --git a/dots/.config/quickshell/ii/shell.qml b/dots/.config/quickshell/ii/shell.qml
-index 13cf7af4..b9fe54f3 100644
+index 13cf7af4..947e5d8f 100644
 --- a/dots/.config/quickshell/ii/shell.qml
 +++ b/dots/.config/quickshell/ii/shell.qml
 @@ -7,6 +7,7 @@
@@ -25,14 +25,12 @@ index 13cf7af4..b9fe54f3 100644
  import "services"
  import "panelFamilies"
  
-@@ -22,6 +23,29 @@ ShellRoot {
+@@ -22,6 +23,27 @@ ShellRoot {
      // Stuff for every panel family
      ReloadPopup {}
  
-+    // Keep hyprlock's clock in step with the 12h/24h setting. The settings page
-+    // used to sed hyprlock.conf once, but every switch copies a fresh one, so
-+    // derive it here: when Config is ready, when the format changes, and on
-+    // every Hyprland config reload (a switch ends with one).
++    // Every switch copies a fresh hyprlock.conf, so re-apply the 12h/24h format on
++    // ready, on format change and on every Hyprland reload.
 +    function syncHyprlockClock() {
 +        if (!Config.ready)
 +            return;

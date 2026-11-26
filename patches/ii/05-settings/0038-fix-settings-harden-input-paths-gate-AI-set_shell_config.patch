@@ -15,14 +15,14 @@ warning and clamps a non-finite delay to 0; presets.sh checks the name on
 all name-bearing actions and Presets.qml rejects unsafe names client-side.
 Drop when: upstream gates set_shell_config and validates preset names.
 ---
- .../quickshell/ii/scripts/hyprland/autostart.py  | 13 +++++++++----
- dots/.config/quickshell/ii/scripts/presets.sh    |  2 +-
- dots/.config/quickshell/ii/services/Ai.qml       | 16 +++++++++++++---
- dots/.config/quickshell/ii/services/Presets.qml  |  8 +++++++-
- 4 files changed, 30 insertions(+), 9 deletions(-)
+ .../quickshell/ii/scripts/hyprland/autostart.py   | 13 +++++++++----
+ dots/.config/quickshell/ii/scripts/presets.sh     |  2 +-
+ dots/.config/quickshell/ii/services/Ai.qml        | 15 ++++++++++++---
+ dots/.config/quickshell/ii/services/Presets.qml   |  8 +++++++-
+ 4 files changed, 29 insertions(+), 9 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/scripts/hyprland/autostart.py b/dots/.config/quickshell/ii/scripts/hyprland/autostart.py
-index ffc371b..38dc077 100755
+index 54ea2dd1..288eebfd 100755
 --- a/dots/.config/quickshell/ii/scripts/hyprland/autostart.py
 +++ b/dots/.config/quickshell/ii/scripts/hyprland/autostart.py
 @@ -1,5 +1,5 @@
@@ -31,8 +31,8 @@ index ffc371b..38dc077 100755
 +import json, math, subprocess, sys, time, os
  
  
- # Same escaping as krane-ii-settings' lua_str: hyprctl dispatch evaluates this
-@@ -29,9 +29,14 @@ if not autostart.get('enable', False):
+ def lua_str(text):
+@@ -23,9 +23,14 @@ if not autostart.get('enable', False):
      exit(0)
  
  for app in autostart.get('apps', []):
@@ -49,7 +49,7 @@ index ffc371b..38dc077 100755
  
      workspace = app.get('workspace', 1)
      if not isinstance(workspace, int) or isinstance(workspace, bool):
-@@ -39,7 +44,7 @@ for app in autostart.get('apps', []):
+@@ -33,7 +38,7 @@ for app in autostart.get('apps', []):
          continue
  
      delay = app.get('delay', 0)
@@ -59,20 +59,20 @@ index ffc371b..38dc077 100755
  
      subprocess.run(['hyprctl', 'dispatch', f'hl.dsp.focus({{workspace = {workspace}}})'])
 diff --git a/dots/.config/quickshell/ii/scripts/presets.sh b/dots/.config/quickshell/ii/scripts/presets.sh
-index 0a2e7a9..378d809 100755
+index f592f371..df98cd6a 100755
 --- a/dots/.config/quickshell/ii/scripts/presets.sh
 +++ b/dots/.config/quickshell/ii/scripts/presets.sh
-@@ -255,7 +255,7 @@ else
+@@ -193,7 +193,7 @@ else
  fi
  
  case "$action" in
 -    --remove|--apply)
 +    --remove|--apply|--save|--export-zip)
-         # $name is joined into "$PRESETS_DIR/${name}.json" and (for --remove)
-         # "*_imported/assets/${name}" below; "." or ".." there would target
-         # the presets/assets directory itself or its parent.
+         if is_unsafe_name "$name"; then
+             echo "Error: unsafe preset name: $name" >&2
+             exit 1
 diff --git a/dots/.config/quickshell/ii/services/Ai.qml b/dots/.config/quickshell/ii/services/Ai.qml
-index 8ee5dfe..12e98a1 100644
+index 8ee5dfe8..57036af0 100644
 --- a/dots/.config/quickshell/ii/services/Ai.qml
 +++ b/dots/.config/quickshell/ii/services/Ai.qml
 @@ -769,6 +769,13 @@ Singleton {
@@ -89,14 +89,13 @@ index 8ee5dfe..12e98a1 100644
          const responseMessage = createFunctionOutputMessage(message.functionName, "", false);
          const id = idForMessage(responseMessage);
          root.messageIDs = [...root.messageIDs, id];
-@@ -816,9 +823,12 @@ Singleton {
+@@ -816,9 +823,11 @@ Singleton {
                  addFunctionOutputMessage(name, Translation.tr("Invalid arguments. Must provide `key` and `value`."));
                  return;
              }
 -            const key = args.key;
 -            const value = args.value;
 -            Config.setNestedValue(key, value);
-+            // Same approval step as run_shell_command; applied in approveCommand.
 +            const description = `set ${args.key} = ${JSON.stringify(args.value)}`.replace(/`/g, "'");
 +            const contentToAppend = `\n\n**Config change request**\n\n\`\`\`command\n${description}\n\`\`\``;
 +            message.rawContent += contentToAppend;
@@ -106,14 +105,14 @@ index 8ee5dfe..12e98a1 100644
              if (!args.command || args.command.length === 0) {
                  addFunctionOutputMessage(name, Translation.tr("Invalid arguments. Must provide `command`."));
 diff --git a/dots/.config/quickshell/ii/services/Presets.qml b/dots/.config/quickshell/ii/services/Presets.qml
-index ce292b4..6e1dd50 100644
+index 39b1c1da..17f73900 100644
 --- a/dots/.config/quickshell/ii/services/Presets.qml
 +++ b/dots/.config/quickshell/ii/services/Presets.qml
 @@ -70,6 +70,11 @@ Singleton {
          onExited: root.refreshImported()
      }
  
-+    // Same character class as presets.sh's SAFE_NAME_RE; presets.sh re-checks.
++    // Mirrors SAFE_NAME_RE in presets.sh.
 +    function isUnsafeName(name) {
 +        return !/^[A-Za-z0-9._ -]+$/.test(name) || name.includes("..") || name.startsWith(".")
 +    }
@@ -130,7 +129,7 @@ index ce292b4..6e1dd50 100644
  
          saveProc.command = ["bash", Directories.presetsScriptPath, "--save", name, description]
          saveProc.running = true
-@@ -117,6 +122,7 @@ Singleton {
+@@ -116,6 +121,7 @@ Singleton {
      }
  
      function exportZip(name) {

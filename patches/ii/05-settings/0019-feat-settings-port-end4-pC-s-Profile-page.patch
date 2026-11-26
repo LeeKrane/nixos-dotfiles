@@ -12,16 +12,16 @@ settings.
 Port: hand-ported (hostname read-only; online presets removed)
 Drop when: Config.qml's profile.* keys are removed.
 ---
- .../ii/modules/settings/Profile.qml           | 395 ++++++++++++++++++
- 1 file changed, 395 insertions(+)
+ .../ii/modules/settings/Profile.qml           | 393 ++++++++++++++++++
+ 1 file changed, 393 insertions(+)
  create mode 100644 dots/.config/quickshell/ii/modules/settings/Profile.qml
 
 diff --git a/dots/.config/quickshell/ii/modules/settings/Profile.qml b/dots/.config/quickshell/ii/modules/settings/Profile.qml
 new file mode 100644
-index 00000000..33590c1d
+index 00000000..c96ce3a4
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/modules/settings/Profile.qml
-@@ -0,0 +1,395 @@
+@@ -0,0 +1,393 @@
 +import QtQuick
 +import QtQuick.Layouts
 +import Qt5Compat.GraphicalEffects
@@ -287,7 +287,6 @@ index 00000000..33590c1d
 +                id: importDialogLoader
 +                active: false
 +                sourceComponent: Item {
-+                    // Use kdialog like wallpaper selector for consistency, fallback to Qt dialog
 +                    Component.onCompleted: {
 +                        const proc = importFilePicker
 +                        proc.command = ["kdialog", "--getopenfilename", Quickshell.env("HOME"), "*.zip | Preset ZIP"]
@@ -304,7 +303,6 @@ index 00000000..33590c1d
 +                    }
 +                }
 +            }
-+            // Helper to trigger
 +            Item { id: importDialog; function open(){ importDialogLoader.active = true } }
 +
 +            StyledText {

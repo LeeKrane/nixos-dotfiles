@@ -10,14 +10,14 @@ page instead of end4-pC's richer system-info cards.
 Port: hand-ported (update buttons, Packages and Updates cards dropped; pin revision, patch count and dotfiles path added)
 Drop when: the pinned About.qml grows the same system-info cards natively.
 ---
- .../quickshell/ii/modules/settings/About.qml  | 274 +++++++++++-------
- 1 file changed, 165 insertions(+), 109 deletions(-)
+ .../quickshell/ii/modules/settings/About.qml  | 271 +++++++++++-------
+ 1 file changed, 163 insertions(+), 108 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/settings/About.qml b/dots/.config/quickshell/ii/modules/settings/About.qml
-index adf1e1b1..631af21e 100644
+index adf1e1b1..946714c3 100644
 --- a/dots/.config/quickshell/ii/modules/settings/About.qml
 +++ b/dots/.config/quickshell/ii/modules/settings/About.qml
-@@ -2,149 +2,205 @@ import QtQuick
+@@ -2,149 +2,204 @@ import QtQuick
  import QtQuick.Layouts
  import Quickshell
  import Quickshell.Widgets
@@ -33,7 +33,7 @@ index adf1e1b1..631af21e 100644
 +    bottomContentPadding: 35
 +    property bool isMinimal: false
 +
-+    // Pin revision and patch count, written by lib/mk-host.nix at build time.
++    // Pin revision and patch count, written by lib/mk-host.nix.
 +    property var kraneBuildInfo: ({})
 +    FileView {
 +        path: Quickshell.shellPath("krane-build.json")
@@ -42,7 +42,6 @@ index adf1e1b1..631af21e 100644
 +            try { kraneBuildInfo = JSON.parse(text()); } catch (e) { kraneBuildInfo = ({}); }
 +        }
 +    }
-+    // The dotfiles checkout, from the config-dir symlink (…/hosts/<host>/illogical-impulse).
 +    property string dotfilesDir: ""
 +    Process {
 +        running: true
@@ -196,8 +195,13 @@ index adf1e1b1..631af21e 100644
 -    ContentSection {
 -        icon: "folder_managed"
 -        title: Translation.tr("Dotfiles")
++
++    ColumnLayout {
++        Layout.fillWidth: true
++        Layout.topMargin: !isMinimal ? 0 : -8
++        spacing: 8
  
--        RowLayout {
+         RowLayout {
 -            Layout.alignment: Qt.AlignHCenter
 -            spacing: 20
 -            Layout.topMargin: 10
@@ -205,12 +209,6 @@ index adf1e1b1..631af21e 100644
 -            IconImage {
 -                implicitSize: 80
 -                source: Quickshell.iconPath("illogical-impulse")
-+    ColumnLayout {
-+        Layout.fillWidth: true
-+        Layout.topMargin: !isMinimal ? 0 : -8
-+        spacing: 8
-+
-+        RowLayout { //This is not in the grid because I was planning to do something else.
 +            Layout.fillWidth: true
 +            spacing: 8
 +

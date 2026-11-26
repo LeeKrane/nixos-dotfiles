@@ -20,14 +20,14 @@ overview.orderRightLeft/orderBottomUp option values fixed from the fork's int
 sidebar.agents.enable); pin controls with no fork equivalent carried over
 Drop when: upstream ships an equivalent page, or the settings port is abandoned.
 ---
- .../ii/modules/settings/InterfaceConfig.qml   | 1807 ++++++++++-------
- 1 file changed, 1048 insertions(+), 759 deletions(-)
+ .../ii/modules/settings/InterfaceConfig.qml   | 1806 ++++++++++-------
+ 1 file changed, 1047 insertions(+), 759 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/settings/InterfaceConfig.qml b/dots/.config/quickshell/ii/modules/settings/InterfaceConfig.qml
-index de544ed8..e0b9e911 100644
+index de544ed8..3da043e5 100644
 --- a/dots/.config/quickshell/ii/modules/settings/InterfaceConfig.qml
 +++ b/dots/.config/quickshell/ii/modules/settings/InterfaceConfig.qml
-@@ -1,932 +1,1221 @@
+@@ -1,932 +1,1220 @@
  import QtQuick
  import QtQuick.Layouts
 +import qs
@@ -679,7 +679,7 @@ index de544ed8..e0b9e911 100644
 -            onCheckedChanged: {
 -                Config.options.overlay.darkenScreen = checked;
 +    
-+        ContentSection { // I see that for many the overview is important, I put it first why not
++        ContentSection {
 +            visible: true
 +            icon: "overview_key"
 +            shape: MaterialShape.Shape.Gem
@@ -857,7 +857,6 @@ index de544ed8..e0b9e911 100644
 +                        onSelected: newValue => {
 +                            Config.options.cheatsheet.superKey = newValue;
 +                        }
-+                        // Use a nerdfont to see the icons
 +                        options: ([
 +                          "󰖳", "", "󰨡", "", "󰌽", "󰣇", "", "", "",
 +                          "", "", "󱄛", "", "", "", "⌘", "󰀲", "󰟍", ""

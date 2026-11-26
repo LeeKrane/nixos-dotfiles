@@ -6,19 +6,19 @@ Subject: [PATCH] fix(settings): review findings: spin box keeps value
  when the command ends, idle spin box capped at 86400 s
 
 ---
- .../modules/common/widgets/StyledSpinBox.qml  | 50 +++++++------------
- .../ii/modules/settings/HyprlandConfig.qml    |  8 ++-
- .../quickshell/ii/services/KraneSettings.qml  | 13 +++--
- 3 files changed, 30 insertions(+), 41 deletions(-)
+ .../modules/common/widgets/StyledSpinBox.qml  | 42 ++++++++-----------
+ .../ii/modules/settings/HyprlandConfig.qml    |  8 ++--
+ .../quickshell/ii/services/KraneSettings.qml  | 12 ++++--
+ 3 files changed, 29 insertions(+), 33 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/common/widgets/StyledSpinBox.qml b/dots/.config/quickshell/ii/modules/common/widgets/StyledSpinBox.qml
-index 253603f..d2eadf6 100644
+index 0ae56fa0..d2eadf60 100644
 --- a/dots/.config/quickshell/ii/modules/common/widgets/StyledSpinBox.qml
 +++ b/dots/.config/quickshell/ii/modules/common/widgets/StyledSpinBox.qml
-@@ -21,40 +21,24 @@ SpinBox {
+@@ -21,32 +21,24 @@ SpinBox {
          radius: root.radius
      }
-
+ 
 -    contentItem: Item {
 +    // The TextInput is the contentItem itself, so Qt's own commit path applies a
 +    // typed value on Enter / focus-out (valueFromText, then valueModified()) without
@@ -37,9 +37,7 @@ index 253603f..d2eadf6 100644
 -            font.variableAxes: Appearance.font.variableAxes.numbers
 -            font.pixelSize: Appearance.font.pixelSize.small
 -            validator: root.validator
--            // The value this field held when it last gained focus. editingFinished
--            // fires on Enter AND on plain focus-out, so this is what tells a real
--            // edit apart from a click-in-click-out that changed nothing.
+-            // editingFinished also fires on plain focus-out; compare with the value at focus-in to detect a real edit.
 -            property real valueAtFocus: root.value
 -            onActiveFocusChanged: {
 -                if (activeFocus) valueAtFocus = root.value
@@ -47,13 +45,7 @@ index 253603f..d2eadf6 100644
 -            onTextChanged: {
 -                root.value = parseFloat(text);
 -            }
--            // contentItem above is not itself a TextInput, so Qt's built-in
--            // SpinBox text-edit-commit path never attaches and never fires
--            // valueModified() for a typed value. Emit it ourselves on the
--            // input's own commit signal so a typed-and-Enter edit still
--            // counts as user-only, like the +/- buttons and arrow keys do.
--            // Only when the committed value actually differs from the one at
--            // focus-in: a focus-out with no edit must write nothing.
+-            // contentItem is not a TextInput, so SpinBox never emits valueModified() for typed input; emit it here, only if the value changed since focus-in.
 -            onEditingFinished: {
 -                if (root.value !== valueAtFocus) root.valueModified()
 -            }
@@ -71,13 +63,13 @@ index 253603f..d2eadf6 100644
 +        selectByMouse: true
 +        inputMethodHints: root.inputMethodHints
      }
-
+ 
      down.indicator: Rectangle {
 diff --git a/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml b/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
-index cc45e86..3eb47a5 100644
+index d5258c61..f052ab2b 100644
 --- a/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
 +++ b/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
-@@ -244,8 +244,7 @@ ContentPage {
+@@ -235,8 +235,7 @@ ContentPage {
                          text: Translation.tr("Bit depth") + (page.monitorLocked("bitdepth") ? ` · ${KraneSettings.nixReason}` : "")
                          icon: "gradient"
                          enabled: !page.monitorLocked("bitdepth")
@@ -87,7 +79,7 @@ index cc45e86..3eb47a5 100644
                          onSelected: newValue => {
                              monitorConfig.updateMonitor(monitorCanvas.selectedIndex, { bitdepth: newValue })
                              monitorConfig.save(monitorCanvas.selectedIndex)
-@@ -255,7 +254,6 @@ ContentPage {
+@@ -246,7 +245,6 @@ ContentPage {
                              return [
                                  { displayName: "8-bit",  icon: "filter_8", value: 8  },
                                  { displayName: "10-bit", icon: "palette",   value: 10 },
@@ -95,7 +87,7 @@ index cc45e86..3eb47a5 100644
                              ].filter(o => o.value <= maxBpc)
                          })()
                      }
-@@ -275,7 +273,7 @@ ContentPage {
+@@ -266,7 +264,7 @@ ContentPage {
                          currentValue: monitorConfig.monitors[monitorCanvas.selectedIndex]?.cm ?? "auto"
                          onSelected: newValue => {
                              const hdr = newValue === "hdr" || newValue === "hdredid"
@@ -104,7 +96,7 @@ index cc45e86..3eb47a5 100644
                              monitorConfig.save(monitorCanvas.selectedIndex)
                          }
                      }
-@@ -615,7 +613,7 @@ ContentPage {
+@@ -606,7 +604,7 @@ ContentPage {
                          Layout.preferredWidth: 130
                          value: timerRow.displayValue
                          from: 0
@@ -114,10 +106,10 @@ index cc45e86..3eb47a5 100644
                          onValueModified: {
                              if (!timerRow.loaded) return
 diff --git a/dots/.config/quickshell/ii/services/KraneSettings.qml b/dots/.config/quickshell/ii/services/KraneSettings.qml
-index ee0ddad..13e1e02 100644
+index 9f648251..95f6776a 100644
 --- a/dots/.config/quickshell/ii/services/KraneSettings.qml
 +++ b/dots/.config/quickshell/ii/services/KraneSettings.qml
-@@ -107,7 +107,6 @@ Singleton {
+@@ -85,7 +85,6 @@ Singleton {
              return;
          const args = root._queue[0];
          root._queue = root._queue.slice(1);
@@ -125,8 +117,8 @@ index ee0ddad..13e1e02 100644
          runProc.busy = true;
          runProc.exitedFlag = false;
          runProc.stderrDone = false;
-@@ -118,6 +117,9 @@ Singleton {
-
+@@ -96,6 +95,9 @@ Singleton {
+ 
      function _finish(code, errText) {
          runProc.busy = false;
 +        // The window opens when the command ends (file watcher events lag a
@@ -135,21 +127,20 @@ index ee0ddad..13e1e02 100644
          root.lastError = code === 0 ? "" : (errText.trim() || Translation.tr("krane-ii-settings failed (exit %1)").arg(code));
          root.refresh();
          Qt.callLater(root._next);
-@@ -162,7 +164,12 @@ Singleton {
+@@ -139,7 +141,11 @@ Singleton {
          stdout: StdioCollector {
              onStreamFinished: {
                  try {
 -                    root.state = JSON.parse(text);
 +                    const next = JSON.parse(text);
-+                    // The revert timer's service writes the repo file itself
-+                    // (apply, revert-unconfirmed): not an outside edit.
++                    // The revert timer's service writes the repo file: not an outside edit.
 +                    if (root.state.revertPending === true && next.revertPending !== true)
 +                        root._selfWriteUntil = Date.now() + 3000;
 +                    root.state = next;
                      root.available = true;
                  } catch (e) {
                      root.available = false;
-@@ -182,7 +189,7 @@ Singleton {
+@@ -159,7 +165,7 @@ Singleton {
          watchChanges: true
          printErrors: false
          onFileChanged: {
@@ -158,6 +149,3 @@ index ee0ddad..13e1e02 100644
                  root.externalChange = true;
              root.refresh();
          }
---
-2.56.0
-

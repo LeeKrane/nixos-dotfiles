@@ -10,8 +10,8 @@ Port: hand-ported (live values from hyprctl; writes through krane-ii-settings; s
 Drop when: upstream ships an equivalent page, or the settings port is abandoned.
 ---
  .../common/widgets/ColorSelectionArray.qml    |  98 +++
- .../ii/modules/settings/HyprlandConfig.qml    | 602 ++++++++++++++++++
- 2 files changed, 700 insertions(+)
+ .../ii/modules/settings/HyprlandConfig.qml    | 597 ++++++++++++++++++
+ 2 files changed, 695 insertions(+)
  create mode 100644 dots/.config/quickshell/ii/modules/common/widgets/ColorSelectionArray.qml
  create mode 100644 dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
 
@@ -122,10 +122,10 @@ index 00000000..0af1c8ce
 \ No newline at end of file
 diff --git a/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml b/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
 new file mode 100644
-index 00000000..6211d0fe
+index 00000000..2b42aef8
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
-@@ -0,0 +1,602 @@
+@@ -0,0 +1,597 @@
 +import QtQuick
 +import QtQuick.Layouts
 +import Quickshell.Io
@@ -164,7 +164,6 @@ index 00000000..6211d0fe
 +        }
 +    }
 +
-+    // Same roles as the settings panel border color on the Interface page.
 +    readonly property var borderColorRoles: ["primary", "secondary", "tertiary", "primaryContainer", "secondaryContainer", "tertiaryContainer", "layer0Border"]
 +
 +    ColumnLayout {
@@ -173,7 +172,6 @@ index 00000000..6211d0fe
 +        Layout.fillHeight: true
 +        spacing: 20
 +
-+        // krane-ii-settings did not answer, or refused the last change.
 +        NoticeBox {
 +            Layout.fillWidth: true
 +            visible: !KraneSettings.available || KraneSettings.lastError !== "" || !!KraneSettings.state.error
@@ -182,7 +180,6 @@ index 00000000..6211d0fe
 +                : (KraneSettings.state.error || KraneSettings.lastError)
 +        }
 +
-+        // hosts/<host>/ii-settings.json changed outside this window (hand edit, git checkout).
 +        NoticeBox {
 +            Layout.fillWidth: true
 +            visible: KraneSettings.externalChange
@@ -648,7 +645,6 @@ index 00000000..6211d0fe
 +                        value: Math.round(Config.options.hyprland.general.borderColor.activeOpacity * 100)
 +                        from: 0; to: 100; stepSize: 5
 +                        onValueChanged: {
-+                            // Compared as integers: the spin box only holds whole percents.
 +                            if (value === Math.round(Config.options.hyprland.general.borderColor.activeOpacity * 100)) return
 +                            Config.options.hyprland.general.borderColor.activeOpacity = value / 100.0
 +                            HyprlandConfig.applyBorderColors()
@@ -672,7 +668,6 @@ index 00000000..6211d0fe
 +                        value: Math.round(Config.options.hyprland.general.borderColor.inactiveOpacity * 100)
 +                        from: 0; to: 100; stepSize: 5
 +                        onValueChanged: {
-+                            // Compared as integers: the spin box only holds whole percents.
 +                            if (value === Math.round(Config.options.hyprland.general.borderColor.inactiveOpacity * 100)) return
 +                            Config.options.hyprland.general.borderColor.inactiveOpacity = value / 100.0
 +                            HyprlandConfig.applyBorderColors()

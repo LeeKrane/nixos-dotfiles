@@ -10,20 +10,20 @@ Problem: the Displays section needs a draggable monitor layout canvas and per-ou
 Port: hand-ported (drag commits only the dragged monitor's position via updateMonitor+save, matching the Position spin boxes; dragging disabled for Nix-owned positions)
 Drop when: the Displays section is dropped.
 ---
- .../modules/common/widgets/MonitorCanvas.qml  | 149 ++++++++++++++
- .../ii/modules/common/widgets/MonitorRect.qml | 181 ++++++++++++++++++
- .../ii/scripts/hyprland/monitor_caps.py       | 170 ++++++++++++++++
- 3 files changed, 500 insertions(+)
+ .../modules/common/widgets/MonitorCanvas.qml  | 144 ++++++++++++++
+ .../ii/modules/common/widgets/MonitorRect.qml | 177 ++++++++++++++++++
+ .../ii/scripts/hyprland/monitor_caps.py       | 168 +++++++++++++++++
+ 3 files changed, 489 insertions(+)
  create mode 100644 dots/.config/quickshell/ii/modules/common/widgets/MonitorCanvas.qml
  create mode 100644 dots/.config/quickshell/ii/modules/common/widgets/MonitorRect.qml
  create mode 100755 dots/.config/quickshell/ii/scripts/hyprland/monitor_caps.py
 
 diff --git a/dots/.config/quickshell/ii/modules/common/widgets/MonitorCanvas.qml b/dots/.config/quickshell/ii/modules/common/widgets/MonitorCanvas.qml
 new file mode 100644
-index 00000000..75d4fd56
+index 00000000..2384692a
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/modules/common/widgets/MonitorCanvas.qml
-@@ -0,0 +1,149 @@
+@@ -0,0 +1,144 @@
 +import QtQuick
 +import QtQuick.Layouts
 +import qs.services
@@ -38,8 +38,6 @@ index 00000000..75d4fd56
 +    property int selectedIndex: 0
 +    property var previewPositions: ({})
 +    property bool dragHasOverlap: false
-+    // Predicate name => bool: true when dragging that output should be disabled
-+    // (its position is Nix-owned). null means nothing is locked.
 +    property var isPositionLocked: null
 +
 +    implicitHeight: 220
@@ -125,9 +123,6 @@ index 00000000..75d4fd56
 +        root.previewPositions = preview
 +    }
 +
-+    // Writes only the dragged monitor's position, in real Hyprland coordinates.
-+    // Other monitors are left untouched (no normalized positions written back),
-+    // matching how the Position X/Y spin boxes write position.
 +    function commitPosition(idx, newX, newY) {
 +        monitorConfig.updateMonitor(idx, { x: newX, y: newY })
 +        monitorConfig.save(idx)
@@ -176,10 +171,10 @@ index 00000000..75d4fd56
 \ No newline at end of file
 diff --git a/dots/.config/quickshell/ii/modules/common/widgets/MonitorRect.qml b/dots/.config/quickshell/ii/modules/common/widgets/MonitorRect.qml
 new file mode 100644
-index 00000000..d2cd42ed
+index 00000000..087ff80c
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/modules/common/widgets/MonitorRect.qml
-@@ -0,0 +1,181 @@
+@@ -0,0 +1,177 @@
 +import QtQuick
 +import QtQuick.Layouts
 +import qs.services
@@ -210,11 +205,7 @@ index 00000000..d2cd42ed
 +    property int snappedX: 0
 +    property int snappedY: 0
 +    property real snapThreshold: 12
-+    // scaleFactor/canvasOffset frozen at press time. previewPositions can shift
-+    // the canvas's own bounds (and so scaleFactor/canvasOffset) mid-drag, once
-+    // the layout is normalized to remove negative coordinates. Converting the
-+    // dragged pixel position back to real coordinates with the live values
-+    // would then save a shifted position instead of the monitor's real one.
++    // Frozen at press time: previewPositions can change scaleFactor/canvasOffset mid-drag, which would save a shifted position.
 +    property real dragStartScale: 1
 +    property point dragStartOffset: Qt.point(0, 0)
 +
@@ -364,26 +355,24 @@ index 00000000..d2cd42ed
 \ No newline at end of file
 diff --git a/dots/.config/quickshell/ii/scripts/hyprland/monitor_caps.py b/dots/.config/quickshell/ii/scripts/hyprland/monitor_caps.py
 new file mode 100755
-index 00000000..0935d784
+index 00000000..968a699d
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/scripts/hyprland/monitor_caps.py
-@@ -0,0 +1,170 @@
+@@ -0,0 +1,168 @@
 +#!/usr/bin/env -S\_/bin/sh\_-c\_"source\_\$(eval\_echo\_\$ILLOGICAL_IMPULSE_VIRTUAL_ENV)/bin/activate&&exec\_python\_-E\_"\$0"\_"\$@""
 +import argparse
 +import glob
 +import json
 +import os
 +
-+# EDID byte 20, bits 6-4: supported color bit depth on digital displays.
++# EDID byte 20 bits 6-4: color bit depth.
 +BPC_CODES = {1: 6, 2: 8, 3: 10, 4: 12, 5: 14, 6: 16}
 +
-+# CTA-861 extended data block tags.
 +EXT_TAG_HDR_STATIC_METADATA = 0x06
 +EXT_TAG_HDR_DYNAMIC_METADATA = 0x14
 +EXT_TAG_HF_EEODB = 0x78
 +
-+# DisplayID 2.0 data block tag that wraps a CTA-861-style data block
-+# collection (same tag/length encoding as the legacy CTA-861 extension).
++# DisplayID 2.0 tag wrapping a CTA-861-style data block collection.
 +DISPLAYID_TAG_CTA861 = 0x81
 +
 +UNKNOWN_CAPS = {"digital": None, "maxBpc": None, "hdr": None, "hdrDynamic": None}

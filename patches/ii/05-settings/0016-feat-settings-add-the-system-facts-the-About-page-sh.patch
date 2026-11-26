@@ -15,7 +15,7 @@ Drop when: the pinned SystemInfo.qml has cpu, gpu, memory, disk, shell and kerne
  1 file changed, 85 insertions(+)
 
 diff --git a/dots/.config/quickshell/ii/services/SystemInfo.qml b/dots/.config/quickshell/ii/services/SystemInfo.qml
-index ac540d53..59cee9fe 100644
+index d187204e..5c0a30ba 100644
 --- a/dots/.config/quickshell/ii/services/SystemInfo.qml
 +++ b/dots/.config/quickshell/ii/services/SystemInfo.qml
 @@ -14,6 +14,7 @@ Singleton {
