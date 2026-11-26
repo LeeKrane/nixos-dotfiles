@@ -47,15 +47,18 @@ files are never edited by hand; they are re-exported with `git format-patch`.
 
 A script writes two lists:
 
-- (a) Comment lines in the final tree whose blame commit is in `PIN..krane`. Each entry:
-  file, line, text, introducing commit, series.
-- (b) `+` comment lines whose final-tree blame commit is not the commit that added
-  them, or whose line is gone. Found per patch with `git blame`/`git log -L` on
-  `orig`. Example: commit A adds `code // note`, commit B changes only `code`; blame
-  names B, so absorb would put the edit into B and A's patch would still add the
-  comment. These are folded by hand (step 4b).
+- (a) Comment lines in the final tree whose blame commit is in `PIN..krane`, excluding
+  lines whose `+` origin is on list (b). Each entry: file, line, text, blame commit
+  subject, series.
+- (b) `+` comment lines, keyed by (introducing commit subject, file, text), that have
+  no list (a) entry with the same key. This covers lines whose final-tree blame is a
+  later commit and lines a later commit deletes. Example: commit A adds
+  `code // note`, commit B changes only `code`; blame names B, so absorb would put
+  the edit into B and A's patch would still add the comment. These are folded by hand
+  (step 4b).
 
-Every `+` comment line in the 66 patches is on exactly one of the two lists.
+Every `+` comment line in the 66 patches matches exactly one entry; the inventory
+script fails if a line matches zero entries or two.
 
 ### 3. Editing
 
@@ -77,17 +80,20 @@ Every `+` comment line in the 66 patches is on exactly one of the two lists.
   from list (a).
 - `GIT_SEQUENCE_EDITOR=true git rebase -i --autosquash "$PIN"`.
 - A manual fixup can conflict when a later commit changed nearby lines. Resolve as the
-  later commit's version minus the comment; the checker proves the result.
+  later commit's version with the list (a) decision applied (comment deleted or
+  trimmed); the checker proves the result.
 
 ### 4b. List (b): edit the introducing commits
 
 Runs after 4a, as a separate rebase.
 
 - `git rebase -i "$PIN"` with a script as `GIT_SEQUENCE_EDITOR` that marks every
-  introducing commit from list (b) `edit`.
+  introducing commit from list (b) `edit`, matched by commit subject because 4a
+  rewrote the SHAs.
 - At each stop, apply the subagent's decisions for that commit, `git commit --amend`,
   `git rebase --continue`.
-- Conflicts in later commits: resolve as the later commit's version minus the comment.
+- Conflicts in later commits: take the later commit's side for the conflicted lines.
+  It already carries its list (a) edits from 4a.
 
 If a commit becomes empty in 4a or 4b, stop and ask the user.
 
@@ -123,17 +129,26 @@ Comment-only checker, a throwaway at `~/.cache/comment-cleanup/check.py`:
   - a removed blank line or a removed full-line comment;
   - a full-line comment replaced by a full-line comment (trimmed survivor);
   - the old line with its trailing comment cut off or replaced, the code part
-    byte-identical (compared after `rstrip`).
-- Comment syntax per file type: QML/js `//`, and `/* */` blocks including their
-  ` * ` continuation lines; py/sh `#`; lua `--`. Python docstrings count as code
-  and must match exactly. Any other file type must match exactly.
-- Shebangs (`#!`) and machine-read directives must stay byte-identical.
+    byte-identical (compared after `rstrip`). A `//` or `#` inside a string can
+    make a real code change look like this, so the checker prints every cut or
+    replaced trailing comment with its old and new line, and each one is checked by
+    hand.
+- Comment syntax per file type: QML/js `//`, and lines inside a `/* ... */` block,
+  tracked from open to close by a per-file state machine on the `orig` version (a
+  ` * ` line outside an open block is code); py/sh `#`; lua `--`. Any other file
+  type must match exactly.
+- Python docstrings count as code, must match exactly, and are out of scope for this
+  stage.
+- Shebangs (`#!`) and the machine-read directives from the stage 1 rules stay
+  byte-identical. QML `pragma`/`.pragma` lines are code.
 - Every removed or changed line in the final tree must blame (in `orig`) to a commit
   in `PIN..orig`. This rejects edits to upstream comments.
 
-Syntax check on every changed file in the final tree, run on `orig` and on the new
-tree; the new tree must not add errors: `bash -n` (sh), `python -m py_compile` (py),
-`luac -p` (lua), `qmllint` (QML/js, from `qt6.qtdeclarative`). This catches a bad
+Syntax check on every changed file in the final tree: `bash -n` (sh),
+`python -m py_compile` (py), `luac -p` (lua), `qmlformat` (QML/js, from
+`qt6.qtdeclarative`, used only as a parser, output discarded; `qmllint` is unusable
+here because it warns on the unresolved Quickshell imports). A file passes if its tool
+succeeds on the new tree whenever it succeeds on `orig`. This catches a bad
 trailing-comment cut such as `echo "a # b"` to `echo "a`, which the line rules alone
 would pass. Tools run through `nix shell`.
 
