@@ -24,6 +24,13 @@ in
         position = "-2560x-360";
         scale = 1;
       }
+      # External Dell U2724DE over DisplayPort, also to the left of the internal panel.
+      # Bottom edges line up: the panel is 900 logical px tall at scale 1.6, the Dell 1440.
+      {
+        output = "DP-1";
+        position = "-2560x-540";
+        scale = 1;
+      }
     ]
     # Internal panel, to the right of the external one. Scale 1.25 when it is the only
     # output; extraMonitorsLua below raises it while an external monitor is attached.
