@@ -1,0 +1,517 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Fri, 27 Nov 2026 03:06:08 +0100
+Subject: [PATCH] fix(settings): monitor drag keeps the layout gap-free and
+ refuses overlapping drops
+
+Problem: the layout canvas only snapped within 12 px of an edge, so a drop elsewhere left a gap; moving a monitor that joined two others left the rest disconnected; edge maths ignored the monitor scale; the canvas rescaled mid-drag.
+Fix: monitor-layout.js lays out the whole canvas on each drag step. The dropped monitor attaches to its nearest neighbour, sharing at least a quarter of the shorter edge, with edges within the snap threshold lined up. Every detached group is pulled onto it, nearest first; a group holding a Nix-locked monitor stays and the other side moves. A drop overlapping another monitor by more than the threshold shows red and is refused. logicalWidth/logicalHeight divide by scale. All moved monitors go through one krane-ii-settings try (try monitor A ... + B ...).
+---
+ .../models/hyprland/MonitorConfigOption.qml   |  32 +++--
+ .../modules/common/widgets/MonitorCanvas.qml  | 105 ++++++--------
+ .../ii/modules/common/widgets/MonitorRect.qml |  59 +++-----
+ .../modules/common/widgets/monitor-layout.js  | 134 ++++++++++++++++++
+ .../quickshell/ii/services/KraneSettings.qml  |  14 +-
+ 5 files changed, 221 insertions(+), 123 deletions(-)
+ create mode 100644 dots/.config/quickshell/ii/modules/common/widgets/monitor-layout.js
+
+diff --git a/dots/.config/quickshell/ii/modules/common/models/hyprland/MonitorConfigOption.qml b/dots/.config/quickshell/ii/modules/common/models/hyprland/MonitorConfigOption.qml
+index 12daf4f1..566ef66f 100644
+--- a/dots/.config/quickshell/ii/modules/common/models/hyprland/MonitorConfigOption.qml
++++ b/dots/.config/quickshell/ii/modules/common/models/hyprland/MonitorConfigOption.qml
+@@ -95,28 +95,33 @@ NestableObject {
+         return { setPairs, resetKeys }
+     }
+ 
+-    // Set fields go through krane-ii-settings try (reverted after 15 s unless confirmed); resets write the repo file directly.
++    // Set fields go through one krane-ii-settings try (reverted after 15 s unless confirmed); resets write the repo file directly.
++    // index: one monitor index or an array of them.
+     function save(index) {
+-        const m = root.monitors[index]
+-        if (!m || !m.name) return
+-        const changed = root._pendingChanges[index]
+-        if (!changed) return
+-        const { setPairs, resetKeys } = root._fieldsToWrite(m, new Set(Object.keys(changed)))
+         let pending = Object.assign({}, root._pendingChanges)
+-        delete pending[index]
++        const tries = []
++        for (const i of [].concat(index)) {
++            const m = root.monitors[i]
++            const changed = pending[i]
++            if (!m || !m.name || !changed) continue
++            delete pending[i]
++            const { setPairs, resetKeys } = root._fieldsToWrite(m, new Set(Object.keys(changed)))
++            for (const key of resetKeys)
++                KraneSettings.reset("monitor", m.name, key)
++            if (Object.keys(setPairs).length > 0)
++                tries.push([m.name, setPairs])
++        }
+         root._pendingChanges = pending
+-        for (const key of resetKeys)
+-            KraneSettings.reset("monitor", m.name, key)
+-        if (Object.keys(setPairs).length > 0)
+-            KraneSettings.tryMonitor(m.name, setPairs)
++        if (tries.length > 0)
++            KraneSettings.tryMonitors(tries)
+     }
+ 
+     function logicalWidth(m) {
+-        return (m.transform === 1 || m.transform === 3) ? m.height : m.width
++        return Math.round(((m.transform === 1 || m.transform === 3) ? m.height : m.width) / (m.scale || 1))
+     }
+ 
+     function logicalHeight(m) {
+-        return (m.transform === 1 || m.transform === 3) ? m.width : m.height
++        return Math.round(((m.transform === 1 || m.transform === 3) ? m.width : m.height) / (m.scale || 1))
+     }
+ 
+     Process {
+@@ -136,6 +141,7 @@ NestableObject {
+                         scale:         m.scale,
+                         transform:     m.transform ?? 0,
+                         disabled:      m.disabled,
++                        mirrorOf:      m.mirrorOf ?? "none",
+                         availableModes: m.availableModes,
+                         currentMode:   `${m.width}x${m.height}@${m.refreshRate.toFixed(2)}Hz`,
+                         cm:            m.colorManagementPreset ?? "auto",
+diff --git a/dots/.config/quickshell/ii/modules/common/widgets/MonitorCanvas.qml b/dots/.config/quickshell/ii/modules/common/widgets/MonitorCanvas.qml
+index 2384692a..98d72f30 100644
+--- a/dots/.config/quickshell/ii/modules/common/widgets/MonitorCanvas.qml
++++ b/dots/.config/quickshell/ii/modules/common/widgets/MonitorCanvas.qml
+@@ -3,6 +3,7 @@ import QtQuick.Layouts
+ import qs.services
+ import qs.modules.common
+ import qs.modules.common.widgets
++import "monitor-layout.js" as MonitorLayout
+ 
+ Item {
+     id: root
+@@ -10,9 +11,12 @@ Item {
+     property var monitorConfig
+     property real padding: 20
+     property int selectedIndex: 0
++    property var isPositionLocked: null
++    // Screen pixels: an edge this close to another lines up with it, an overlap this deep snaps out.
++    property real snapThreshold: 12
++    // Drag preview, by output name; bounds ignore it so the canvas does not rescale mid-drag.
+     property var previewPositions: ({})
+     property bool dragHasOverlap: false
+-    property var isPositionLocked: null
+ 
+     implicitHeight: 220
+ 
+@@ -25,12 +29,10 @@ Item {
+             if (m.disabled) continue
+             const w = monitorConfig.logicalWidth(m)
+             const h = monitorConfig.logicalHeight(m)
+-            const px = previewPositions[m.name]?.x ?? m.x
+-            const py = previewPositions[m.name]?.y ?? m.y
+-            minX = Math.min(minX, px)
+-            minY = Math.min(minY, py)
+-            maxX = Math.max(maxX, px + w)
+-            maxY = Math.max(maxY, py + h)
++            minX = Math.min(minX, m.x)
++            minY = Math.min(minY, m.y)
++            maxX = Math.max(maxX, m.x + w)
++            maxY = Math.max(maxY, m.y + h)
+         }
+         if (minX === Infinity) return { minX: 0, minY: 0, width: 1920, height: 1080 }
+         return { minX, minY, width: maxX - minX, height: maxY - minY }
+@@ -48,58 +50,40 @@ Item {
+         (canvas.height - bounds.height * scaleFactor) / 2 - bounds.minY * scaleFactor
+     )
+ 
+-    function checkOverlap(monitors, idx) {
+-        const a = monitors[idx]
+-        const aw = monitorConfig.logicalWidth(a)
+-        const ah = monitorConfig.logicalHeight(a)
+-        for (let i = 0; i < monitors.length; i++) {
+-            if (i === idx) continue
+-            if (monitors[i].disabled) continue
+-            const b = monitors[i]
+-            const bw = monitorConfig.logicalWidth(b)
+-            const bh = monitorConfig.logicalHeight(b)
+-            if (a.x < b.x + bw && a.x + aw > b.x &&
+-                a.y < b.y + bh && a.y + ah > b.y) {
+-                return true
+-            }
+-        }
+-        return false
+-    }
+-
+-    function computeNormalized(monitors, changedIdx, newX, newY) {
+-        let m = monitors.slice().map(mon => Object.assign({}, mon))
+-        m[changedIdx].x = newX
+-        m[changedIdx].y = newY
+-        let minX = Infinity, minY = Infinity
+-        for (let i = 0; i < m.length; i++) {
+-            if (m[i].disabled) continue
+-            minX = Math.min(minX, m[i].x)
+-            minY = Math.min(minY, m[i].y)
+-        }
+-        const offX = minX < 0 ? -minX : 0
+-        const offY = minY < 0 ? -minY : 0
+-        if (offX > 0 || offY > 0) {
+-            for (let i = 0; i < m.length; i++) {
+-                m[i].x += offX
+-                m[i].y += offY
+-            }
+-        }
+-        return m
+-    }
+-
+     function updatePreview(idx, newX, newY) {
+-        const normalized = computeNormalized(monitorConfig.monitors, idx, newX, newY)
+-        root.dragHasOverlap = checkOverlap(normalized, idx)
++        const mons = monitorConfig.monitors
++        const enabled = []
++        // A mirror sits on its source and takes no part in the layout.
++        for (let i = 0; i < mons.length; i++)
++            if (!mons[i].disabled && mons[i].mirrorOf === "none") enabled.push(i)
++        const rects = enabled.map(i => ({
++            x: mons[i].x, y: mons[i].y,
++            w: monitorConfig.logicalWidth(mons[i]), h: monitorConfig.logicalHeight(mons[i]),
++            locked: !!(root.isPositionLocked && root.isPositionLocked(mons[i].name))
++        }))
++        const res = MonitorLayout.layout(rects, enabled.indexOf(idx), newX, newY, root.snapThreshold / root.scaleFactor)
+         let preview = {}
+-        for (let i = 0; i < normalized.length; i++) {
+-            preview[normalized[i].name] = { x: normalized[i].x, y: normalized[i].y }
+-        }
++        enabled.forEach((i, k) => preview[mons[i].name] = res.positions[k])
+         root.previewPositions = preview
++        root.dragHasOverlap = res.overlap
+     }
+ 
+-    function commitPosition(idx, newX, newY) {
+-        monitorConfig.updateMonitor(idx, { x: newX, y: newY })
+-        monitorConfig.save(idx)
++    // Every monitor the drag moved goes into one try, so one confirm or revert covers all.
++    function commitPreview() {
++        const mons = monitorConfig.monitors
++        const preview = root.previewPositions
++        const overlap = root.dragHasOverlap
++        root.previewPositions = {}
++        root.dragHasOverlap = false
++        if (overlap) return
++        const changed = []
++        for (let i = 0; i < mons.length; i++) {
++            const p = preview[mons[i].name]
++            if (!p || (p.x === mons[i].x && p.y === mons[i].y)) continue
++            monitorConfig.updateMonitor(i, { x: p.x, y: p.y })
++            changed.push(i)
++        }
++        if (changed.length > 0) monitorConfig.save(changed)
+     }
+ 
+     Rectangle {
+@@ -122,21 +106,14 @@ Item {
+                     monitorConfig: root.monitorConfig
+                     scaleFactor: root.scaleFactor
+                     canvasOffset: root.offset
+-                    allMonitors: root.monitorConfig.monitors
+                     isSelected: index === root.selectedIndex
+-                    previewPositions: root.previewPositions
+-                    hasOverlap: root.dragHasOverlap && isDragging
+                     dragEnabled: !(root.isPositionLocked && root.isPositionLocked(monitor?.name ?? ""))
+ 
+                     onMonitorClicked: (idx) => root.selectedIndex = idx
++                    previewPositions: root.previewPositions
++                    hasOverlap: root.dragHasOverlap
+                     onPositionDragging: (idx, x, y) => root.updatePreview(idx, x, y)
+-                    onPositionCommitted: (idx, x, y) => {
+-                        const hadOverlap = root.dragHasOverlap
+-                        root.previewPositions = {}
+-                        root.dragHasOverlap = false
+-                        if (!hadOverlap)
+-                            root.commitPosition(idx, x, y)
+-                    }
++                    onDragReleased: root.commitPreview()
+                 }
+             }
+         }
+diff --git a/dots/.config/quickshell/ii/modules/common/widgets/MonitorRect.qml b/dots/.config/quickshell/ii/modules/common/widgets/MonitorRect.qml
+index 087ff80c..d9dbc792 100644
+--- a/dots/.config/quickshell/ii/modules/common/widgets/MonitorRect.qml
++++ b/dots/.config/quickshell/ii/modules/common/widgets/MonitorRect.qml
+@@ -12,31 +12,29 @@ Rectangle {
+     required property var monitorConfig
+     required property real scaleFactor
+     required property point canvasOffset
+-    required property var allMonitors
+     property bool isSelected: false
++    property bool dragEnabled: true
+     property var previewPositions: ({})
+     property bool hasOverlap: false
+-    property bool dragEnabled: true
+ 
+-    signal positionCommitted(int index, int x, int y)
+     signal monitorClicked(int index)
+     signal positionDragging(int index, int x, int y)
++    signal dragReleased(int index)
+ 
+     property bool isDragging: false
+     property real dragX: 0
+     property real dragY: 0
+-    property int snappedX: 0
+-    property int snappedY: 0
+-    property real snapThreshold: 12
+-    // Frozen at press time: previewPositions can change scaleFactor/canvasOffset mid-drag, which would save a shifted position.
++    property bool dragMoved: false
++    readonly property var preview: previewPositions[monitor.name] ?? monitor
++    // Frozen at press time, so a canvas rescale mid-drag cannot shift the saved position.
+     property real dragStartScale: 1
+     property point dragStartOffset: Qt.point(0, 0)
+ 
+     property int logW: monitorConfig?.logicalWidth(monitor) ?? 0
+     property int logH: monitorConfig?.logicalHeight(monitor) ?? 0
+ 
+-    x: isDragging ? dragX : (previewPositions[monitor.name]?.x ?? monitor.x) * scaleFactor + canvasOffset.x
+-    y: isDragging ? dragY : (previewPositions[monitor.name]?.y ?? monitor.y) * scaleFactor + canvasOffset.y
++    x: isDragging ? dragX : preview.x * scaleFactor + canvasOffset.x
++    y: isDragging ? dragY : preview.y * scaleFactor + canvasOffset.y
+     width:  logW * scaleFactor
+     height: logH * scaleFactor
+ 
+@@ -63,8 +61,8 @@ Rectangle {
+ 
+     Rectangle {
+         visible: root.isDragging && !root.hasOverlap
+-        x: root.snappedX * root.dragStartScale + root.dragStartOffset.x - root.x
+-        y: root.snappedY * root.dragStartScale + root.dragStartOffset.y - root.y
++        x: root.preview.x * root.dragStartScale + root.dragStartOffset.x - root.x
++        y: root.preview.y * root.dragStartScale + root.dragStartOffset.y - root.y
+         width: root.width
+         height: root.height
+         radius: root.radius
+@@ -109,27 +107,6 @@ Rectangle {
+         }
+     }
+ 
+-    function snapPosition(px, py) {
+-        let sx = px, sy = py
+-        const thresh = snapThreshold / scaleFactor
+-        for (let i = 0; i < allMonitors.length; i++) {
+-            if (i === monitorIndex) continue
+-            const other = allMonitors[i]
+-            if (other.disabled) continue
+-            const ow = monitorConfig.logicalWidth(other)
+-            const oh = monitorConfig.logicalHeight(other)
+-            if (Math.abs(px - other.x) < thresh)                 sx = other.x
+-            if (Math.abs(px - (other.x + ow)) < thresh)          sx = other.x + ow
+-            if (Math.abs((px + logW) - other.x) < thresh)        sx = other.x - logW
+-            if (Math.abs((px + logW) - (other.x + ow)) < thresh) sx = other.x + ow - logW
+-            if (Math.abs(py - other.y) < thresh)                 sy = other.y
+-            if (Math.abs(py - (other.y + oh)) < thresh)          sy = other.y + oh
+-            if (Math.abs((py + logH) - other.y) < thresh)        sy = other.y - logH
+-            if (Math.abs((py + logH) - (other.y + oh)) < thresh) sy = other.y + oh - logH
+-        }
+-        return Qt.point(sx, sy)
+-    }
+-
+     MouseArea {
+         id: hoverArea
+         anchors.fill: parent
+@@ -143,8 +120,7 @@ Rectangle {
+         drag.threshold: 4
+ 
+         onPressed: {
+-            root.snappedX = monitor.x
+-            root.snappedY = monitor.y
++            root.dragMoved = false
+             if (!root.dragEnabled) return
+             root.dragStartScale = root.scaleFactor
+             root.dragStartOffset = root.canvasOffset
+@@ -159,19 +135,18 @@ Rectangle {
+             root.dragY = root.y
+             const realX = Math.round((root.x - root.dragStartOffset.x) / root.dragStartScale)
+             const realY = Math.round((root.y - root.dragStartOffset.y) / root.dragStartScale)
+-            const snapped = root.snapPosition(realX, realY)
+-            root.snappedX = snapped.x
+-            root.snappedY = snapped.y
+-            root.positionDragging(root.monitorIndex, root.snappedX, root.snappedY)
++            if (realX === monitor.x && realY === monitor.y && !root.dragMoved) return
++            root.dragMoved = true
++            root.positionDragging(root.monitorIndex, realX, realY)
+         }
+ 
+         onReleased: {
++            const wasDragging = root.isDragging
+             root.isDragging = false
+-            if (root.snappedX === monitor.x && root.snappedY === monitor.y) {
++            if (wasDragging && root.dragMoved)
++                root.dragReleased(root.monitorIndex)
++            else
+                 root.monitorClicked(root.monitorIndex)
+-                return
+-            }
+-            root.positionCommitted(root.monitorIndex, root.snappedX, root.snappedY)
+         }
+     }
+ }
+\ No newline at end of file
+diff --git a/dots/.config/quickshell/ii/modules/common/widgets/monitor-layout.js b/dots/.config/quickshell/ii/modules/common/widgets/monitor-layout.js
+new file mode 100644
+index 00000000..68f18bff
+--- /dev/null
++++ b/dots/.config/quickshell/ii/modules/common/widgets/monitor-layout.js
+@@ -0,0 +1,134 @@
++.pragma library
++
++// Monitor layout for the Displays canvas. Rects are {x, y, w, h} in logical pixels.
++
++function overlaps(a, b) {
++    return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
++}
++
++function touches(a, b) {
++    const xo = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)
++    const yo = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y)
++    return (xo === 0 && yo > 0) || (yo === 0 && xo > 0)
++}
++
++// Groups of rect indices joined by shared edges.
++function components(rects) {
++    const seen = new Set()
++    const groups = []
++    for (let i = 0; i < rects.length; i++) {
++        if (seen.has(i)) continue
++        const group = [i]
++        seen.add(i)
++        for (let k = 0; k < group.length; k++) {
++            for (let j = 0; j < rects.length; j++) {
++                if (!seen.has(j) && touches(rects[group[k]], rects[j])) {
++                    seen.add(j)
++                    group.push(j)
++                }
++            }
++        }
++        groups.push(group)
++    }
++    return groups
++}
++
++function clamp(v, lo, hi) {
++    return Math.max(lo, Math.min(hi, v))
++}
++
++// Shift {dx, dy} nearest to no shift that puts the group flush against a side of an
++// anchor, sharing at least a quarter of the shorter edge so the cursor can cross, with
++// no group rect overlapping an obstacle. Group edges within thresh of an obstacle edge
++// line up with it. Null when nothing fits.
++function attach(anchors, group, obstacles, thresh) {
++    let alignX = 0, alignY = 0, bestX = thresh, bestY = thresh
++    const dxs = [], dys = []
++    for (const r of group) {
++        for (const o of obstacles) {
++            for (const d of [o.x - r.x, o.x + o.w - r.x, o.x - r.x - r.w, o.x + o.w - r.x - r.w])
++                if (Math.abs(d) < bestX) { bestX = Math.abs(d); alignX = d }
++            for (const d of [o.y - r.y, o.y + o.h - r.y, o.y - r.y - r.h, o.y + o.h - r.y - r.h])
++                if (Math.abs(d) < bestY) { bestY = Math.abs(d); alignY = d }
++            // Slide along an edge to just past another monitor instead of into it.
++            dxs.push(o.x - r.w - r.x, o.x + o.w - r.x)
++            dys.push(o.y - r.h - r.y, o.y + o.h - r.y)
++        }
++    }
++    dxs.unshift(alignX)
++    dys.unshift(alignY)
++
++    let best = null, bestDist = Infinity
++    const consider = (dx, dy) => {
++        const dist = dx * dx + dy * dy
++        if (dist >= bestDist) return
++        for (const r of group) {
++            const m = { x: r.x + dx, y: r.y + dy, w: r.w, h: r.h }
++            if (obstacles.some(o => overlaps(m, o))) return
++        }
++        best = { dx, dy }
++        bestDist = dist
++    }
++    for (const r of group) {
++        for (const a of anchors) {
++            const shareX = Math.round(Math.min(r.w, a.w) / 4)
++            const shareY = Math.round(Math.min(r.h, a.h) / 4)
++            for (const dy of dys) {
++                const cdy = clamp(dy, a.y - r.h + shareY - r.y, a.y + a.h - shareY - r.y)
++                consider(a.x - r.w - r.x, cdy)
++                consider(a.x + a.w - r.x, cdy)
++            }
++            for (const dx of dxs) {
++                const cdx = clamp(dx, a.x - r.w + shareX - r.x, a.x + a.w - shareX - r.x)
++                consider(cdx, a.y - r.h - r.y)
++                consider(cdx, a.y + a.h - r.y)
++            }
++        }
++    }
++    return best
++}
++
++// Layout after dropping rects[idx] at (px, py). rects are {x, y, w, h, locked}.
++// Returns {overlap, positions}: overlap is true, and nothing moves, when the drop lands
++// on another monitor by more than thresh. Otherwise the dropped monitor sits flush
++// against its nearest neighbour, and every group left detached is pulled onto it,
++// nearest first. A group holding a locked monitor stays; the other side moves to it.
++function layout(rects, idx, px, py, thresh) {
++    const out = rects.map(r => ({ x: r.x, y: r.y, w: r.w, h: r.h, locked: r.locked }))
++    const result = overlap => ({ overlap, positions: (overlap ? rects : out).map(r => ({ x: r.x, y: r.y })) })
++    const moved = out[idx]
++    moved.x = px
++    moved.y = py
++    const others = out.filter((_, i) => i !== idx)
++    if (others.length === 0) return result(false)
++
++    const inner = { x: px + thresh, y: py + thresh, w: moved.w - 2 * thresh, h: moved.h - 2 * thresh }
++    if (others.some(o => overlaps(inner, o))) return result(true)
++    const shift = attach(others, [moved], others, thresh)
++    if (!shift) return result(true)
++    moved.x += shift.dx
++    moved.y += shift.dy
++
++    for (;;) {
++        const groups = components(out)
++        if (groups.length < 2) break
++        const main = groups.find(g => g.includes(idx))
++        let best = null
++        for (const g of groups) {
++            if (g === main) continue
++            const moving = g.some(i => out[i].locked) ? main : g
++            if (moving.some(i => out[i].locked)) continue
++            const still = moving === g ? main : g
++            const obstacles = out.filter((_, i) => !moving.includes(i))
++            const s = attach(still.map(i => out[i]), moving.map(i => out[i]), obstacles, thresh)
++            if (s && (!best || s.dx * s.dx + s.dy * s.dy < best.dist))
++                best = { moving, dx: s.dx, dy: s.dy, dist: s.dx * s.dx + s.dy * s.dy }
++        }
++        if (!best) break
++        for (const i of best.moving) {
++            out[i].x += best.dx
++            out[i].y += best.dy
++        }
++    }
++    return result(false)
++}
+diff --git a/dots/.config/quickshell/ii/services/KraneSettings.qml b/dots/.config/quickshell/ii/services/KraneSettings.qml
+index e3f497e0..1bb93c77 100644
+--- a/dots/.config/quickshell/ii/services/KraneSettings.qml
++++ b/dots/.config/quickshell/ii/services/KraneSettings.qml
+@@ -46,10 +46,16 @@ Singleton {
+         root._enqueue(["apply"]);
+     }
+ 
+-    function tryMonitor(output, fields) {
+-        const args = ["try", "monitor", output];
+-        for (const k in fields)
+-            args.push(k, String(fields[k]));
++    // tries: [[output, fields], ...], applied as one try.
++    function tryMonitors(tries) {
++        const args = ["try", "monitor"];
++        tries.forEach(([output, fields], i) => {
++            if (i > 0)
++                args.push("+");
++            args.push(output);
++            for (const k in fields)
++                args.push(k, String(fields[k]));
++        });
+         root._enqueue(args);
+     }
+ 

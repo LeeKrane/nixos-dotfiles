@@ -428,8 +428,8 @@ choices, derive consequences.
 |---|---|---|
 | ii shell options | `hosts/<host>/illogical-impulse/config.json`, through the `~/.config/illogical-impulse` symlink | ii's own file watcher |
 | Hyprland options (`hl.config` keys) | `hosts/<host>/ii-settings.json`, `hyprland` | writer re-renders `custom/krane_gui.lua`, `hyprctl reload config-only` |
-| Monitor fields | `hosts/<host>/ii-settings.json`, `monitors` | same file, full reload, confirm-or-revert |
-| Idle timeouts | `hosts/<host>/ii-settings.json`, `idle`, or `krane.hypr.idle` | writer edits `hypridle.conf`, restarts hypridle |
+| Monitor fields | `hosts/<host>/ii-settings.json`, `monitors`, over the `krane.hypr.monitors` baseline | same file, full reload, confirm-or-revert |
+| Idle timeouts | `hosts/<host>/ii-settings.json`, `idle`, over the `krane.hypr.idle` baseline | writer edits `hypridle.conf`, restarts hypridle |
 | Animation preset | `hosts/<host>/ii-settings.json`, `animationPreset` | `require("hyprland.animationPresets.<name>")` in `krane_gui.lua` |
 | Border colors | config.json, `hyprland.general.borderColor` (roles and opacity) | resolved from the palette into `shellOverrides/main.lua` |
 | Hyprlock 12h clock | config.json, `time.format` | `shell.qml` seds `hyprlock.conf` on ready, on change and on every reload |
@@ -440,23 +440,33 @@ a `config-only` reload brings the Nix or upstream value back without a switch.
 
 ### One owner per key
 
-Nix owns every key it sets: each `krane.hypr.settings` leaf, every entry of
-`krane.hypr.guiLocked`, the non-null fields of each `krane.hypr.monitors`
-entry (`output`, `mode`, `scale` and `disabled` always; `position` only when
-set, and the GUI owns it otherwise), and `idle` when `krane.hypr.idle` or
-`idleTimeouts = false` is set. The settings window shows those controls
-disabled with "Set in Nix", and `krane-ii-settings` refuses them. Every other
-key in `pkgs/krane-ii-settings/schema.json` belongs to the GUI file. A key in
-both places fails evaluation, naming both files: delete it from one. To hand
-a key to the GUI, delete it from `display.nix` in the same commit that adds
-it to `ii-settings.json`.
+Nix locks only each `krane.hypr.settings` leaf, every entry of
+`krane.hypr.guiLocked` and each monitor's `output`. The settings window shows
+those controls disabled with "Set in Nix", and `krane-ii-settings` refuses
+them. Every other key in `pkgs/krane-ii-settings/schema.json` belongs to the
+GUI file. A `settings` or `guiLocked` key also in `ii-settings.json` fails
+evaluation, naming both files: delete it from one. To hand a key to the GUI,
+delete it from `display.nix` in the same commit that adds it to
+`ii-settings.json`.
 
-Monitor positions are handed over this way: `position` is null in every
-host's `display.nix`, and a host with a fixed layout keeps it in
-`ii-settings.json` (one without, such as taractias, renders `auto`). A
-position depends on the neighbours' Nix-owned scale, so after changing a scale
-in Nix, re-drag the positions in the settings window. Keyboard layout stays in
-Nix because `qwertz-binds.nix` depends on it.
+Everything else Nix sets is a default the GUI may override:
+
+- `krane.hypr.monitors`: every field of an entry (`mode`, `scale`, `disabled`,
+  `transform`, `vrr`, ..., `position`) is the monitor's baseline in the manifest.
+  A GUI value in `monitors.<output>` wins; resetting the field removes it and
+  the Nix value applies again. `position` is null in every host's
+  `display.nix`, and a host with a fixed layout keeps it in `ii-settings.json`
+  (one without, such as taractias, renders `auto`). A position depends on the
+  neighbours' scale, so after changing a scale, re-drag the positions.
+- `krane.hypr.idle` and `idleTimeouts = false` (0/0/0): the idle baseline. The
+  effective idle values are the baseline overlaid with the GUI's `idle`.
+- `krane.hypr.defaults` (same shape as `settings`): rendered into
+  `custom/general.lua`, not locked. `custom/krane_gui.lua` loads later
+  (`monitors.lua` is required after `custom/general.lua`), so a GUI value wins;
+  resetting the key removes it from that file and the next reload brings the
+  default back. The hosts' `input.kb_layout` and `kb_variant` live here.
+  `qwertz-binds.nix` assumes `kb_layout = "at"`, so a GUI layout change leaves
+  those binds wrong.
 
 Only keys in `schema.json` can be written. To add one, check the key in
 Hyprland's source for the pinned version, then list it in `schema.json` with
@@ -486,10 +496,12 @@ manifest) is the only writer of `ii-settings.json`:
   repo file prints a warning and leaves the build-time render in place. Before
   login `$XDG_RUNTIME_DIR` may not exist yet; the lock then falls back to
   `hosts/<host>/.ii-settings.lock` (git-ignored).
-- `try monitor …` / `confirm`: a display change is live at once, and a
-  transient systemd timer (`krane-ii-settings-revert`, 15 s) reverts it
-  unless Keep is pressed. The previous live file is kept aside so the revert
-  never depends on the repo file being readable. While the timer is pending,
+- `try monitor OUTPUT FIELD VALUE … [+ OUTPUT …]` / `confirm`: a display
+  change, for one output or several at once (a monitor drag that moves
+  others), is live at once, and a transient systemd timer
+  (`krane-ii-settings-revert`, 15 s) reverts it unless Keep is pressed.
+  The previous live file is kept aside so the revert never depends on the
+  repo file being readable. While the timer is pending,
   the Hyprland page disables every section (Displays, Layout, Input, Idle,
   Visual & Aesthetics, Autostart Apps, Animations) until Keep or Revert.
   `confirm` validates the repo file and the merge before it stops the timer,
@@ -530,11 +542,12 @@ keyed by output name, holding the full rule it sent to Hyprland. The
 (`modules/home/desktop/hypr-config.nix`'s `monitorsFile`). A host that needs
 its `extraMonitorsLua` to survive hotplug sets `krane_after_gui` to a function
 that merges `KRANE_GUI_MONITORS[output]` into each rule it re-sends, skipping
-`output`, `mode` and `scale` so Nix's values win; `position` is GUI-owned and
-read from `KRANE_GUI_MONITORS`. `hosts/tarmantria/display.nix`'s
-`scale_internal` is the example: it merges eDP-1's GUI fields back in whenever
-a monitor is added or removed (the panel's position comes from the GUI entry
-of eDP-1 or, as the panel name flips with the GPU mux, eDP-2).
+`output`; `KRANE_GUI_MONITORS[output]` already holds the Nix baseline overlaid
+with the GUI values (mode and scale included), so the merge keeps the GUI's
+choice. `hosts/tarmantria/display.nix`'s `place_internal` is the example: it
+merges the panel's GUI entry back in whenever a monitor is added or removed
+(the panel's position comes from the GUI entry of eDP-1 or, as the panel name
+flips with the GPU mux, eDP-2).
 
 ### Escape hatches
 

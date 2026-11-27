@@ -11,8 +11,9 @@ in
 {
   krane.hypr = {
     monitors = [
-      # Positions are GUI-owned (ii-settings.json, settings app > Displays); re-drag them after
-      # changing a scale here.
+      # Every field is a default the settings app (Displays) may override; positions are
+      # GUI-owned (ii-settings.json). A position depends on the neighbours' scale: re-drag after
+      # changing one.
       {
         output = "HDMI-A-1";
         mode = "2560x1440@144";
@@ -33,21 +34,15 @@ in
       }
     ) internalOutputs;
 
-    # Internal panel scale: 1.25 alone, 1.6 with another output connected. Hyprland needs a scale
-    # that divides the mode into whole logical pixels: 1.6 gives 1600x900, 1.25 gives 2048x1152.
-    # Position: the GUI file, else the other internal name (eDP-1 or eDP-2 depending on the GPU
-    # mux), else 0x0.
+    # Internal panel: mode and scale come from the GUI entry when set, else the Nix defaults
+    # above (1.25 gives 2048x1152 logical pixels). Re-sent on hotplug and reload so the position
+    # follows the panel across its two names (eDP-1 or eDP-2 depending on the GPU mux): the GUI
+    # position of either name, else 0x0.
     extraMonitorsLua = ''
       local function is_internal(name)
           return name:match("^eDP%-") ~= nil
       end
-      local function scale_internal(removed)
-          local external = false
-          for _, m in ipairs(hl.get_monitors()) do
-              if not is_internal(m.name) and m.name ~= removed then
-                  external = true
-              end
-          end
+      local function place_internal()
           for _, m in ipairs(hl.get_monitors()) do
               if is_internal(m.name) then
                   local gui = KRANE_GUI_MONITORS and KRANE_GUI_MONITORS[m.name]
@@ -61,13 +56,15 @@ in
                       output = m.name,
                       mode = "${internal.mode}",
                       position = gui_position(gui) or gui_position(other) or "0x0",
-                      scale = external and 1.6 or 1.25,
+                      scale = 1.25,
                   }
-                  -- Carry over GUI-set fields (color management, HDR, transform, vrr, ...) so a
-                  -- reload does not clobber them; output, mode and scale stay Nix's; position was chosen above.
-                  if gui then
-                      for k, v in pairs(gui) do
-                          if k ~= "output" and k ~= "mode" and k ~= "position" and k ~= "scale" then
+                  -- Carry over the GUI entry (mode, scale, color management, HDR, transform, vrr,
+                  -- ...) so a reload does not clobber it; position was chosen above. The panel's
+                  -- other name stands in when the mux flipped since the entry was saved.
+                  local fields = gui or other
+                  if fields then
+                      for k, v in pairs(fields) do
+                          if k ~= "output" and k ~= "position" then
                               rule[k] = v
                           end
                       end
@@ -77,16 +74,19 @@ in
           end
       end
 
-      scale_internal()
-      hl.on("monitor.added", function() scale_internal() end)
-      hl.on("monitor.removed", function(m) scale_internal(m and m.name) end)
-      -- custom/krane_gui.lua loads after this file; re-run so GUI-owned fields are merged back in.
-      krane_after_gui = scale_internal
+      place_internal()
+      hl.on("monitor.added", function() place_internal() end)
+      hl.on("monitor.removed", function() place_internal() end)
+      -- custom/krane_gui.lua loads after this file; re-run so GUI fields are merged back in.
+      krane_after_gui = place_internal
     '';
 
-    settings.input = {
+    defaults.input = {
       kb_layout = "at";
       kb_variant = "nodeadkeys";
+    };
+
+    settings.input = {
       touchpad = {
         natural_scroll = true;
         tap_to_click = true;

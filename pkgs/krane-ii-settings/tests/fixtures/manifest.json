@@ -9,7 +9,7 @@
   "nixOwned": {
     "hyprland": ["cursor:default_monitor", "input:kb_layout", "input:kb_variant"],
     "idle": false,
-    "monitors": { "DP-2": ["disabled", "mode", "output", "position", "scale"] }
+    "monitors": { "DP-2": ["output"] }
   },
   "monitorBaselines": {
     "DP-2": { "mode": "3840x2160@240", "output": "DP-2", "position": "0x0", "scale": 1.5 }

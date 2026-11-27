@@ -1,8 +1,9 @@
 # Hyprland settings saved from the ii settings window: the GUI writes sparse deltas through
 # krane-ii-settings (pkgs/krane-ii-settings) into hosts/<host>/ii-settings.json. This module
 # renders that file into the owned custom/krane_gui.lua (required last by monitors.lua) and gives
-# the writer its manifest: the Nix-owned keys and the monitor and idle baselines. A key set in both
-# Nix and the GUI file fails evaluation. See docs/II-INTEGRATION.md "Settings persistence".
+# the writer its manifest: the Nix-owned keys and the monitor and idle baselines. Nix monitor
+# fields, idle timeouts and krane.hypr.defaults are defaults the GUI may override; a
+# krane.hypr.settings or guiLocked key set in both Nix and the GUI file fails evaluation. See docs/II-INTEGRATION.md "Settings persistence".
 {
   config,
   lib,
@@ -35,13 +36,7 @@ let
     );
   nixHyprKeys = lib.unique (flatten "" cfg.settings ++ cfg.guiLocked);
 
-  fixedMonitorFields = [
-    "output"
-    "mode"
-    "scale"
-    "disabled"
-  ];
-  # Nix-owned only when non-null; `or null` tolerates fields the monitor submodule lacks.
+  # Baseline fields when non-null; `or null` tolerates fields the monitor submodule lacks.
   optionalMonitorFields = [
     "position"
     "transform"
@@ -63,19 +58,18 @@ let
       let
         setFields = lib.filter (f: (m.${f} or null) != null) optionalMonitorFields;
       in
-      lib.nameValuePair m.output {
-        owned = fixedMonitorFields ++ setFields;
-        baseline = {
+      lib.nameValuePair m.output (
+        {
           inherit (m)
             output
             mode
             scale
             ;
-          position = if m.position == null then "auto" else m.position;
+          position = "auto";
         }
         // lib.optionalAttrs m.disabled { disabled = true; }
-        // lib.genAttrs setFields (f: m.${f});
-      }
+        // lib.genAttrs setFields (f: m.${f})
+      )
     ) cfg.monitors
   );
 
@@ -96,13 +90,8 @@ let
     suspend = 900;
   };
 
-  idleValues =
-    if nixIdle != null then
-      nixIdle
-    else if gui ? idle then
-      iiIdle // gui.idle
-    else
-      null;
+  idleBaseline = if nixIdle != null then nixIdle else iiIdle;
+  idleValues = if nixIdle != null || gui ? idle then idleBaseline // (gui.idle or { }) else null;
 
   manifest = {
     host = hostName;
@@ -114,11 +103,11 @@ let
     settingsQml = "${home}/.config/quickshell/ii/settings.qml";
     nixOwned = {
       hyprland = lib.sort lib.lessThan nixHyprKeys;
-      idle = nixIdle != null;
-      monitors = lib.mapAttrs (_: v: lib.sort lib.lessThan v.owned) nixMonitors;
+      idle = false;
+      monitors = lib.mapAttrs (_: _: [ "output" ]) nixMonitors;
     };
-    monitorBaselines = lib.mapAttrs (_: v: v.baseline) nixMonitors;
-    idleBaseline = if nixIdle != null then nixIdle else iiIdle;
+    monitorBaselines = nixMonitors;
+    inherit idleBaseline;
   };
   manifestFile = pkgs.writeText "krane-ii-settings-manifest-${hostName}.json" (
     builtins.toJSON manifest
@@ -157,17 +146,9 @@ let
       ) guiMonitors
     );
 
-  overlap =
-    map (k: "hyprland.${k}") (lib.filter (k: lib.elem k nixHyprKeys) (lib.attrNames guiHypr))
-    ++ lib.optional ((gui ? idle) && nixIdle != null) "idle"
-    ++ lib.concatLists (
-      lib.mapAttrsToList (
-        o: fields:
-        map (f: "monitors.${o}.${f}") (
-          lib.filter (f: lib.elem f (nixMonitors.${o}.owned or [ ])) (lib.attrNames fields)
-        )
-      ) guiMonitors
-    );
+  overlap = map (k: "hyprland.${k}") (
+    lib.filter (k: lib.elem k nixHyprKeys) (lib.attrNames guiHypr)
+  );
 in
 {
   options.krane.hypr.guiLocked = lib.mkOption {
@@ -216,9 +197,9 @@ in
     # changes made since the last switch would be lost. Re-render from the live repo file;
     # `activate` never fails (a bad repo file just warns and keeps the build-time render).
     # entryAfter kraneIiIdle: that entry is under lib.mkIf and may not exist; dag.topoSort ignores
-    # unknown names in `after`. When idle is Nix-owned, kraneIiIdle wrote hypridle.conf and
-    # activate's idle write reads the same Nix value back (effective_idle prefers the Nix
-    # baseline), so it leaves the file as kraneIiIdle set it.
+    # unknown names in `after`. When Nix sets idle, kraneIiIdle wrote hypridle.conf and
+    # activate's idle write adds the GUI's idle values over the same Nix baseline, so it only changes
+    # the file when the GUI overrides one.
     home.activation.kraneIiActivate = lib.hm.dag.entryAfter [ "kraneIiOverrides" "kraneIiIdle" ] ''
       $DRY_RUN_CMD ${wrapped}/bin/krane-ii-settings activate || true
     '';
@@ -236,9 +217,9 @@ in
         assertion = overlap == [ ];
         message = ''
           ${where} sets ${lib.concatStringsSep ", " overlap}, which Nix also sets
-          (krane.hypr.settings, krane.hypr.guiLocked, krane.hypr.monitors or idle, in
-          hosts/${hostName}/display.nix or modules/home). Every key has one owner: delete it
-          from one of the two.
+          (krane.hypr.settings or krane.hypr.guiLocked, in hosts/${hostName}/display.nix or
+          modules/home). Every such key has one owner: delete it from one of the two. Use
+          krane.hypr.defaults for a Nix value the GUI may override.
         '';
       }
       {

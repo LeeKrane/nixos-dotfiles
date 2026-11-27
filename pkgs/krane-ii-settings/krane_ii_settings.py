@@ -168,8 +168,6 @@ def check_ownership(data, manifest):
     for key in data.get("hyprland", {}):
         if key in owned["hyprland"]:
             raise SettingsError(f"hyprland.{key}: set in Nix ({nix_hint(manifest)})")
-    if data.get("idle") and owned["idle"]:
-        raise SettingsError(f"idle: set in Nix ({nix_hint(manifest)})")
     for output, fields in data.get("monitors", {}).items():
         for field in fields:
             if field in owned["monitors"].get(output, []):
@@ -515,10 +513,7 @@ class Runtime:
 
 
 def effective_idle(data, manifest):
-    idle = dict(manifest["idleBaseline"])
-    if not manifest["nixOwned"]["idle"]:
-        idle.update(data.get("idle", {}))
-    return idle
+    return {**manifest["idleBaseline"], **data.get("idle", {})}
 
 
 def edit_set(data, section, key, pairs, schema):
@@ -613,8 +608,6 @@ def check_owner(section, key, fields, manifest):
     owned = manifest["nixOwned"]
     if section == "hyprland" and key in owned["hyprland"]:
         raise SettingsError(f"hyprland.{key}: set in Nix ({nix_hint(manifest)})")
-    if section == "idle" and owned["idle"]:
-        raise SettingsError(f"idle: set in Nix ({nix_hint(manifest)})")
     if section == "monitor":
         for field in fields:
             if field in owned["monitors"].get(key, []):
@@ -730,18 +723,26 @@ class Settings:
             return "applied"
 
     def try_monitor(self, output, pairs):
-        check_owner("monitor", output, [f for f, _ in pairs], self.manifest)
+        return self.try_monitors([(output, pairs)])
+
+    def try_monitors(self, changes):
+        """One try, one confirm or revert, for every (output, pairs) in changes."""
+        for output, pairs in changes:
+            check_owner("monitor", output, [f for f, _ in pairs], self.manifest)
         with locked(self.manifest):
             data, _ = read_repo(self.repo)
-            proposed = edit_set(data, "monitor", output, pairs, self.schema)
-            proposed = complete_rule(proposed, output, self.manifest, self.runtime)
+            proposed = data
+            for output, pairs in changes:
+                proposed = edit_set(proposed, "monitor", output, pairs, self.schema)
+                proposed = complete_rule(proposed, output, self.manifest, self.runtime)
             validate_data(proposed, self.schema)
             check_ownership(proposed, self.manifest)
             live = self.render(proposed)
+            outputs = [output for output, _ in changes]
             # Revert must not depend on the repo file staying readable.
-            write_pending({"kind": "try", "output": output,
+            write_pending({"kind": "try",
                            "deadline": time.time() + REVERT_SECONDS,
-                           "fields": proposed["monitors"][output],
+                           "fields": {o: proposed["monitors"][o] for o in outputs},
                            "previousLive": self.runtime.read_live()})
             # Timer first: if it cannot be started, nothing has been applied yet.
             try:
@@ -751,7 +752,7 @@ class Settings:
                 raise SettingsError(f"cannot start the revert timer, nothing applied: {e}")
             self.runtime.write_live(live)
             self.runtime.reload(full=True)
-            return f"trying {output}; reverting in {REVERT_SECONDS}s unless confirmed"
+            return f"trying {', '.join(outputs)}; reverting in {REVERT_SECONDS}s unless confirmed"
 
     def confirm(self):
         with locked(self.manifest):
@@ -761,9 +762,13 @@ class Settings:
             data, text = read_repo(self.repo)
             new = copy.deepcopy(data)
             if pending["kind"] == "try":
-                entry = dict(pending["fields"])
-                mark_unconfirmed(data.get("monitors", {}).get(pending["output"]), entry)
-                new.setdefault("monitors", {})[pending["output"]] = entry
+                by_output = pending["fields"]
+                if "output" in pending:  # written by a version that tried one output
+                    by_output = {pending["output"]: by_output}
+                for output, fields in by_output.items():
+                    entry = dict(fields)
+                    mark_unconfirmed(data.get("monitors", {}).get(output), entry)
+                    new.setdefault("monitors", {})[output] = entry
             else:
                 # Only outputs the pending check listed; one still disconnected at boot
                 # keeps bootConfirmed=false.
@@ -796,11 +801,10 @@ class Settings:
             data, text = read_repo(self.repo)
             new = copy.deepcopy(data)
             monitors = new.get("monitors", {})
-            owned = self.manifest["nixOwned"]["monitors"]
             for output in outputs:
                 prev = (monitors.pop(output, None) or {}).get("bootPrevious") or {}
-                # A field Nix took over since it was remembered stays Nix's.
-                prev = {k: v for k, v in prev.items() if k not in owned.get(output, [])}
+                owned = self.manifest["nixOwned"]["monitors"].get(output, [])
+                prev = {f: v for f, v in prev.items() if f not in owned}
                 # An output Nix no longer declares needs a complete rule (see complete_rule).
                 if output not in self.manifest["monitorBaselines"] and not all(
                         f in prev for f in ("mode", "position", "scale")):
@@ -899,6 +903,22 @@ def pairs_from(args, what):
     return [(args[i], args[i + 1]) for i in range(0, len(args), 2)]
 
 
+def monitor_groups(args):
+    """Split `OUTPUT FIELD VALUE ... + OUTPUT FIELD VALUE ...` into (output, pairs) groups."""
+    groups, current = [], []
+    for arg in args + ["+"]:
+        if arg != "+":
+            current.append(arg)
+            continue
+        if len(current) < 3:
+            raise SettingsError("try monitor: expected OUTPUT FIELD VALUE ...")
+        if any(current[0] == output for output, _ in groups):
+            raise SettingsError(f"try monitor: {current[0]} twice")
+        groups.append((current[0], pairs_from(current[1:], "try monitor")))
+        current = []
+    return groups
+
+
 def main(argv=None, runtime_factory=Runtime):
     parser = argparse.ArgumentParser(prog="krane-ii-settings")
     parser.add_argument("--manifest", default=os.environ.get("KRANE_II_SETTINGS_MANIFEST"))
@@ -917,8 +937,7 @@ def main(argv=None, runtime_factory=Runtime):
     p_render.add_argument("--json", required=True)
     p_try = sub.add_parser("try")
     p_try.add_argument("section", choices=["monitor"])
-    p_try.add_argument("output")
-    p_try.add_argument("rest", nargs="+")
+    p_try.add_argument("rest", nargs="+", metavar="OUTPUT FIELD VALUE ... [+ OUTPUT ...]")
     sub.add_parser("confirm")
     sub.add_parser("boot-check")
     sub.add_parser("revert-unconfirmed")
@@ -951,7 +970,7 @@ def main(argv=None, runtime_factory=Runtime):
         elif args.cmd == "apply":
             out = settings.apply()
         elif args.cmd == "try":
-            out = settings.try_monitor(args.output, pairs_from(args.rest, "try monitor"))
+            out = settings.try_monitors(monitor_groups(args.rest))
         elif args.cmd == "confirm":
             out = settings.confirm()
         elif args.cmd == "boot-check":

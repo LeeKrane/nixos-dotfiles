@@ -206,10 +206,13 @@ class TestIdle(Base):
         self.assertEqual(self.repo_data(), {"idle": {"lock": 60}})
         self.assertIn(("apply_idle", {"lock": 60, "screenOff": 600, "suspend": 900}), self.runtime.calls)
 
-    def test_idle_owned_by_nix(self):
-        self.manifest["nixOwned"]["idle"] = True
-        with self.assertRaisesRegex(k.SettingsError, "set in Nix"):
-            self.s.set("idle", "lock", [("lock", "60")])
+    def test_gui_idle_overrides_nix_baseline_and_reset_restores_it(self):
+        self.manifest["idleBaseline"] = {"lock": 0, "screenOff": 0, "suspend": 0}
+        self.s.set("idle", "lock", [("lock", "60")])
+        self.assertIn(("apply_idle", {"lock": 60, "screenOff": 0, "suspend": 0}), self.runtime.calls)
+        self.s.reset("idle", "lock", [])
+        self.assertIn(("apply_idle", {"lock": 0, "screenOff": 0, "suspend": 0}), self.runtime.calls)
+        self.assertEqual(self.repo_data(), {})
 
     def test_apply_does_not_restart_hypridle_when_idle_unchanged(self):
         self.s.set("idle", "lock", [("lock", "60")])

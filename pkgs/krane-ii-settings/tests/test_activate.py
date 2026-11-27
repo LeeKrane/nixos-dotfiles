@@ -37,8 +37,8 @@ class TestActivate(Base):
         self.assertEqual(self.runtime.calls, [])
 
     def test_activate_on_nix_owned_rejection_changes_nothing_and_exits_clean(self):
-        # The fixture manifest makes "scale" Nix-owned on DP-2.
-        self.repo.write_text('{"monitors": {"DP-2": {"scale": 2.0}}}\n')
+        # The fixture manifest makes input:kb_layout Nix-owned.
+        self.repo.write_text('{"hyprland": {"input:kb_layout": "us"}}\n')
         self.assertEqual(self.s.activate(), "activation skipped")
         self.assertFalse(pathlib.Path(self.manifest["liveFile"]).exists())
         self.assertEqual(self.runtime.calls, [])

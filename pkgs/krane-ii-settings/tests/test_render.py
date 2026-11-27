@@ -1,6 +1,5 @@
 """Render and schema tests for krane_ii_settings."""
 
-import copy
 import json
 import pathlib
 import re
@@ -83,8 +82,11 @@ class TestOwnership(RenderBase):
             k.check_ownership({"hyprland": {"input:kb_layout": "us"}}, self.manifest)
 
     def test_refuses_nix_owned_monitor_field(self):
-        with self.assertRaisesRegex(k.SettingsError, "monitors.DP-2.scale: set in Nix"):
-            k.check_ownership({"monitors": {"DP-2": {"scale": 1.5}}}, self.manifest)
+        with self.assertRaisesRegex(k.SettingsError, "monitors.DP-2.output: set in Nix"):
+            k.check_ownership({"monitors": {"DP-2": {"output": "DP-9"}}}, self.manifest)
+
+    def test_accepts_nix_default_monitor_fields(self):
+        k.check_ownership({"monitors": {"DP-2": {"mode": "1920x1080@60", "scale": 1.5}}}, self.manifest)
 
     def test_accepts_non_owned_monitor_field(self):
         k.check_ownership({"monitors": {"DP-2": {"cm": "hdr"}}}, self.manifest)
@@ -92,14 +94,8 @@ class TestOwnership(RenderBase):
     def test_accepts_non_owned_hyprland_key(self):
         k.check_ownership({"hyprland": {"decoration:rounding": 12}}, self.manifest)
 
-    def test_accepts_idle_when_not_nix_owned(self):
+    def test_accepts_idle(self):
         k.check_ownership({"idle": {"lock": 600}}, self.manifest)
-
-    def test_refuses_idle_when_nix_owned(self):
-        manifest = copy.deepcopy(self.manifest)
-        manifest["nixOwned"]["idle"] = True
-        with self.assertRaisesRegex(k.SettingsError, "idle: set in Nix"):
-            k.check_ownership({"idle": {"lock": 600}}, manifest)
 
 
 if __name__ == "__main__":

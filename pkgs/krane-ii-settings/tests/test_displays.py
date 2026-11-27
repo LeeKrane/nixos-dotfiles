@@ -53,7 +53,30 @@ class TestMonitors(Base):
 
     def test_try_refuses_nix_owned_field(self):
         with self.assertRaisesRegex(k.SettingsError, "set in Nix"):
-            self.s.try_monitor("DP-2", [("scale", "1")])
+            self.s.try_monitor("DP-2", [("output", "DP-9")])
+
+    def test_gui_mode_and_scale_override_nix_baseline_and_reset_restores_it(self):
+        self.s.try_monitor("DP-2", [("mode", "1920x1080@60"), ("scale", "1")])
+        self.s.confirm()
+        entry = self.repo_data()["monitors"]["DP-2"]
+        self.assertEqual((entry["mode"], entry["scale"]), ("1920x1080@60", 1))
+        live = pathlib.Path(self.manifest["liveFile"]).read_text()
+        self.assertIn('mode = "1920x1080@60"', live)
+        self.assertIn("scale = 1\n", live)
+        self.assertIn('position = "0x0"', live)
+        self.s.reset("monitor", "DP-2", ["mode", "scale"])
+        self.assertEqual(self.repo_data(), {})
+        # No GUI entry left: the render is empty and monitors.lua's Nix rule applies again.
+        self.assertEqual(pathlib.Path(self.manifest["liveFile"]).read_text(), self.s.render({}))
+
+    def test_revert_unconfirmed_restores_previous_gui_scale_over_nix(self):
+        self.repo.write_text('{"monitors": {"DP-2": {"scale": 2}}}\n')
+        self.s.try_monitor("DP-2", [("scale", "1")])
+        self.s.confirm()
+        k.write_pending({"kind": "boot", "outputs": ["DP-2"]})
+        self.s.revert_unconfirmed()
+        self.assertEqual(self.repo_data(), {"monitors": {"DP-2": {"scale": 2}}})
+        self.assertIn("scale = 2\n", pathlib.Path(self.manifest["liveFile"]).read_text())
 
     def test_gui_owned_output_gets_complete_rule(self):
         self.runtime.live_monitors = {"HDMI-A-1": {"mode": "1920x1080@60", "position": "3840x0", "scale": 1.0}}
@@ -63,6 +86,46 @@ class TestMonitors(Base):
         self.assertEqual(entry["position"], "-1920x0")
         self.assertEqual(entry["mode"], "1920x1080@60")
         self.assertEqual(entry["scale"], 1.0)
+
+    def test_try_several_outputs_in_one_try(self):
+        self.runtime.live_monitors = {
+            "HDMI-A-1": {"mode": "1920x1080@60", "position": "3840x0", "scale": 1.0},
+            "DP-3": {"mode": "1920x1080@60", "position": "5760x0", "scale": 1.0}}
+        self.s.try_monitors([("HDMI-A-1", [("position", "-1920x0")]), ("DP-3", [("position", "-3840x0")])])
+        live = pathlib.Path(self.manifest["liveFile"]).read_text()
+        self.assertIn('position = "-1920x0"', live)
+        self.assertIn('position = "-3840x0"', live)
+        self.s.confirm()
+        monitors = self.repo_data()["monitors"]
+        self.assertEqual(monitors["HDMI-A-1"]["position"], "-1920x0")
+        self.assertEqual(monitors["DP-3"]["position"], "-3840x0")
+        self.assertFalse(monitors["DP-3"]["bootConfirmed"])
+
+    def test_try_several_outputs_refuses_any_nix_owned(self):
+        self.runtime.live_monitors = {"HDMI-A-1": {"mode": "1920x1080@60", "position": "3840x0", "scale": 1.0}}
+        with self.assertRaisesRegex(k.SettingsError, "set in Nix"):
+            self.s.try_monitors([("HDMI-A-1", [("position", "0x0")]), ("DP-2", [("output", "DP-9")])])
+        self.assertIsNone(k.read_pending())
+
+    def test_cli_try_splits_outputs_on_plus(self):
+        self.assertEqual(k.monitor_groups(["DP-1", "position", "0x0", "+", "DP-2", "position", "1x0", "scale", "1"]),
+                         [("DP-1", [("position", "0x0")]), ("DP-2", [("position", "1x0"), ("scale", "1")])])
+        with self.assertRaises(k.SettingsError):
+            k.monitor_groups(["DP-1", "position"])
+        with self.assertRaises(k.SettingsError):
+            k.monitor_groups(["DP-1"])
+        with self.assertRaises(k.SettingsError):
+            k.monitor_groups(["DP-1", "position", "0x0", "+", "DP-2"])
+        with self.assertRaisesRegex(k.SettingsError, "DP-1 twice"):
+            k.monitor_groups(["DP-1", "position", "0x0", "+", "DP-1", "scale", "1"])
+
+    def test_confirm_reads_single_output_pending_from_older_version(self):
+        self.runtime.live_monitors = {"HDMI-A-1": {"mode": "1920x1080@60", "position": "3840x0", "scale": 1.0}}
+        self.s.try_monitor("HDMI-A-1", [("position", "-1920x0")])
+        pending = k.read_pending()
+        k.write_pending(dict(pending, output="HDMI-A-1", fields=pending["fields"]["HDMI-A-1"]))
+        self.s.confirm()
+        self.assertEqual(self.repo_data()["monitors"]["HDMI-A-1"]["position"], "-1920x0")
 
     def test_gui_owned_output_needs_hyprland(self):
         with self.assertRaisesRegex(k.SettingsError, "cannot be read"):
@@ -139,7 +202,7 @@ class TestGuiOwnedPosition(Base):
 
     def setUp(self):
         super().setUp()
-        self.manifest["nixOwned"]["monitors"]["DP-1"] = ["disabled", "mode", "output", "scale"]
+        self.manifest["nixOwned"]["monitors"]["DP-1"] = ["output"]
         self.manifest["monitorBaselines"]["DP-1"] = {
             "mode": "2560x1440@144", "output": "DP-1", "position": "auto", "scale": 1}
 
@@ -151,12 +214,6 @@ class TestGuiOwnedPosition(Base):
         self.assertIn('position = "2560x0"', live)
         self.assertIn('mode = "2560x1440@144"', live)
         self.assertIn("scale = 1", live)
-
-    def test_nix_pinned_position_still_refused(self):
-        with self.assertRaisesRegex(k.SettingsError, "set in Nix"):
-            self.s.try_monitor("DP-2", [("position", "10x0")])
-        with self.assertRaisesRegex(k.SettingsError, "set in Nix"):
-            self.s.try_monitor("DP-1", [("scale", "2")])
 
     def test_reset_position_falls_back_to_baseline(self):
         self.repo.write_text('{"monitors": {"DP-1": {"position": "2560x0"}}}\n')
@@ -189,6 +246,12 @@ class TestGuiOwnedPosition(Base):
         self.s.revert_unconfirmed()
         self.assertEqual(self.repo_data(), {})
 
+    def test_revert_unconfirmed_drops_nix_owned_previous_fields(self):
+        self.repo.write_text('{"monitors": {"DP-2": {"bootConfirmed": false, "bootPrevious": {"output": "DP-2", "position": "0x0"}, "position": "10x0"}}}\n')
+        k.write_pending({"kind": "boot", "outputs": ["DP-2"]})
+        self.s.revert_unconfirmed()
+        self.assertEqual(self.repo_data(), {"monitors": {"DP-2": {"position": "0x0"}}})
+
     def test_boot_confirm_clears_previous(self):
         self.repo.write_text('{"monitors": {"DP-1": {"position": "2560x0"}}}\n')
         self.s.try_monitor("DP-1", [("bitdepth", "10")])
@@ -196,14 +259,6 @@ class TestGuiOwnedPosition(Base):
         k.write_pending({"kind": "boot", "outputs": ["DP-1"]})
         self.s.confirm()
         self.assertEqual(self.repo_data(), {"monitors": {"DP-1": {"bitdepth": 10, "position": "2560x0"}}})
-
-    def test_revert_unconfirmed_drops_nix_owned_previous_fields(self):
-        # Scale moved to Nix after the entry was remembered: restoring it would clash with Nix.
-        self.repo.write_text('{"monitors": {"DP-1": {"bitdepth": 10, "bootConfirmed": false, '
-                             '"bootPrevious": {"position": "2560x0", "scale": 2}}}}\n')
-        k.write_pending({"kind": "boot", "outputs": ["DP-1"]})
-        self.s.revert_unconfirmed()
-        self.assertEqual(self.repo_data(), {"monitors": {"DP-1": {"position": "2560x0"}}})
 
     def test_revert_unconfirmed_drops_incomplete_gui_owned_previous(self):
         self.repo.write_text('{"monitors": {"DP-3": {"bootConfirmed": false, '

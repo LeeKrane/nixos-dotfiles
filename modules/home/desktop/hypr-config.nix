@@ -242,9 +242,21 @@ let
       ) cfg.variables
     );
 
+  leafKeys =
+    prefix: attrs:
+    lib.concatLists (
+      lib.mapAttrsToList (
+        k: v: if builtins.isAttrs v then leafKeys "${prefix}${k}:" v else [ "${prefix}${k}" ]
+      ) attrs
+    );
+  defaultsInSettings = lib.intersectLists (leafKeys "" cfg.defaults) (leafKeys "" cfg.settings);
+
   generalFile =
+    assert lib.assertMsg (defaultsInSettings == [ ])
+      "krane.hypr.defaults and krane.hypr.settings both set ${lib.concatStringsSep ", " defaultsInSettings}; keep each key in one of them";
     header "custom/general.lua"
     + "\n"
+    + lib.optionalString (cfg.defaults != { }) "hl.config(${luaValue "" cfg.defaults})\n"
     + lib.optionalString (cfg.settings != { }) "hl.config(${luaValue "" cfg.settings})\n"
     + lib.optionalString (cfg.devices != [ ]) ("\n" + lib.concatMapStrings deviceLua cfg.devices)
     + lib.optionalString (cfg.extraGeneralLua != "") ("\n" + cfg.extraGeneralLua + "\n");
@@ -293,7 +305,8 @@ let
         example = "2560x0";
         description = ''
           Layout position, or `auto`/`auto-left`/.... null leaves it to the ii settings window
-          (hosts/<host>/ii-settings.json) and renders `auto` here.
+          (hosts/<host>/ii-settings.json) and renders `auto` here. Every field of a monitor is
+          a default the settings window may override; reset falls back to it.
         '';
       };
       scale = lib.mkOption {
@@ -510,6 +523,21 @@ in
       '';
     };
 
+    defaults = lib.mkOption {
+      type = lib.types.attrsOf lib.types.anything;
+      default = { };
+      example = {
+        input = {
+          kb_layout = "at";
+        };
+      };
+      description = ''
+        Same shape as `settings`, rendered into custom/general.lua before it, but not owned
+        by Nix: the ii settings window may override these keys (custom/krane_gui.lua loads
+        after general.lua, so its value wins) and resetting the key restores this value.
+      '';
+    };
+
     devices = lib.mkOption {
       type = lib.types.listOf (
         lib.types.submodule {
@@ -587,8 +615,8 @@ in
       };
       description = ''
         hypridle timeouts. null (the default) leaves them to the ii settings window
-        (hosts/<host>/ii-settings.json) or ii's own 300/600/900. Setting this makes idle
-        Nix-owned: the settings window shows it disabled. Written into
+        (hosts/<host>/ii-settings.json) or ii's own 300/600/900. Setting this makes them the
+        baseline the settings window may override (reset falls back to them). Written into
         ~/.config/hypr/hypridle.conf at activation by modules/home/desktop/ii-settings.nix.
       '';
     };

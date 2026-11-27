@@ -1,8 +1,8 @@
 { ... }:
 {
   krane.hypr = {
-    # Positions are GUI-owned (ii-settings.json, settings app > Displays); re-drag them after
-    # changing DP-2's scale.
+    # Every field is a default the settings app (Displays) may override; positions are GUI-owned
+    # (ii-settings.json). A position depends on the neighbours' scale: re-drag after changing one.
     monitors = [
       {
         output = "DP-2";
@@ -16,7 +16,7 @@
       }
     ];
 
-    settings.input = {
+    defaults.input = {
       kb_layout = "at";
       kb_variant = "nodeadkeys";
     };

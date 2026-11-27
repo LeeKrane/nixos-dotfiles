@@ -1,0 +1,264 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Fri, 27 Nov 2026 03:32:46 +0100
+Subject: [PATCH] fix(settings): canvas shows mode and scale with room around
+ the layout; floating Keep/Revert bar; scrollable side rail
+
+Problem: monitor boxes showed the logical size (2560x1440 for 3840x2160 at 1.5x); the canvas left no room around the layout to drop into; the mode selector cut off the refresh rate; the Keep/Revert banner sat at the top of the scrolled page; the side rail did not scroll when taller than the window.
+Fix: label shows mode and scale; canvas bounds add half the largest monitor on every side; the mode selector is sized from its longest entry; the Keep/Revert bar floats at the bottom of the settings window on every page; the navigation rail scrolls.
+---
+ .../modules/common/widgets/MonitorCanvas.qml  | 14 +++-
+ .../ii/modules/common/widgets/MonitorRect.qml |  9 ++-
+ .../ii/modules/settings/HyprlandConfig.qml    | 42 +++---------
+ dots/.config/quickshell/ii/settings.qml       | 64 +++++++++++++++++--
+ 4 files changed, 88 insertions(+), 41 deletions(-)
+
+diff --git a/dots/.config/quickshell/ii/modules/common/widgets/MonitorCanvas.qml b/dots/.config/quickshell/ii/modules/common/widgets/MonitorCanvas.qml
+index 98d72f30..53a8505d 100644
+--- a/dots/.config/quickshell/ii/modules/common/widgets/MonitorCanvas.qml
++++ b/dots/.config/quickshell/ii/modules/common/widgets/MonitorCanvas.qml
+@@ -18,11 +18,12 @@ Item {
+     property var previewPositions: ({})
+     property bool dragHasOverlap: false
+ 
+-    implicitHeight: 220
++    implicitHeight: 260
+ 
+     property var bounds: {
+         let minX = Infinity, minY = Infinity
+         let maxX = -Infinity, maxY = -Infinity
++        let maxW = 0, maxH = 0
+         const mons = monitorConfig.monitors
+         for (let i = 0; i < mons.length; i++) {
+             const m = mons[i]
+@@ -33,9 +34,12 @@ Item {
+             minY = Math.min(minY, m.y)
+             maxX = Math.max(maxX, m.x + w)
+             maxY = Math.max(maxY, m.y + h)
++            maxW = Math.max(maxW, w)
++            maxH = Math.max(maxH, h)
+         }
+         if (minX === Infinity) return { minX: 0, minY: 0, width: 1920, height: 1080 }
+-        return { minX, minY, width: maxX - minX, height: maxY - minY }
++        // Free space around the layout to drop into: half the largest monitor on every side.
++        return { minX: minX - maxW / 2, minY: minY - maxH / 2, width: maxX - minX + maxW, height: maxY - minY + maxH }
+     }
+ 
+     property real scaleFactor: {
+@@ -61,6 +65,7 @@ Item {
+             w: monitorConfig.logicalWidth(mons[i]), h: monitorConfig.logicalHeight(mons[i]),
+             locked: !!(root.isPositionLocked && root.isPositionLocked(mons[i].name))
+         }))
++        if (enabled.indexOf(idx) < 0) return
+         const res = MonitorLayout.layout(rects, enabled.indexOf(idx), newX, newY, root.snapThreshold / root.scaleFactor)
+         let preview = {}
+         enabled.forEach((i, k) => preview[mons[i].name] = res.positions[k])
+@@ -88,6 +93,8 @@ Item {
+ 
+     Rectangle {
+         anchors.fill: parent
++        // Monitors pulled further out than the margin during a drag stay inside the canvas.
++        clip: true
+         radius: Appearance.rounding.normal
+         color: Appearance.colors.colLayer1
+         border.width: 1
+@@ -107,7 +114,8 @@ Item {
+                     scaleFactor: root.scaleFactor
+                     canvasOffset: root.offset
+                     isSelected: index === root.selectedIndex
+-                    dragEnabled: !(root.isPositionLocked && root.isPositionLocked(monitor?.name ?? ""))
++                    dragEnabled: !monitor.disabled && monitor.mirrorOf === "none"
++                        && !(root.isPositionLocked && root.isPositionLocked(monitor?.name ?? ""))
+ 
+                     onMonitorClicked: (idx) => root.selectedIndex = idx
+                     previewPositions: root.previewPositions
+diff --git a/dots/.config/quickshell/ii/modules/common/widgets/MonitorRect.qml b/dots/.config/quickshell/ii/modules/common/widgets/MonitorRect.qml
+index d9dbc792..ceea4c9e 100644
+--- a/dots/.config/quickshell/ii/modules/common/widgets/MonitorRect.qml
++++ b/dots/.config/quickshell/ii/modules/common/widgets/MonitorRect.qml
+@@ -32,6 +32,13 @@ Rectangle {
+ 
+     property int logW: monitorConfig?.logicalWidth(monitor) ?? 0
+     property int logH: monitorConfig?.logicalHeight(monitor) ?? 0
++    // Mode resolution (rotated like the logical size) and scale, e.g. "3840x2160 · 1.5x".
++    readonly property string modeLabel: {
++        const rot = monitor.transform === 1 || monitor.transform === 3
++        const w = rot ? monitor.height : monitor.width
++        const h = rot ? monitor.width : monitor.height
++        return `${w}x${h} · ${parseFloat((monitor.scale || 1).toFixed(2))}x`
++    }
+ 
+     x: isDragging ? dragX : preview.x * scaleFactor + canvasOffset.x
+     y: isDragging ? dragY : preview.y * scaleFactor + canvasOffset.y
+@@ -100,7 +107,7 @@ Rectangle {
+ 
+         StyledText {
+             anchors.horizontalCenter: parent.horizontalCenter
+-            text: `${root.logW}x${root.logH}`
++            text: root.modeLabel
+             font.pixelSize: Math.max(8, Math.min(10, root.width * 0.08))
+             color: Appearance.colors.colSubtext
+             horizontalAlignment: Text.AlignHCenter
+diff --git a/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml b/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
+index 436ad82a..6ad0804e 100644
+--- a/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
++++ b/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
+@@ -43,12 +43,20 @@ ContentPage {
+         return KraneSettings.isMonitorFieldLocked(monitorConfig.monitors[monitorCanvas.selectedIndex]?.name ?? "", field)
+     }
+ 
+-    // A try is pending: every section except the keep/revert banner is disabled, since
++    // A try is pending: every section is disabled (the keep/revert bar lives in settings.qml), since
+     // any other write would re-render the live file over the tried rule.
+     readonly property bool revertPending: KraneSettings.state.revertPending === true
+ 
+     MonitorConfigOption { id: monitorConfig }
+ 
++    // Widest mode string, so the mode combo box never elides it.
++    TextMetrics {
++        id: modeMetrics
++        font.pixelSize: Appearance.font.pixelSize.small
++        text: (monitorConfig.monitors[monitorCanvas.selectedIndex]?.availableModes ?? [])
++            .reduce((a, m) => m.length > a.length ? m : a, "")
++    }
++
+     ColumnLayout {
+         id: mainLayout
+         Layout.fillWidth: true
+@@ -84,37 +92,6 @@ ContentPage {
+             title: Translation.tr("Displays")
+             visible: monitorConfig.monitors.length > 0
+ 
+-            // Shown while the revert timer runs: after a try, or when boot-check found unconfirmed display settings.
+-            NoticeBox {
+-                id: keepBanner
+-                Layout.fillWidth: true
+-                visible: KraneSettings.state.revertPending === true
+-                property real now: Date.now() / 1000
+-                readonly property var deadline: KraneSettings.state.revertDeadline
+-                Timer {
+-                    interval: 1000; repeat: true; running: keepBanner.visible
+-                    onTriggered: keepBanner.now = Date.now() / 1000
+-                }
+-                text: typeof keepBanner.deadline === "number"
+-                    ? Translation.tr("Keep these display settings? Reverting in %1 s").arg(Math.max(0, Math.round(keepBanner.deadline - keepBanner.now)))
+-                    : Translation.tr("Keep these display settings? Reverting soon")
+-                Item { Layout.fillWidth: true }
+-                RippleButtonWithIcon {
+-                    Layout.fillWidth: false
+-                    buttonRadius: Appearance.rounding.small
+-                    materialIcon: "check"
+-                    mainText: Translation.tr("Keep")
+-                    onClicked: KraneSettings.confirm()
+-                }
+-                RippleButtonWithIcon {
+-                    Layout.fillWidth: false
+-                    buttonRadius: Appearance.rounding.small
+-                    materialIcon: "undo"
+-                    mainText: Translation.tr("Revert")
+-                    onClicked: KraneSettings.revert()
+-                }
+-            }
+-
+             MonitorCanvas {
+                 id: monitorCanvas
+                 Layout.fillWidth: true
+@@ -148,6 +125,7 @@ ContentPage {
+                         buttonIcon: "aspect_ratio"
+                         text: Translation.tr("Resolution & Refresh Rate") + (page.monitorLocked("mode") ? ` · ${KraneSettings.nixReason}` : "")
+                         enabled: !page.monitorLocked("mode")
++                        fieldWidth: modeMetrics.advanceWidth + 32 + 8 + Appearance.font.pixelSize.larger + 16
+                         textRole: "display"
+                         model: (monitorConfig.monitors[monitorCanvas.selectedIndex]?.availableModes ?? [])
+                             .map(mode => ({ display: mode, value: mode }))
+diff --git a/dots/.config/quickshell/ii/settings.qml b/dots/.config/quickshell/ii/settings.qml
+index ff67c54e..9960d5c6 100644
+--- a/dots/.config/quickshell/ii/settings.qml
++++ b/dots/.config/quickshell/ii/settings.qml
+@@ -174,13 +174,16 @@ ApplicationWindow {
+                 Behavior on implicitWidth {
+                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                 }
++                Flickable { // Scrolls the rail when the window is shorter than it
++                    id: navFlick
++                    anchors.fill: parent
++                    contentHeight: navRail.height
++                    clip: true
++                    boundsBehavior: Flickable.StopAtBounds
++                    ScrollBar.vertical: StyledScrollBar {}
+                 NavigationRail { // Window content with navigation rail and content pane
+                     id: navRail
+-                    anchors {
+-                        left: parent.left
+-                        top: parent.top
+-                        bottom: parent.bottom
+-                    }
++                    height: Math.max(implicitHeight, navFlick.height)
+                     spacing: 10
+                     expanded: root.width > 900
+                     
+@@ -239,6 +242,7 @@ ApplicationWindow {
+                         Layout.fillHeight: true
+                     }
+                 }
++                }
+             }
+             Rectangle { // Content container
+                 Layout.fillWidth: true
+@@ -246,6 +250,56 @@ ApplicationWindow {
+                 color: Appearance.m3colors.m3surfaceContainerLow
+                 radius: Appearance.rounding.windowRounding - root.contentPadding
+ 
++                Rectangle { // Keep/revert bar, pinned over the page while a display try is pending
++                    id: keepBar
++                    z: 10
++                    visible: KraneSettings.state.revertPending === true
++                    anchors {
++                        bottom: parent.bottom
++                        horizontalCenter: parent.horizontalCenter
++                        bottomMargin: 16
++                    }
++                    width: Math.min(parent.width - 32, keepRow.implicitWidth + 24)
++                    height: keepRow.implicitHeight + 16
++                    radius: Appearance.rounding.normal
++                    color: Appearance.colors.colPrimaryContainer
++                    property real now: Date.now() / 1000
++                    readonly property var deadline: KraneSettings.state.revertDeadline
++                    Timer {
++                        interval: 1000; repeat: true; running: keepBar.visible
++                        onTriggered: keepBar.now = Date.now() / 1000
++                    }
++                    StyledRectangularShadow { target: keepBar }
++                    RowLayout {
++                        id: keepRow
++                        anchors.centerIn: parent
++                        spacing: 8
++                        MaterialSymbol {
++                            text: "info"
++                            iconSize: Appearance.font.pixelSize.huge
++                            color: Appearance.colors.colOnPrimaryContainer
++                        }
++                        StyledText {
++                            color: Appearance.colors.colOnPrimaryContainer
++                            text: typeof keepBar.deadline === "number"
++                                ? Translation.tr("Keep these display settings? Reverting in %1 s").arg(Math.max(0, Math.round(keepBar.deadline - keepBar.now)))
++                                : Translation.tr("Keep these display settings? Reverting soon")
++                        }
++                        RippleButtonWithIcon {
++                            buttonRadius: Appearance.rounding.small
++                            materialIcon: "check"
++                            mainText: Translation.tr("Keep")
++                            onClicked: KraneSettings.confirm()
++                        }
++                        RippleButtonWithIcon {
++                            buttonRadius: Appearance.rounding.small
++                            materialIcon: "undo"
++                            mainText: Translation.tr("Revert")
++                            onClicked: KraneSettings.revert()
++                        }
++                    }
++                }
++
+                 Loader {
+                     id: pageLoader
+                     anchors.fill: parent
