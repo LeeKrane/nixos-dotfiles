@@ -4,7 +4,7 @@ Path from a blank machine to a working `tariognatha`, `tarmantria`, or `taractia
 
 Desktops and laptops only. The servers (`taragarmr`, `taronychus`, `tarritator`, `tarronax`) are not installed with `install.sh`: see their `hosts/<name>/default.nix` header comments and the Servers section of [secrets/README.md](../secrets/README.md).
 
-`install.sh` drives disko, `nixos-install`, secrets bootstrap, the Rust toolchain, flathub and the required second `nixos-rebuild switch`. Every destructive step has a `--dry-run` preview. Appendix A is the manual path, Appendix B documents `install.sh` step by step.
+`install.sh` drives disko, `nixos-install`, secrets bootstrap, the Rust toolchain, flathub and the required second `nixos-rebuild switch`. Every destructive step has a `--dry-run` preview. Appendix A is the manual path, The last section lists `install.sh`'s mode detection and dry-run invariants.
 
 ## 0. Before you start
 
@@ -37,7 +37,7 @@ On a live ISO this runs install mode:
 4. Disk: lists real disks, excludes the ISO's own device, offers a stable `/dev/disk/by-id/...` path.
 5. Confirmation: you type the kernel device name, such as `nvme0n1`.
 6. Partition and format: patches `hosts/<host>/disko.nix`'s `/dev/CHANGE-ME` with your disk and runs disko. This erases the disk. Layout: GPT, an ESP, btrfs root with zstd-compressed `@`, `@home`, `@nix`, `@snapshots` subvolumes, zram swap.
-7. Install swapfile: under 24 GiB RAM, a 16 GiB swapfile at `/mnt/swapfile`, removed after `nixos-install`. The nix eval heap alone stays around 5 GB and the live ISO has no swap. `nixos-install` also runs with `max-jobs = 1` and half the cores, so local compiles (quickshell) do not trigger the OOM killer.
+7. Install swapfile: under 24 GiB RAM, a 16 GiB swapfile at `/mnt/swapfile`, removed after `nixos-install`. The live ISO has no swap to back the nix eval heap. `nixos-install` also runs with `max-jobs = 1` and half the cores, so local compiles (quickshell) do not trigger the OOM killer.
 8. Hardware config: `nixos-generate-config --no-filesystems --root /mnt`, written to `hosts/<host>/hardware-configuration.nix`.
 9. PRIME bus IDs, `tarmantria` only: patches `krane.prime.intelBusId`/`nvidiaBusId` in `hosts/tarmantria/default.nix` from `lspci -D`.
 10. Local commit of the hardware config and PRIME changes: flakes only see git-tracked files.
@@ -48,7 +48,7 @@ On a live ISO this runs install mode:
 
 ## 2. After first boot: setup mode
 
-Every host autologins into the plain (non-UWSM) Hyprland session and locks it at once, so the ii lock screen is the first thing you see (`modules/nixos/desktop/desktop.nix`). This is acceptable because no host encrypts its disk: there is no boot password gate to preserve. tuigreet appears after logout or `systemctl restart greetd`; "Hyprland (UWSM)" is its normal session, plain "Hyprland" the fallback ([II-INTEGRATION.md "Rollback and escape hatches"](II-INTEGRATION.md#rollback-and-escape-hatches)).
+Every host autologins into the plain (non-UWSM) Hyprland session and locks it at once, so the ii lock screen is the first thing you see (`modules/nixos/desktop/desktop.nix`). The lock-on-start reason is in [II-INTEGRATION.md](II-INTEGRATION.md); skipping the greeter costs nothing because no host encrypts its disk. tuigreet appears after logout or `systemctl restart greetd`; "Hyprland (UWSM)" is its normal session, plain "Hyprland" the fallback ([II-INTEGRATION.md "Rollback and escape hatches"](II-INTEGRATION.md#rollback-and-escape-hatches)).
 
 Log in, then from `~/.dotfiles`:
 
@@ -58,7 +58,7 @@ Log in, then from `~/.dotfiles`:
 
 On an installed system this runs setup mode:
 
-1. Bootstraps sops-nix (`scripts/bootstrap-sops.sh <host>`): derives this host's age recipient and offers to commit `.sops.yaml`. If you decline, commit later with Appendix A step 9. sshd runs only so `sshd-keygen` creates the host key at boot; `openFirewall = false`.
+1. Bootstraps sops-nix (`scripts/bootstrap-sops.sh <host>`): derives this host's age recipient and offers to commit `.sops.yaml`. If you decline, commit later with Appendix A step 10. sshd runs only so `sshd-keygen` creates the host key at boot; `openFirewall = false`.
 2. Offers to edit `secrets/<host>.yaml` with `sops` (skipped under `--yes`/`--dry-run`) and to commit it. An uncommitted secrets file evaluates as absent to sops-nix. Keys: [secrets/README.md](../secrets/README.md).
 3. Offers the Rust toolchain (`rustup default stable` plus components).
 4. Offers the flathub remote.
@@ -103,32 +103,22 @@ Non-interactively:
     --disk /dev/disk/by-id/<disk> --yes --confirm-wipe
 ```
 
-`--yes --new-host` requires `--user`, `--profile` and `--form-factor`. `--git-name`, `--git-email`, `--kb-layout` and `--kb-variant` take the defaults above. All of these flags are usage errors without `--new-host` or outside install mode.
+`--yes --new-host` requires `--user`, `--profile` and `--form-factor`; `--git-name`, `--git-email`, `--kb-layout` and `--kb-variant` take the defaults above (variant: `nodeadkeys` for `at`, else empty). All of them are usage errors without `--new-host` or outside install mode.
 
 To check the templates without a machine, commit your change and run `just check-new-host` (needs local Nix). It scaffolds a throwaway `testhost` for each GPU profile and form factor in a temporary git worktree and checks each is nixfmt-clean and evaluates.
 
 ## Flags
 
+`./install.sh --help` lists them all; the new-host flags are under [Installing a new machine](#installing-a-new-machine). Non-obvious ones:
+
 | Flag | What it does |
 | --- | --- |
-| `--mode install\|setup` | Force a mode instead of auto-detecting it. |
-| `--host HOST` | One of the directories under `hosts/`. |
-| `--new-host NAME` | Install mode only: create `hosts/NAME` from `templates/host/`. |
-| `--user NAME` | New host's login user, default `krane`. |
-| `--git-name NAME` | New host's git `user.name`, default: the login user. |
-| `--git-email EMAIL` | New host's git `user.email`, default `chris@krane.dev`. |
-| `--profile PROFILE` | New host's GPU profile: `amd-igpu`, `intel-igpu`, `nvidia-desktop`, `intel-nvidia-prime`. |
-| `--form-factor FF` | New host's form factor: `laptop` or `desktop`. |
-| `--kb-layout LAYOUT` | New host's keyboard layout, default `at`. |
-| `--kb-variant VARIANT` | New host's keyboard variant, default `nodeadkeys` for `at`, otherwise empty. |
-| `--disk DISK` | Target block device, install mode only. |
 | `-y`, `--yes` | Auto-confirm every prompt. Never skips setting the login user's password. |
 | `-n`, `--dry-run` | Print every mutating command instead of running it. Implies `--yes`. |
 | `--confirm-wipe` | Required for a live, non-dry-run `--yes` install. |
 | `--self-test` | Exercise `install.sh`'s own failure handling in isolation (maintainer and CI hook, not in `--help`). |
-| `-h`, `--help` | Show usage and exit. |
 
-`--yes`/`--dry-run` turn prompts off, so they need `--host` (or `--new-host` with its three required flags) and, in install mode, `--disk`. A live `--yes` install also needs `--confirm-wipe`.
+`--yes`/`--dry-run` turn prompts off, so they need `--host` (or `--new-host` with its required flags) and, in install mode, `--disk`.
 
 On a non-NixOS system `install.sh` defaults to install mode. Pass `--dry-run` or `--mode setup` when experimenting on an ordinary Linux box.
 
@@ -136,7 +126,7 @@ On a non-NixOS system `install.sh` defaults to install mode. Pass `--dry-run` or
 
 ### DNS timeouts ("Resolving timed out")
 
-Preflight offers to pin public DNS. By hand:
+The DNS check (install step 3) offers to pin public DNS. By hand:
 
 ```sh
 nmcli -t -f NAME con show --active
@@ -219,14 +209,14 @@ Replace `<host>` with `tariognatha`, `tarmantria`, or `taractias`. Paths assume 
     lspci | grep -E 'VGA|3D'
     ```
 
-    Under 24 GiB RAM, create a temporary swapfile first, and run `nixos-install` with `NIX_CONFIG=$'max-jobs = 1\ncores = 4'` (or half the cores) to avoid the OOM killer:
+5. Under 24 GiB RAM, create a temporary swapfile, and run `nixos-install` with `NIX_CONFIG=$'max-jobs = 1\ncores = 4'` (or half the cores) to avoid the OOM killer.
 
     ```sh
     btrfs filesystem mkswapfile --size 16g /mnt/swapfile
     swapon /mnt/swapfile
     ```
 
-5. Install. `flake.nix` has no `nixConfig`, so pass the CUDA cache explicitly, only on `tariognatha`, the one host with CUDA packages.
+6. Install. `flake.nix` has no `nixConfig`, so pass the CUDA cache explicitly, only on `tariognatha`, the one host with CUDA packages.
 
     ```sh
     nixos-install --flake "$PWD#<host>" --option extra-substituters https://cache.nixos-cuda.org --option extra-trusted-public-keys cache.nixos-cuda.org:74DUi4Ye579gUqzH4ziL9IyiJBlDpMRn9MBN8oNan9M=   # tariognatha
@@ -239,27 +229,27 @@ Replace `<host>` with `tariognatha`, `tarmantria`, or `taractias`. Paths assume 
     swapoff /mnt/swapfile && rm -f /mnt/swapfile
     ```
 
-6. Set krane's password before rebooting.
+7. Set krane's password before rebooting.
 
     ```sh
     nixos-enter --root /mnt -- passwd krane
     ```
 
-7. Copy this repo onto the new install, before rebooting.
+8. Copy this repo onto the new install, before rebooting.
 
     ```sh
     cp -a ~/.dotfiles /mnt/home/krane/.dotfiles
     nixos-enter --root /mnt -- chown -R krane:users /home/krane/.dotfiles
     ```
 
-8. Reboot, log in, switch twice. The second switch proves the ii dotfiles-copy step and this repo's overrides are idempotent.
+9. Reboot, log in, switch twice. The second switch proves the ii dotfiles-copy step and this repo's overrides are idempotent.
 
     ```sh
     sudo nixos-rebuild switch --flake ~/.dotfiles#<host>
     sudo nixos-rebuild switch --flake ~/.dotfiles#<host>
     ```
 
-9. Bootstrap sops-nix and fill in secrets. Commit both: an uncommitted secrets file evaluates as absent.
+10. Bootstrap sops-nix and fill in secrets. Commit both: an uncommitted secrets file evaluates as absent.
 
     ```sh
     scripts/bootstrap-sops.sh <host>
@@ -269,7 +259,7 @@ Replace `<host>` with `tariognatha`, `tarmantria`, or `taractias`. Paths assume 
     sudo nixos-rebuild switch --flake ~/.dotfiles#<host>
     ```
 
-10. Add the six `wireguard/*` keys to `secrets/<host>.yaml` with `sops set` ([secrets/README.md](../secrets/README.md)) and rebuild. The `wg0.conf` template renders from them and `networking.wg-quick.interfaces.wg0` autostarts on the next switch.
+11. Add the six `wireguard/*` keys to `secrets/<host>.yaml` with `sops set` ([secrets/README.md](../secrets/README.md)) and rebuild. The `wg0.conf` template renders from them and `networking.wg-quick.interfaces.wg0` autostarts on the next switch.
 
     ```sh
     sops set secrets/<host>.yaml '["wireguard"]["wg0-private-key"]' '"<real private key>"'
@@ -282,62 +272,13 @@ Replace `<host>` with `tariognatha`, `tarmantria`, or `taractias`. Paths assume 
     sudo nixos-rebuild switch --flake ~/.dotfiles#<host>
     ```
 
-11. Set up Proton Drive, if you did not seed `rclone/config-seed`.
+12. Set up Proton Drive if you did not seed `rclone/config-seed` (`rclone config`, then `systemctl --user restart proton-drive-mount`), add the flathub remote and the Rust toolchain: setup mode steps 3-4.
 
-    ```sh
-    rclone config
-    systemctl --user restart proton-drive-mount
-    ```
+13. Migrate data and add a Windows entry: see "Data migration" and "Windows dual-boot entry".
 
-12. Add the flathub remote, then install what you want.
+## Dry-run invariants and mode detection
 
-    ```sh
-    flatpak install flathub <app-id>
-    ```
-
-13. Install the Rust toolchain. `modules/home/desktop/dev.nix` installs `rustup`, not a pinned toolchain.
-
-    ```sh
-    rustup default stable
-    rustup component add rust-analyzer rust-src
-    ```
-
-14. Migrate data and add a Windows entry: see "Data migration" and "Windows dual-boot entry".
-
-## Appendix B: what `install.sh` does, step by step
-
-Function and variable names are the stable reference; line numbers move.
-
-Mode detection (`detect_mode`): `install` if `/iso` exists, `/etc/NIXOS` is missing, or `/` is an `overlay` filesystem (a live ISO's root); `setup` otherwise. `--mode` overrides.
-
-### Install mode (`run_install_mode`)
-
-- `preflight_live`: root, UEFI, network, required tools.
-- `choose_host`: `gum choose` over `suggest_host`'s guess plus `+ new host`. `+ new host` (or `--new-host`) runs `prompt_new_host`, which collects every answer first, pre-selecting `suggest_profile`'s GPU profile and form factor.
-- `check_dns`: probes `cache.nixos.org` (plus `cache.nixos-cuda.org` on the CUDA host); offers to pin public DNS on the active NetworkManager connection when a lookup fails or exceeds 3 s.
-- `choose_disk`, `validate_disk_is_physical`, `confirm_wipe_target`: disk list from `lsblk` minus the ISO's device, a stable `/dev/disk/by-id` path, and a typed-confirmation gate before anything destructive.
-- `scaffold_host`, new hosts only: renders `templates/host/` into a staging dir, runs `nix-instantiate --parse` on each file, copies it to `hosts/<name>/`, adds the host's placeholders to `.sops.yaml` (`register_sops_host`). A failure before it finishes rolls both back from `on_exit`. Under `--dry-run` only the staging dir is written.
-- `patch_disko`, `run_disko`: sed-patches `/dev/CHANGE-ME` in `hosts/$HOST/disko.nix`, verified with `grep -qF`, then builds and runs that host's disko script.
-- `resolve_install_user`: after `git add -A`, reads the login user from `nix eval …#nixosConfigurations.$HOST.config.krane.user.name` (the prompt answer for a new host under `--dry-run`).
-- `setup_install_swap` / `teardown_install_swap`: the 16 GiB swapfile when RAM is under 24 GiB. Best effort: a failure warns and continues.
-- `generate_hardware_config`: `nixos-generate-config`, checked for `availableKernelModules` and no `fileSystems`.
-- `patch_prime`: `tarmantria` only; converts `lspci -D` addresses to `PCI:B:D:F` decimal.
-- `commit_hardware_config`: commits (`Add <name> host` for a new host), with a throwaway `<user>@localhost` identity if none is configured.
-- `run_nixos_install`: `nixos-install --flake "$REPO_ROOT#$HOST" --no-root-passwd`, plus `flake_config_opt`'s CUDA substituter options on the CUDA host. Up to 3 attempts, 10 s apart, each confirmed.
-- `finish_install`: copies the repo to `/mnt/home/<user>/.dotfiles`, chowns it, verifies `flake.nix` landed, sets the password, warns that a new host is only a local commit, offers a reboot.
-
-### Setup mode (`run_setup_mode`)
-
-- `preflight_setup`: refuses to run as root, requires `git just sops age ssh-to-age`, dies when the host (`--host` or `hostname`) is not under `hosts/`.
-- `run_bootstrap_sops`: runs `scripts/bootstrap-sops.sh $HOST`, offers to commit `.sops.yaml`.
-- `edit_host_secrets`: offers `sops secrets/$HOST.yaml` (skipped under `--yes`), then offers to commit it.
-- `setup_rust`, `check_flathub`: each offered independently.
-- `verify_checks`: each check reports OK, WARN or SKIP independently.
-- `second_switch`: `sudo nixos-rebuild switch --flake $REPO_ROOT#$HOST` plus the CUDA options, then `verify_checks` again.
-
-### Dry-run invariants
-
-- Every mutating call goes through `run`, `run_sh` or `capture`, which print `+ the command` under `--dry-run`.
-- Read-only probes (`lsblk`, `lspci`, `hostname`, the post-sed `grep -qF` checks, the VERIFY checks) run for real.
+- `detect_mode`: `install` if `/iso` exists, `/etc/NIXOS` is missing, or `/` is an `overlay` filesystem (a live ISO's root); `setup` otherwise. `--mode` overrides.
+- Every mutating call goes through `run`, `run_sh` or `capture`, which print `+ the command` under `--dry-run`. Read-only probes (`lsblk`, `lspci`, `hostname`, the post-sed `grep -qF` checks, the VERIFY checks) run for real.
 - `gum choose`/`gum input` are never reached under `--yes`/`--dry-run`: callers require `--host`/`--disk` instead.
 - Output is duplicated to `/tmp/krane-install-<timestamp>-<pid>.log`; if `/tmp` is not writable it warns once and continues.
