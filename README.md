@@ -49,28 +49,55 @@ This repo pulls ii in as the soymou module instead of reimplementing ii's instal
 
 ## Checks, CI and deploys
 
-`just check` evaluates the flake and dry-run-builds every x86_64 host's toplevel in a throwaway Docker sandbox (the aarch64 Pis are evaluated only in CI), so a machine with Docker but no Nix can check the whole config. `just docker-build <host>` does a real build there. A pre-push hook (`just hooks`) runs `scripts/lint.sh`, the same lint as CI.
-
-CI runs the same eval and lint gate on every push to `main` and every pull request, except documentation-only changes (`.github/workflows/check.yml`). A weekly job (`.github/workflows/update.yml`) opens two pull requests, one per update lane: servers (stable channel, shared inputs, claude-code) and desktops (everything else); `.github/workflows/update-lane.yml` does each lane's work. CI builds only the nvim checks, the Lua syntax check and the server-only packages (`server-upgrade`, `claude-code`). When a commit on `main` passes the check, `.github/workflows/promote.yml` moves the `deploy` branch to it, and the servers auto-upgrade from `deploy`.
+`just check` and CI eval-check every host and dry-run-build the x86_64 ones (the aarch64 Pis are evaluated only in CI); `just hooks` installs a pre-push hook running `scripts/lint.sh`, the same lint as CI. Details: [docs/VERIFY.md](docs/VERIFY.md). Weekly update pull requests come in two lanes, servers and desktops. When a commit on `main` passes the check, `.github/workflows/promote.yml` moves the `deploy` branch to it, and the servers auto-upgrade from `deploy`.
 
 Things that are easy to break here:
 
 - The update pull requests are opened with `GITHUB_TOKEN`, so GitHub does not run `check.yml` on them. `update-lane.yml` calls it itself and reports the result in the PR body; `check.yml` runs again on `main` after the merge. Opening them needs "Allow GitHub Actions to create and approve pull requests" under the repository's Settings, Actions, General.
 - Every gated `main` commit reaches the servers, including desktop-only ones, because `system.configurationRevision` (`lib/mk-host.nix`) is the commit. Such a commit causes a revision-only activation, and the upgrade hooks compare that revision with `deploy`, so do not remove it. A desktop-lane `nixpkgs` bump also changes the server closures: `modules/home/server/default.nix` takes `codegraph` from `nixpkgs-unstable`. The PR body's "Merging deploys to" line lists the servers a PR reaches.
 - A server upgrade that fails its health check rolls back, including after the reboot a kernel change triggers (`scripts/server-upgrade-hooks.sh`, `boot-health`). A kernel that does not boot never reaches that check.
-- The desktop notifier (`modules/home/desktop/flake-update-notify.nix`) parses the PR body's `### Package versions`, `### Inputs` and `### Security: what is in this repo on purpose
+- The desktop notifier (`modules/home/desktop/flake-update-notify.nix`) parses the PR body's `### Package versions`, `### Inputs` and `### Security` headings from `scripts/update-summary.sh` and `scripts/security-summary.sh`. Rename them only together with `scripts/flake-update-notify.sh`.
+
+## Installs
+
+The desktops and laptops are installed from a NixOS unstable minimal ISO by `install.sh`: runbook in [docs/INSTALL.md](docs/INSTALL.md). The servers are installed differently: `taragarmr` with nixos-anywhere, the Pis from flashable images (`packages.image-<host>`); each host's `hosts/<host>/default.nix` header records how.
+
+## Gotchas
+
+- Login shell is fish; its config lives at the NixOS level because ii wipes `~/.config/fish` on every switch. zsh stays as a fallback behind `krane.zshFallback.enable` (default true, `modules/home/common/zsh-fallback.nix`): `exec zsh`.
+- Neovim is the standalone NixVim build (`modules/nixvim/`), installed by `modules/home/common/neovim.nix`; `~/.config/nvim` is unused. `just nvim <file>` tries changes without switching. Colors follow the wallpaper: `modules/nixvim/lua/dynamic-theme.lua` reads ii's `material_colors.scss` and falls back to a built-in palette without it.
+- ii's default browser is zen (`browser` in `hosts/*/display.nix`, package from the zen-browser flake in `modules/home/desktop/apps.nix`).
+- `home.stateVersion` is "26.05" (`modules/home/common/default.nix`). Do not bump it on an existing install without reading home-manager's release notes.
+
+## Layout
+
+```
+flake.nix  lib/mk-host.nix   flake entry point, shared host builder
+install.sh                   live-ISO installer, post-boot setup script
+hosts/<host>/                hardware, disko layout, Hyprland monitor/input; optional host.nix = { system, role, board, image } (default x86_64-linux, desktop; board and image are for the Pis)
+templates/host/              new-host templates install.sh renders into hosts/<name>/
+modules/nixos/{common,desktop,server}/  system config by role, gpu/ per host
+modules/home/{common,desktop,server}/   home-manager config by role: ii wrapper, neovim, ...
+modules/nixvim/              standalone NixVim editor config (packages.nvim)
+overlays/  pkgs/  patches/   overlays, own packages (plymouth-lone, ...), patches for ii and ii-flake
+config/zsh/                  vendored dotfiles
+assets/wallpapers/           curated wallpaper set
+android/                     ani-cli launcher app
+scripts/                     bootstrap-sops.sh, docker-check.sh, lint.sh, CI and update helpers, Proton Drive mount
+secrets/                     sops-encrypted <host>.yaml per host, README.md
+tests/server-host/           server-role config evaluated by CI, not a real host
+docs/                        INSTALL, VERIFY, II-INTEGRATION
+```
+
+## Security: what is in this repo on purpose
 
 Left in because it is meaningless to anyone else or needed for the config to work as shown: the git identity `krane <chris@krane.dev>` (`modules/nixos/common/user.nix`), username and hostnames, the `Europe/Vienna` time zone and `at` / `nodeadkeys` keyboard defaults, the RFC 1918 LAN and WireGuard addresses (`lib/lan.nix`, `lib/wireguard.nix`) and the SSH public keys the servers accept (`lib/ssh-keys.nix`).
 
-No private keys, passwords, password hashes, API tokens, WireGuard/age/SSH private key material, or MAC addresses appear in any tracked file or the published history. Secrets are sops-nix encrypted: [secrets/README.md](secrets/README.md). sshd accepts keys only, with no password or root login. On the desktops it runs only so `sshd-keygen` creates the age identity's host key, with `openFirewall = false`; on the servers it is also the admin path, port 22 open.
+No private keys, passwords, password hashes, API tokens, WireGuard/age/SSH private key material, or MAC addresses appear in any tracked file or the published history. Secrets: [secrets/README.md](secrets/README.md).
 
 ## Licence
 
-[MIT](LICENSE), copyright krane, 2026, except the third-party material below.
-
-The Plymouth boot theme under `pkgs/plymouth-lone/theme/` is a derivative of adi1090x's Plymouth themes and stays under its original GPLv3 licence: see `pkgs/plymouth-lone/theme/LICENSE`.
-
-The ii patches under `patches/ii/` modify [end-4/dots-hyprland](https://github.com/end-4/dots-hyprland) and are GPL-3.0 like upstream: see `patches/ii/LICENSE`. The `01-fixes` backports and the `05-settings` settings pages come from [pctrade/end4-pC](https://github.com/pctrade/end4-pC). The `patches/illogical-flake-*.patch` files quote [soymou/illogical-flake](https://github.com/soymou/illogical-flake), which has no licence. [LICENSE](LICENSE) has the full breakdown, including the LazyVim and powerlevel10k material.
+[MIT](LICENSE), copyright krane, 2026. Third-party material (the Plymouth theme, the ii patches, vendored LazyVim and powerlevel10k files) keeps its own licence: see [LICENSE](LICENSE).
 
 ## Docs
 
