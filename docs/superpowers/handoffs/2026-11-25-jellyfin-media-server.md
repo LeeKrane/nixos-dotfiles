@@ -60,7 +60,6 @@ What follows from that:
 - `hosts/taragarmr/caddy.nix`, `backup.nix`, `backup-drive.nix`, `services.nix`.
 - `modules/nixos/server/backup.nix` (the `krane.backup` options).
 - `tests/server-host/default.nix` and the checks in `flake.nix`, to see what the change must keep passing.
-- Existing specs in `docs/superpowers/specs/` show the house format, for example `2026-11-23-server-auto-upgrade-design.md`.
 - The user's memory notes `~/server-migration/DECISIONS.md`, but that file does not exist on tariognatha (this desktop). It may be on another machine. Ask the user if it matters.
 
 ## Environment notes
