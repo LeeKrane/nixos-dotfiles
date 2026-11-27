@@ -660,6 +660,8 @@ class Settings:
             "nixOwned": self.manifest["nixOwned"],
             "monitorBaselines": self.manifest["monitorBaselines"],
             "idleBaseline": self.manifest["idleBaseline"],
+            # xkeyboard-config's layout and variant list, for the keyboard dropdowns.
+            "xkbRules": self.manifest.get("xkbRules"),
             "repo": None,
             "error": None,
             "pending": read_pending(),
@@ -680,11 +682,18 @@ class Settings:
         return json.dumps(state, sort_keys=True)
 
     def set(self, section, key, pairs):
-        check_owner(section, key, [f for f, _ in pairs], self.manifest)
+        # hyprland: pairs are (key, value) and may name several keys, written together.
+        for k in ([f for f, _ in pairs] if section == "hyprland" else [key]):
+            check_owner(section, k, [f for f, _ in pairs], self.manifest)
         with locked(self.manifest):
             data, text = read_repo(self.repo)
             validate_data(data, self.schema)
-            new = edit_set(data, section, key, pairs, self.schema)
+            if section == "hyprland":
+                new = data
+                for k, raw in pairs:
+                    new = edit_set(new, section, k, [(k, raw)], self.schema)
+            else:
+                new = edit_set(data, section, key, pairs, self.schema)
             if section == "monitor":
                 new = complete_rule(new, key, self.manifest, self.runtime)
                 mark_unconfirmed(data.get("monitors", {}).get(key), new["monitors"][key])
@@ -960,6 +969,8 @@ def main(argv=None, runtime_factory=Runtime):
         elif args.cmd == "set":
             if args.section == "monitor":
                 pairs = pairs_from(args.rest, "set monitor")
+            elif args.section == "hyprland":
+                pairs = pairs_from([args.key] + args.rest, "set hyprland")
             else:
                 if len(args.rest) != 1:
                     raise SettingsError(f"set {args.section} {args.key}: expected one value")

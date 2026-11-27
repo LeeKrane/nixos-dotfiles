@@ -6,6 +6,7 @@
   "idleConfigurator": "/nonexistent/hypridleconfigurator.py",
   "qsBin": "/nonexistent/qs",
   "settingsQml": "/nonexistent/settings.qml",
+  "xkbRules": "/nonexistent/base.lst",
   "nixOwned": {
     "hyprland": ["cursor:default_monitor", "input:kb_layout", "input:kb_variant"],
     "idle": false,

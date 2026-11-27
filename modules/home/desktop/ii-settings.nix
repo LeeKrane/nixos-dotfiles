@@ -101,6 +101,7 @@ let
     idleConfigurator = "${home}/.config/quickshell/ii/scripts/hyprland/hypridleconfigurator.py";
     qsBin = "${config.home.profileDirectory}/bin/qs";
     settingsQml = "${home}/.config/quickshell/ii/settings.qml";
+    xkbRules = "${pkgs.xkeyboard_config}/share/X11/xkb/rules/base.lst";
     nixOwned = {
       hyprland = lib.sort lib.lessThan nixHyprKeys;
       idle = false;

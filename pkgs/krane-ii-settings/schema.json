@@ -16,7 +16,7 @@
     "general:layout": { "type": "enum", "values": ["dwindle", "master", "scrolling"] },
     "input:follow_mouse": { "type": "int", "min": 0, "max": 3 },
     "input:kb_layout": { "type": "str", "pattern": "^[a-z]+(,[a-z]+)*$" },
-    "input:kb_variant": { "type": "str", "pattern": "^[a-z0-9_]*(,[a-z0-9_]*)*$" },
+    "input:kb_variant": { "type": "str", "pattern": "^[a-z0-9_-]*(,[a-z0-9_-]*)*$" },
     "input:numlock_by_default": { "type": "bool" },
     "input:repeat_delay": { "type": "int", "min": 0, "max": 2000 },
     "input:repeat_rate": { "type": "int", "min": 0, "max": 200 },

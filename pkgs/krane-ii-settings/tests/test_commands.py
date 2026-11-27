@@ -312,6 +312,7 @@ class TestCli(Base):
         state = json.loads(k.Settings(self.manifest, SCHEMA, self.runtime).get())
         self.assertIn("cannot parse", state["error"])
         self.assertEqual(state["nixOwned"]["hyprland"], ["cursor:default_monitor", "input:kb_layout", "input:kb_variant"])
+        self.assertEqual(state["xkbRules"], "/nonexistent/base.lst")
 
     def test_main_exit_codes(self):
         (self.dir / "manifest.json").write_text(json.dumps(self.manifest))
@@ -321,6 +322,23 @@ class TestCli(Base):
         self.assertEqual(k.main(["--manifest", mp, "set", "hyprland", "general:gaps_in", "12"], factory), 0)
         self.assertEqual(k.main(["--manifest", mp, "reset", "hyprland", "general:gaps_in"], factory), 0)
         self.assertEqual(self.repo.read_text(), "{}\n")
+
+    def test_main_sets_several_hyprland_keys_in_one_write(self):
+        self.manifest["nixOwned"]["hyprland"] = ["cursor:default_monitor"]
+        (self.dir / "manifest.json").write_text(json.dumps(self.manifest))
+        mp = str(self.dir / "manifest.json")
+        factory = lambda m: FakeRuntime(m)  # noqa: E731
+        self.assertEqual(k.main(["--manifest", mp, "set", "hyprland", "input:kb_layout", "us",
+                                 "input:kb_variant", "altgr-intl"], factory), 0)
+        self.assertEqual(self.repo_data(), {"hyprland": {"input:kb_layout": "us", "input:kb_variant": "altgr-intl"}})
+        # Any bad pair leaves the file as it was.
+        self.assertEqual(k.main(["--manifest", mp, "set", "hyprland", "input:kb_layout", "de",
+                                 "general:gaps_in", "x"], factory), 1)
+        self.assertEqual(k.main(["--manifest", mp, "set", "hyprland", "input:kb_layout", "de",
+                                 "cursor:default_monitor", "DP-1"], factory), 1)
+        self.assertEqual(k.main(["--manifest", mp, "set", "hyprland", "input:kb_layout", "de",
+                                 "input:kb_variant"], factory), 1)
+        self.assertEqual(self.repo_data()["hyprland"]["input:kb_layout"], "us")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,166 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Fri, 27 Nov 2026 03:46:36 +0100
+Subject: [PATCH] feat(settings): keyboard layout and variant dropdowns from
+ xkeyboard-config
+
+Problem: the keyboard layout was a free text field and the variant had no control at all.
+Fix: krane-ii-settings get passes xkeyboard-config's rules/base.lst; the Hyprland page offers a layout dropdown and a variant dropdown filtered by the layout. Picking a layout clears the variant first, since the old one may not exist for the new layout.
+---
+ .../ii/modules/settings/HyprlandConfig.qml    | 66 ++++++++++++++-----
+ .../ii/modules/settings/xkb-rules.js          | 27 ++++++++
+ .../quickshell/ii/services/KraneSettings.qml  |  7 +-
+ 3 files changed, 84 insertions(+), 16 deletions(-)
+ create mode 100644 dots/.config/quickshell/ii/modules/settings/xkb-rules.js
+
+diff --git a/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml b/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
+index 6ad0804e..a22c37d7 100644
+--- a/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
++++ b/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
+@@ -7,11 +7,33 @@ import qs.services
+ import qs.modules.common
+ import qs.modules.common.widgets
+ import qs.modules.common.models.hyprland
++import "xkb-rules.js" as XkbRules
+ 
+ ContentPage {
+     id: page
+     forceWidth: true
+ 
++    // Keyboard dropdown models, from xkeyboard-config's base.lst (path from krane-ii-settings get).
++    property var xkb: ({ layouts: [], variants: {} })
++    FileView {
++        id: xkbRulesFile
++        path: KraneSettings.state.xkbRules ?? ""
++        printErrors: false
++        onLoaded: page.xkb = XkbRules.parse(xkbRulesFile.text())
++    }
++
++    // hyprctl reports an empty string option as "[[EMPTY]]".
++    function optString(opt) {
++        const v = opt.value ?? ""
++        return v === "[[EMPTY]]" ? "" : v
++    }
++
++    // A current value base.lst does not list (e.g. "us,de") stays selectable.
++    function withCurrent(options, value) {
++        if (value === "" || options.some(o => o.value === value)) return options
++        return [{ value: value, displayName: value }].concat(options)
++    }
++
+     function goTo(term) {
+         const t = term.toLowerCase().trim()
+ 
+@@ -401,25 +423,39 @@ ContentPage {
+                 title: Translation.tr("Keyboard")
+ 
+                 GroupedList {
+-                    ConfigTextArea {
++                    ConfigComboBox {
+                         HyprlandConfigOption { id: optKbLayout; key: "input:kb_layout" }
+-                        id: kbLayoutField
+                         Layout.fillWidth: true
+                         buttonIcon: "keyboard"
+                         text: Translation.tr("Keyboard layout") + (optKbLayout.locked ? ` · ${optKbLayout.lockedReason}` : "") + (optKbLayout.available ? "" : ` · ${Translation.tr("hyprctl did not answer")}`)
+-                        placeholderText: Translation.tr("e.g., us, es, latam")
+-                        enabled: !optKbLayout.locked && optKbLayout.available
+-                        value: optKbLayout.value ?? ""
+-                        onValueChanged: kbLayoutDebounceTimer.restart()
+-
+-                        Timer {
+-                            id: kbLayoutDebounceTimer
+-                            interval: 1000
+-                            repeat: false
+-                            onTriggered: {
+-                                if (optKbLayout.fetching || !optKbLayout.loaded || kbLayoutField.value === (optKbLayout.value ?? "")) return
+-                                optKbLayout.setValue(kbLayoutField.value)
+-                            }
++                        enabled: !optKbLayout.locked && optKbLayout.available && optKbLayout.loaded && page.xkb.layouts.length > 0
++                        fieldWidth: 280
++                        model: page.withCurrent(page.xkb.layouts, page.optString(optKbLayout))
++                        currentValue: page.optString(optKbLayout)
++                        onSelected: newValue => {
++                            if (optKbLayout.fetching || !optKbLayout.loaded || newValue === page.optString(optKbLayout)) return
++                            // A variant the new layout lacks is cleared in the same write.
++                            const variant = page.optString(optKbVariant)
++                            const keeps = variant === "" || (page.xkb.variants[newValue] ?? []).some(v => v.value === variant)
++                            if (keeps || optKbVariant.locked)
++                                optKbLayout.setValue(newValue)
++                            else
++                                KraneSettings.setHyprland([["input:kb_layout", newValue], ["input:kb_variant", ""]])
++                        }
++                    }
++                    ConfigComboBox {
++                        HyprlandConfigOption { id: optKbVariant; key: "input:kb_variant" }
++                        Layout.fillWidth: true
++                        buttonIcon: "keyboard_alt"
++                        text: Translation.tr("Keyboard variant") + (optKbVariant.locked ? ` · ${optKbVariant.lockedReason}` : "") + (optKbVariant.available ? "" : ` · ${Translation.tr("hyprctl did not answer")}`)
++                        enabled: !optKbVariant.locked && optKbVariant.available && optKbVariant.loaded && page.xkb.layouts.length > 0
++                        fieldWidth: 280
++                        model: page.withCurrent([{ value: "", displayName: Translation.tr("Default") }]
++                            .concat(page.xkb.variants[page.optString(optKbLayout)] ?? []), page.optString(optKbVariant))
++                        currentValue: page.optString(optKbVariant)
++                        onSelected: newValue => {
++                            if (optKbVariant.fetching || !optKbVariant.loaded || newValue === page.optString(optKbVariant)) return
++                            optKbVariant.setValue(newValue)
+                         }
+                     }
+                     ConfigSwitch {
+diff --git a/dots/.config/quickshell/ii/modules/settings/xkb-rules.js b/dots/.config/quickshell/ii/modules/settings/xkb-rules.js
+new file mode 100644
+index 00000000..7a811a38
+--- /dev/null
++++ b/dots/.config/quickshell/ii/modules/settings/xkb-rules.js
+@@ -0,0 +1,27 @@
++.pragma library
++
++// Parses xkeyboard-config's rules/base.lst into the keyboard dropdowns' models:
++// layouts [{value, displayName}] and variants {layout: [{value, displayName}]}.
++function parse(text) {
++    const layouts = []
++    const variants = {}
++    let section = ""
++    for (const line of text.split("\n")) {
++        if (line.startsWith("! ")) {
++            section = line.slice(2).trim()
++            continue
++        }
++        const m = line.match(/^\s+(\S+)\s+(.*)$/)
++        if (!m) continue
++        if (section === "layout") {
++            layouts.push({ value: m[1], displayName: `${m[2]} (${m[1]})` })
++        } else if (section === "variant") {
++            const v = m[2].match(/^([^:]+):\s*(.*)$/)
++            if (!v) continue
++            if (!variants[v[1]]) variants[v[1]] = []
++            variants[v[1]].push({ value: m[1], displayName: v[2] })
++        }
++    }
++    layouts.sort((a, b) => a.displayName.localeCompare(b.displayName))
++    return { layouts, variants }
++}
+diff --git a/dots/.config/quickshell/ii/services/KraneSettings.qml b/dots/.config/quickshell/ii/services/KraneSettings.qml
+index 1bb93c77..c17b4211 100644
+--- a/dots/.config/quickshell/ii/services/KraneSettings.qml
++++ b/dots/.config/quickshell/ii/services/KraneSettings.qml
+@@ -34,6 +34,11 @@ Singleton {
+         root._enqueue(["set", section, key, String(value)]);
+     }
+ 
++    // Several Hyprland keys in one write: [[key, value], ...].
++    function setHyprland(pairs) {
++        root._enqueue(["set", "hyprland"].concat(...pairs.map(([k, v]) => [k, String(v)])));
++    }
++
+     function reset(section, key, field) {
+         const args = ["reset", section, key];
+         if (field !== undefined)
+@@ -81,7 +86,7 @@ Singleton {
+     property real _selfWriteUntil: 0
+ 
+     function _enqueue(args) {
+-        const same = a => a[0] === "set" && args[0] === "set" && a[1] === args[1] && a[2] === args[2];
++        const same = a => a[0] === "set" && args[0] === "set" && a.length === 4 && args.length === 4 && a[1] === args[1] && a[2] === args[2];
+         root._queue = root._queue.filter(a => !same(a)).concat([args]);
+         root._next();
+     }
