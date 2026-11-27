@@ -1,6 +1,6 @@
 # Upgrades every server host to the latest gated `main` commit: the `deploy` branch that
 # .github/workflows/promote.yml moves after its gate passes. Hooks: pkgs/server-upgrade,
-# scripts/server-upgrade-hooks.sh. See docs/superpowers/specs/2026-11-23-server-auto-upgrade-design.md.
+# scripts/server-upgrade-hooks.sh.
 {
   config,
   lib,
