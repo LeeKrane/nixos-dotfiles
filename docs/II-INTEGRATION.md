@@ -645,33 +645,6 @@ Expected: `cwd`, `id`, `kind`, `name`, `pid`, `sessionId`, `startedAt`,
 up here before the tab breaks; the tab then shows the raw value or an error
 line instead of failing silently.
 
-### Claude in the sidebar chat
-
-Optional and billed per token through an Anthropic API key. The Claude Code
-subscription cannot be used here: routing the teamclaude proxy or Claude
-Code's OAuth credentials into ii's requests falls outside Anthropic's terms.
-
-Add to `ai.extraModels` in `~/.config/illogical-impulse/config.json`:
-
-```json
-{
-  "api_format": "openai",
-  "name": "Claude Sonnet 5",
-  "description": "Anthropic API, billed per token",
-  "endpoint": "https://api.anthropic.com/v1/chat/completions",
-  "model": "claude-sonnet-5",
-  "key_id": "anthropic",
-  "key_get_link": "https://platform.claude.com/settings/keys",
-  "requires_key": true,
-  "extraParams": { "tools": [], "max_tokens": 4096 }
-}
-```
-
-Then pick it with `/model` in the Intelligence tab and store the key with
-`/key <key>` (ii keeps it in the keyring, never in this repo). `"tools": []`
-is required: ii's `openai` strategy does not parse tool calls, so a reply
-that calls one of ii's tools would arrive empty.
-
 ## Verifying on the target
 
 See [docs/VERIFY.md](VERIFY.md)'s on-target checklist for the commands,
