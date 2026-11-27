@@ -53,6 +53,7 @@
     desktopSsh = [
       "tariognatha"
       "tarmantria"
+      "taractias"
     ];
     desktopSshClients.tariognatha = [ "taryonyx" ];
   };
