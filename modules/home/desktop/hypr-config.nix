@@ -218,9 +218,21 @@ let
       end
     '';
 
+  # illogical-flake's block prepends to PATH on every config reload; drop the repeats.
   envFile =
     header "custom/env.lua"
-    + "\n"
+    + ''
+
+      local seen, path = {}, {}
+      for dir in (os.getenv("PATH") or ""):gmatch("[^:]+") do
+          if not seen[dir] then
+              seen[dir] = true
+              path[#path + 1] = dir
+          end
+      end
+      hl.env("PATH", table.concat(path, ":"))
+
+    ''
     + lib.concatStrings (lib.mapAttrsToList (k: v: "hl.env(${luaStr k}, ${luaStr v})\n") cfg.env);
 
   variablesFile =
