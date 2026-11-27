@@ -1,141 +1,75 @@
 # Verification
 
-Two layers prove different, non-overlapping slices of correctness. The
-docker eval and build loop runs fast, on every change. The on-target
-checklist is the only real proof of what the docker loop cannot touch at
-all.
+Two layers: the docker loop evaluates and builds on every change, and the on-target checklist proves what a booted machine does.
 
 ## 1. Docker loop
 
-Everything here except `test`, `ci` and `diff` (local Nix) runs via
-`scripts/docker-check.sh`, wrapping a throwaway `nixos/nix` container
-against a persistent `nixstore` docker volume. See its own header comment
-for what each invocation does.
+`scripts/docker-check.sh` runs a throwaway `nixos/nix` container against a persistent `nixstore` volume. It runs `git add -N` on untracked, non-ignored files first, because flakes only see tracked files. `test`, `ci` and `diff` use local Nix.
 
 ```sh
-just check                 # nix flake check --no-build --show-trace
-                            # + every x86_64 host's toplevel (tariognatha,
-                            # tarmantria, taractias, taragarmr), --dry-run
-just eval-host tariognatha  # fast: single host, eval only, no build
-just docker-build tariognatha   # real (slow) build of one host's toplevel
-just fmt                    # nix fmt
-just lint                   # scripts/lint.sh: nixfmt, statix, deadnix, shellcheck, actionlint, secrets guard
-just test                   # scripts/tests/*-test.sh, local Nix
-just ci                     # lint + test, local Nix
-just diff tariognatha       # closure diff vs /run/current-system, on the target host
+just check                 # nix flake check --no-build + every x86_64 host's toplevel, --dry-run
+just eval-host tariognatha # single host, eval only
+just docker-build tariognatha # real (slow) build of one host's toplevel
+just fmt                   # nix fmt
+just lint                  # scripts/lint.sh
+just test                  # scripts/tests/*-test.sh, local Nix
+just ci                    # lint + test, local Nix
+just diff tariognatha      # closure diff vs /run/current-system, run on the target
 ```
 
-`scripts/docker-check.sh` runs `git add -N` on untracked, non-ignored files before every one of these.
-Flakes only see tracked files, and intent-to-add tracks a new file without staging its content.
+Containers are capped at 6 CPUs and 14g memory. Override per run with `DOCKER_CPUS`, `DOCKER_CPU_SHARES`, `DOCKER_MEMORY`, `NIX_MAX_JOBS`, `NIX_CORES`.
 
-Every `docker run` this script does is capped by default at 6 CPUs and
-14g memory, so a real build doesn't peg the host it runs on. Override per
-invocation on a bigger or smaller machine: `DOCKER_CPUS`,
-`DOCKER_CPU_SHARES`, `DOCKER_MEMORY`, `NIX_MAX_JOBS`, `NIX_CORES`.
+What it proves:
 
-### What it proves
+- `nix flake check --no-build`: every module evaluates and every assertion passes. `checks.lua-syntax` runs `luac -p` over every host's rendered Hyprland Lua. `checks.ii-overlay` proves the `ii-fixes` `gnome-icon-theme` alias reaches the NixOS pkgs shared via `useGlobalPkgs`.
+- `nix build ...toplevel --dry-run` for every x86_64 host: the closure's dependency graph is sound. The aarch64 Pis are only evaluated (`checks.pi-eval`, CI).
+- `just docker-build <host>`: a real build succeeds. It is slow because quickshell compiles from source.
 
-- `nix flake check --no-build`: every module evaluates. `checks.lua-syntax`
-  runs `luac -p` over every rendered Hyprland Lua file for every
-  host. Option types and assertions all pass.
-- `checks.ii-overlay`: the `ii-fixes` overlay's `gnome-icon-theme` alias
-  reaches the NixOS pkgs, which home-manager shares via `useGlobalPkgs`.
-- `nix build …toplevel --dry-run` for every x86_64 host (three desktops and taragarmr; the aarch64
-  Pis are only evaluated, by `checks.pi-eval` and CI): every derivation in
-  the closure would build. The dependency graph is sound, with no missing
-  or renamed nixpkgs attrs and no `throw`s hit.
-- `just docker-build <host>`: a real build succeeds. It runs slow, because
-  quickshell compiles from source with no binary cache.
-
-### What it cannot prove
-
-Anything that exists only once a kernel boots on real or virtualised
-hardware:
-
-- Boot process, systemd-boot, plymouth. On-target only.
-- The NVIDIA kernel module loading. On-target only.
-- Monitor layout, transforms and scale, checked with `hyprctl monitors -j`.
-  On-target only.
-- `home.activation` ordering between `kraneIiOverrides` and
-  `copyIllogicalImpulseConfigs`. On-target only: docker only evaluates the
-  activation script text, never runs it.
-- Quickshell rendering a working shell. On-target only.
-- greetd/tuigreet presenting a session picker. On-target only. Every host
-  skips the picker at boot: greetd autologins into Hyprland, which locks
-  itself at session start, so the ii lock screen is what's on-target to
-  check there. Its reboot/poweroff buttons skip the password prompt unless
-  `requirePasswordToPower` is `true` in
-  `~/.config/illogical-impulse/config.json` (ii-owned state, currently
-  `false`). `launchOnStartup` in the same file is patched to `true` on
-  fresh hosts by `kraneIiPatches` (see
-  [docs/II-INTEGRATION.md](II-INTEGRATION.md) "Patched files"), so ii's
-  own startup path locks too, independent of the forced IPC call below.
+It cannot prove anything that needs a booted kernel: boot, systemd-boot, plymouth, the NVIDIA module, monitor layout, `home.activation` ordering (docker only evaluates the script text), Quickshell rendering, or greetd. Those are the on-target checklist.
 
 ## 2. On-target checklist
 
-Run these on a real install, after two consecutive `nixos-rebuild switch`
-runs. The first switch's illogical-impulse (ii) dotfiles-copy step has to
-run once before the second switch's `kraneIiOverrides` activation entry
-means anything to check. See [docs/II-INTEGRATION.md](II-INTEGRATION.md).
+Run it on a real install after two consecutive `nixos-rebuild switch` runs: the first switch's ii dotfiles copy must run before the second switch's `kraneIiOverrides` entry has anything to check. See [docs/II-INTEGRATION.md](II-INTEGRATION.md).
 
 ### Autologin and lock-on-start
 
-Every host autologins into Hyprland and locks itself at session start
-(`modules/nixos/desktop/desktop.nix`'s `initial_session`,
-`modules/home/desktop/lock-on-start.nix`). Don't trust a systemd session property
-like `loginctl`'s `LockedHint` for this: that flag just reflects whatever
-last called `loginctl lock-session`/`unlock-session`, not whether ii's own
-lock surface is actually drawn on screen, so it can read locked while the
-compositor shows a bare desktop underneath. Check instead:
+Every host autologins into Hyprland (`initial_session` in `modules/nixos/desktop/desktop.nix`) and locks at session start (`modules/home/desktop/lock-on-start.nix`). `loginctl`'s `LockedHint` is not proof: it only reflects the last `lock-session` call, not whether ii's lock surface is drawn. Check instead:
 
-- After a fresh reboot, look at the screen: the ii lock panel itself must
-  be visible, not a bare Hyprland desktop and not tuigreet.
-- `journalctl --user -b | grep krane-lock-on-start` must produce no
-  output. Any line from it means the hyprlock fallback fired, i.e. ii's
-  lock IPC handler (`qs -c ii ipc show`'s `target lock`) never appeared
-  within the script's poll window, and the fallback plain-`hyprlock`
-  path was used instead of the ii lock screen.
-- After the first unlock, run
-  `~/.config/quickshell/ii/scripts/keyring/is_unlocked.sh` and confirm it
-  prints `Keyring is unlocked`. Autologin gives PAM no password, so
-  nothing unlocks the login keyring the normal way; ii's lock screen
-  unlocks it itself via `~/.config/quickshell/ii/scripts/keyring/unlock.sh` when
-  `security.unlockKeyring` is `true`. If the script instead prints that
-  the keyring is locked, expect a keyring prompt later from
-  NetworkManager or a browser.
+- After a fresh reboot, the ii lock panel is visible, not a bare desktop and not tuigreet.
+- `journalctl --user -b | grep krane-lock-on-start` prints nothing. Any line means ii's lock IPC never appeared and the plain `hyprlock` fallback ran.
+- After the first unlock, `~/.config/quickshell/ii/scripts/keyring/is_unlocked.sh` prints `Keyring is unlocked`. Autologin gives PAM no password, so ii's lock screen unlocks the keyring itself (`security.unlockKeyring` is `true`). If it is locked, expect a keyring prompt from NetworkManager or a browser.
+- The lock screen's reboot/poweroff buttons skip the password prompt while `requirePasswordToPower` is `false` in `~/.config/illogical-impulse/config.json`, the current value. `launchOnStartup` is patched to `true` on fresh hosts (see [docs/II-INTEGRATION.md](II-INTEGRATION.md) "Patched files").
+
+### Checks
 
 | Check | Command | Host |
 | --- | --- | --- |
-| Owned Hyprland files carry the generated header (`modules/home/desktop/hypr-config.nix`'s `header` function) | `head -4 ~/.config/hypr/custom/keybinds.lua` | All |
-| Override block appears exactly once in `env.lua`, want `1` | `grep -c -- '-- >>> krane overrides >>>' ~/.config/hypr/custom/env.lua` | All |
-| Override block appears exactly once in `general.lua`, want `1` | `grep -c -- '-- >>> krane overrides >>>' ~/.config/hypr/custom/general.lua` | All |
-| Hyprland accepted the whole config, no unknown-key errors: output of `hyprctl configerrors` is empty | `hyprctl configerrors` | All |
+| Owned Hyprland files carry the generated header (`header` in `modules/home/desktop/hypr-config.nix`) | `head -4 ~/.config/hypr/custom/keybinds.lua` | All |
+| Override block appears once in `env.lua`, want `1` | `grep -c -- '-- >>> krane overrides >>>' ~/.config/hypr/custom/env.lua` | All |
+| Override block appears once in `general.lua`, want `1` | `grep -c -- '-- >>> krane overrides >>>' ~/.config/hypr/custom/general.lua` | All |
+| Hyprland accepted the whole config: empty output | `hyprctl configerrors` | All |
 | Keybinds survived the switch (no latched emergency mode) | `hyprctl binds \| head -5` | All |
-| Cursor theme from `modules/home/desktop/cursor.nix` is installed and set for GTK, want `Bibata-Modern-Classic` twice | `ls /etc/profiles/per-user/$USER/share/icons \| grep Bibata-Modern-Classic$; grep gtk-cursor-theme-name ~/.config/gtk-3.0/settings.ini` | All |
-| Monitor layout matches `hosts/<host>/display.nix` | `hyprctl monitors -j \| jq '.[] \| {name, width, height, refreshRate, scale, transform}'` | All |
-| Logitech G502 libinput device name matches `display.nix`'s `devices[].name` | `hyprctl devices \| grep -i logitech` | tariognatha |
+| Cursor theme from `modules/home/desktop/cursor.nix` installed and set for GTK, want `Bibata-Modern-Classic` twice | `ls /etc/profiles/per-user/$USER/share/icons \| grep Bibata-Modern-Classic$; grep gtk-cursor-theme-name ~/.config/gtk-3.0/settings.ini` | All |
+| Monitor layout matches `hosts/<host>/display.nix` and the GUI-owned positions in `ii-settings.json` | `hyprctl monitors -j \| jq '.[] \| {name, width, height, refreshRate, scale, transform}'` | All |
+| Logitech G502 libinput name matches `display.nix`'s `devices[].name`, otherwise the block applies to nothing | `hyprctl devices \| grep -i logitech` | tariognatha |
 | Built-in ELAN I2C touchpad shows up with no extra config | `hyprctl devices \| grep -i touchpad` | taractias |
 | Single-panel scale guess in `display.nix` | `hyprctl monitors -j \| jq '.[] \| {name, scale}'` | taractias |
-| Vega iGPU VA-API decode goes through Mesa's radeonsi driver | `vainfo \| grep -i driver` | taractias |
+| Vega iGPU VA-API decode uses Mesa's radeonsi | `vainfo \| grep -i driver` | taractias |
 | PRIME offload reaches the dGPU | `nvidia-offload glxinfo \| grep vendor` | tarmantria |
-| Wi-Fi came up after the first reboot | `nmcli device status \| grep -i wifi` | tarmantria, taractias |
+| Wi-Fi came up after the first reboot (`rtw88` on taractias) | `nmcli device status \| grep -i wifi` | tarmantria, taractias |
 | Bluetooth came up after the first reboot | `bluetoothctl show \| grep -i powered` | tarmantria, taractias |
 | Windows dual-boot entry present, if expected. See [docs/INSTALL.md](INSTALL.md) "Windows dual-boot entry" | `sudo bootctl list` | All, if dual-booting |
 | Proton Drive mounted | `systemctl --user status proton-drive-mount` | All |
-| teamclaude proxy running with at least one seat, Claude Code's `ANTHROPIC_BASE_URL` target. No seats yet: run `teamclaude login` once per seat | `systemctl --user status teamclaude; teamclaude status` | All |
-| wg0 tunnel up, peer reachable | `sudo wg show wg0` shows the peer with a recent latest handshake | All with a `wireguard:` section in `secrets/<host>.yaml` |
-| wg0 has this host's tunnel address | `ip -br addr show wg0` shows the host's tunnel address | All with a `wireguard:` section in `secrets/<host>.yaml` |
+| teamclaude proxy running with at least one seat (none yet: `teamclaude login` once per seat) | `systemctl --user status teamclaude; teamclaude status` | All |
+| wg0 up, peer has a recent handshake | `sudo wg show wg0` | Hosts with a `wireguard:` section in `secrets/<host>.yaml` |
+| wg0 has this host's tunnel address | `ip -br addr show wg0` | Hosts with a `wireguard:` section in `secrets/<host>.yaml` |
 
-`modules/nixos/desktop/hardware.nix`'s `hardware.enableRedistributableFirmware`
-makes the iwlwifi, rtw88 and Bluetooth adapters work on the laptop hosts.
-`nixos-generate-config` never turns it on by itself, so these two checks
-are the one thing docker verification cannot prove. On taractias,
-`rtw88` should show the in-kernel RTL8821CE adapter.
+The Wi-Fi and Bluetooth checks cover `hardware.enableRedistributableFirmware` (`modules/nixos/desktop/hardware.nix`), which `nixos-generate-config` never enables.
 
-## Settings window (after two consecutive switches)
+### Settings window
 
 - `readlink -f ~/.config/illogical-impulse` is `~/.dotfiles/hosts/<host>/illogical-impulse`.
-- `krane-ii-settings render --json ~/.dotfiles/hosts/<host>/ii-settings.json | diff - ~/.config/hypr/custom/krane_gui.lua` prints nothing (the live file matches the repo file).
+- `krane-ii-settings render --json ~/.dotfiles/hosts/<host>/ii-settings.json | diff - ~/.config/hypr/custom/krane_gui.lua` prints nothing.
 - `hyprctl configerrors` is empty; `qs log -c ii` has no `[KraneSettings]` warning.
 - `SUPER + I` opens every page; closing it leaves the bar running.
 - One control per config.json page changes exactly one key in `git diff hosts/<host>/illogical-impulse/config.json`.
@@ -143,4 +77,4 @@ are the one thing docker verification cannot prove. On taractias,
 - Keyboard layout (and on tariognatha idle) is disabled with "Set in Nix".
 - Displays: a change reverts after 15 s unless kept; a kept change asks again after the next reboot.
 - `systemctl --user is-active krane-ii-settings-revert.timer` is `inactive` when no change is pending.
-- Reboot without an intervening switch: the live `krane_gui.lua` still matches a `set`/`reset` made before the reboot.
+- After a reboot with no switch, `krane_gui.lua` still matches a `set`/`reset` made before it.
