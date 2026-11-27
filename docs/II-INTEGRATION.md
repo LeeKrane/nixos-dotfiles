@@ -48,9 +48,10 @@ Two consequences this repo already handles:
   the copy step replaces home-manager's `~/.config/fish/config.fish`
   symlink with a regular file. `lib/mk-host.nix` sets
   `home-manager.backupFileExtension = "hm-bak"` so the next switch does
-  not abort on that collision. `*.hm-bak` files after a switch are normal.
-- Fish customisation lives in NixOS `programs.fish.*` (`/etc/fish/...`),
-  outside `$HOME`, never in home-manager.
+  not abort on that collision. `*.hm-bak` files after a switch are normal;
+  find them with `find ~ -name '*.hm-bak'` and delete them once checked.
+- Fish customisation lives in NixOS `programs.fish.*` (`/etc/fish/...`,
+  `modules/nixos/common/shells.nix`), outside `$HOME`, never in home-manager.
 
 ## Activation order
 
@@ -83,7 +84,7 @@ any `nix flake update` that moves `illogical-flake`.
 | --- | --- | --- |
 | `monitors.lua` | owned | Not shipped upstream. Sourced by `hyprland.lua` if present. |
 | `custom/variables.lua` | owned | Upstream ships it empty. |
-| `custom/keybinds.lua` | owned | Upstream ships one bind. |
+| `custom/keybinds.lua` | owned | Upstream ships one bind, `CTRL+SUPER+ALT+Slash` ("Edit user keybinds"), which is dropped. Add it back through `krane.hypr.binds` if missed. |
 | `custom/execs.lua` | owned | Upstream ships it empty. |
 | `custom/rules.lua` | owned | Upstream ships it empty. |
 | `custom/env.lua` | appended | Truncated with `cat >` every switch. Our block must land after. |
@@ -108,34 +109,26 @@ cat "$tmp" > "$target"
 ```
 
 Everything from the sentinel line down is dropped before the fresh block
-is written, so a stale block from an older generation self-corrects. The
-sentinel is `-- >>> krane overrides >>>`, appearing exactly once after a
-switch since the copy step recreates both files first. More than once
-means the drop failed.
-
-The block is written even when the rendered body is empty, so a stock
-install still leaves `custom/env.lua` ending in the sentinel, keeping
-the verification below meaningful whether or not a host sets the option.
+is written, so a stale block self-corrects. The sentinel is
+`-- >>> krane overrides >>>`, appearing exactly once after a switch since
+the copy step recreates both files first. More than once means the drop
+failed. The block is written even when the rendered body is empty, so every
+host's `custom/env.lua` ends in the sentinel.
 
 The append runs from a store script, not a plain redirect: a redirection
-cannot be prefixed with `$DRY_RUN_CMD`, it would still fire in dry-run
-mode, while one command swallows it whole. Every tool used is an
-absolute store path, so activation does not depend on the user's `PATH`.
+cannot be prefixed with `$DRY_RUN_CMD` and would still fire in dry-run
+mode. Every tool used is an absolute store path, so activation does not
+depend on the user's `PATH`.
 
 ## Dry runs are not read-only
 
-This repo's step honours `$DRY_RUN_CMD` on every mutating command, so
-`home-manager switch -n` and `nixos-rebuild dry-activate` print it
-without touching `$HOME`. The soymou module's `cat > custom/env.lua` and
-`cat >> custom/general.lua` are not guarded the same way, so a dry run
-really does truncate `custom/env.lua`, destroying our override block,
-and append another copy of the plugin block to `custom/general.lua`.
-
-Nothing is lost for good: the next real switch wipes and recreates both
-files, and our block is written again. Do not read a dry run as read
-only, or run several dry runs then inspect `general.lua` and conclude
-the append is broken. Run a real `nixos-rebuild switch` if you need the
-files correct now.
+This repo's steps honour `$DRY_RUN_CMD`, but the soymou module's
+`cat > custom/env.lua` and `cat >> custom/general.lua` do not. A
+`home-manager switch -n` or `nixos-rebuild dry-activate` really truncates
+`custom/env.lua`, destroying our block, and appends another plugin block to
+`custom/general.lua`. The next real switch recreates both. Do not inspect
+`general.lua` after dry runs and conclude the append is broken; run a real
+`nixos-rebuild switch` if you need the files correct now.
 
 ## How ii sources Lua
 
@@ -149,13 +142,10 @@ hyprland.lib -> hyprland.services -> hyprland.env -> custom.env
   -> workspaces.lua -> monitors.lua -> hyprland.shellOverrides.main
 ```
 
-Two things worth getting right:
-
 - `custom/variables.lua` is not in that chain. It is sourced from
   `hyprland/keybinds.lua`, right after `hyprland/variables.lua`, which
-  makes it the right place to override `terminal`, `fileManager`,
-  `browser` and the other Lua globals that hold shell command strings,
-  not package paths.
+  makes it the place to override `terminal`, `fileManager`, `browser` and
+  the other Lua globals that hold shell command strings, not package paths.
 - There is no `custom/monitors.lua`. Monitor rules go in the top-level
   `monitors.lua`, which this repo owns and renders from
   `krane.hypr.monitors`. Its last lines require `custom/krane_gui.lua`,
@@ -198,7 +188,7 @@ hatches. Everything else is serialised and cannot inject a syntax error.
 A value it cannot represent throws at evaluation time.
 
 Run `nix flake check` to check the result: `checks.lua-syntax`
-runs `luac -p` over every rendered file for all three hosts.
+runs `luac -p` over every rendered file of every desktop host.
 
 Unknown keys in `hl.config` and unknown fields in `hl.monitor`/`hl.device`
 are hard errors at Hyprland start. Neither `nix flake check` nor `luac -p`
@@ -215,47 +205,39 @@ file is skipped rather than failing activation:
 
 - `~/.config/fish/config.fish`:
   `s|^\(\s*\)cat \(~/.local/state/quickshell/user/generated/terminal/sequences.txt\)|\1command cat \2|`.
-  `modules/nixos/common/shells.nix` aliases `cat` to `bat --color=always` at
-  NixOS level (`/etc/fish` loads first), so ii's own line printing that
-  file would emit a bat frame instead of raw OSC sequences. The patch
-  makes that one line call `command cat` to bypass the alias.
+  `modules/nixos/common/shells.nix` aliases `cat` to `bat --color=always`,
+  which would print a bat frame instead of the raw OSC sequences.
 - `~/.config/hypr/hyprland/keybinds.lua`:
   `s|killall ydotool qs quickshell|killall ydotool; pkill -f '[q]s-wrapped -c ii'|`.
-  The nix-wrapped quickshell binary's comm is truncated to `.quickshell-wra`,
-  so the restart-widgets keybind's `killall qs quickshell` never matches and
-  every press stacks a new `qs` instance. `pkill -f` matches the full
-  command line instead, so it still finds and kills the wrapped process.
+  The nix-wrapped quickshell's comm is truncated to `.quickshell-wra`, so
+  `killall qs quickshell` never matched and every restart-widgets press
+  stacked a new `qs` instance.
 - `~/.config/quickshell/ii/modules/common/Config.qml`:
   `s/property bool launchOnStartup: false/property bool launchOnStartup: true/`.
-  Fresh hosts seed `~/.config/illogical-impulse/config.json` from this QML
-  default the first time ii's copy step runs. Every host autologins via
-  greetd straight into Hyprland (`modules/nixos/desktop/desktop.nix`), so there's
-  no session picker to lock behind; flip the default itself so ii locks
-  immediately on startup. After that the value lives in this host's
-  config.json in the repo, and the settings window can still turn it off.
+  Every host autologins via greetd straight into Hyprland
+  (`modules/nixos/desktop/desktop.nix`), so ii must lock on startup. Only
+  fresh hosts seed `config.json` from this default; after that the value
+  lives in the host's `config.json` and the settings window can turn it off.
 - `~/.config/quickshell/ii/scripts/colors/switchwall.sh`:
   `s#gsettings \(set\|get\) org.gnome.desktop.interface#GSETTINGS_SCHEMA_DIR=<schemas> <store gsettings> \1 org.gnome.desktop.interface#g`.
-  ii's dark/light toggle writes `color-scheme` with gsettings, but the ii
-  session has no schemas on `XDG_DATA_DIRS`, so every call failed with "No
-  schemas installed" and the portal kept reporting no preference. The patch
-  points each call at the `gsettings-desktop-schemas` directory directly.
+  The ii session has no gsettings schemas on `XDG_DATA_DIRS`, so the
+  dark/light toggle never reached the portal; each call gets the
+  `gsettings-desktop-schemas` directory directly.
 
-Idle timeouts are no longer a sed: `kraneIiIdle` (in
+Idle timeouts are not a sed: `kraneIiIdle` (in
 `modules/home/desktop/ii-settings.nix`) runs ii's `hypridleconfigurator.py` with the
-values from `krane.hypr.idle`, `idleTimeouts = false` (all zeros) or the
-settings window. See "Settings persistence".
+values from `krane.hypr.idle` or `idleTimeouts = false` (all zeros). See
+"Settings persistence".
 
-`kraneIiHyprReload` (`entryAfter [ "kraneIiOverrides" "kraneIiPatches" ]`)
-runs `hyprctl reload config-only` once the `~/.config/hypr` tree and our
-overrides are fully written. `copyIllogicalImpulseConfigs`'s `rm -rf` + `cp -r`
-is non-atomic, so a running Hyprland can reload mid-copy on the first inotify
-event, hit `module 'hyprland.lib' not found`, and latch emergency mode (no
-binds) until the next explicit reload — this entry is that reload. It works
-both interactively, where `HYPRLAND_INSTANCE_SIGNATURE` is already set, and
-under `nixos-rebuild switch`'s `home-manager-krane.service` (logs as
-`hm-activate-krane`), where it isn't, by scanning `$XDG_RUNTIME_DIR/hypr` for
-a candidate instance directory. The reload itself is the liveness test, each
-candidate socket dir is tried until one answers; a stale dir from a crashed
+`kraneIiHyprReload` (`entryAfter [ "kraneIiOverrides" "kraneIiPatches" "kraneIiActivate" ]`)
+runs `hyprctl reload config-only` once the `~/.config/hypr` tree, our
+overrides and the GUI render are fully written. `copyIllogicalImpulseConfigs`'s
+`rm -rf` + `cp -r` is non-atomic, so a running Hyprland can reload mid-copy,
+hit `module 'hyprland.lib' not found`, and latch emergency mode (no binds)
+until the next explicit reload; this entry is that reload. Under
+`nixos-rebuild switch`'s `home-manager-krane.service` there is no
+`HYPRLAND_INSTANCE_SIGNATURE`, so it tries each socket dir under
+`$XDG_RUNTIME_DIR/hypr` until one answers; a stale dir from a crashed
 instance is skipped. No-op when no Hyprland instance is running.
 
 ### Preserved files
@@ -267,131 +249,72 @@ That file holds fish's universal variables, including
 `__fish_initialized`; the copy step's `rm -rf` wipes it, which retriggers
 fish's 4.3 upgrade notice and `conf.d/fish_frozen_key_bindings.fish` on
 every new terminal after each activation. The backup lives at
-`~/.local/state/krane/fish_variables`.
+`~/.local/state/krane/fish_variables`. A `set -U` between save and wipe
+is lost.
 
 ## Backported fork fixes
 
 `patches/ii/` holds one `git format-patch` series per sub-project:
-`01-fixes` (fixes from [pctrade/end4-pC](https://github.com/pctrade/end4-pC)),
-then `02-translator`, `04-agents`, `05-settings`, `06-notifications` and
-`07-idle` as they land (`05-settings` is not present yet).
-`lib/mk-host.nix` applies them with `applyPatches`, after the cheatsheet
-patch, to build the `dots-hyprland-patched` source the soymou module copies:
-directories in lexical order, and the files in each directory in lexical
-order, which is commit order. The table below covers `01-fixes`. Each patch's commit message records the fork
-commit, the problem, how it was ported and when to drop it.
+`01-fixes`, `02-translator`, `04-agents`, `05-settings`, `06-notifications`
+and `07-idle`. `lib/mk-host.nix` applies them with `applyPatches`, after
+`patches/illogical-flake-cheatsheet-fkeys.patch`, to build the
+`dots-hyprland-patched` source the soymou module copies: directories in
+lexical order, files in each directory in lexical order, which is commit
+order. Each patch's commit message records the problem, the port and, for
+most, when to drop it.
 
 A patch must not change or add text that a `kraneIiPatches` sed matches: the
 sed would silently stop matching or rewrite the patch's own code. The line at
-risk is `launchOnStartup` in `Config.qml`, which several patch series touch. A
-patch that has to change such a line takes over the sed's job, and the sed
-entry goes in the same commit.
+risk is `property bool launchOnStartup: false` in `Config.qml`; no patch
+touches it today (`05-settings/0013` only binds the setting in the Interface
+page). A patch that has to change such a line takes over the sed's job, and
+the sed entry goes in the same commit.
 
-| Patch | Fork commit | Port | Drop when |
-|---|---|---|---|
-| `0001` thumbnail temp file + `mv` | `05b50d9` | clean, $tmp escaping fixed | pinned `ThumbnailImage.qml` writes via a temp file |
-| `0002` notification discard freeze | `6f1dc5f` | clean | pinned `Notifications.qml` no longer uses `list.splice()` to discard |
-| `0003` corrupt notifications file | `2cf76f8` | clean | pinned `Notifications.qml` wraps the file `JSON.parse` in try/catch |
-| `0004` null notification timer | `342a45b` | clean | pinned `cancelTimeout` checks for null |
-| `0005` undefined notification action | `eb76c3d` | clean | pinned `attemptInvokeAction` checks for undefined |
-| `0006` materialyoucolor key name | `3dad196` | clean | pinned `generate_colors_material.py` reads `primaryPaletteKeyColor` |
-| `0007` BlueZ connected state | `d116eef` | hand-ported | bluez#2485 fixed, or pinned `BluetoothStatus.qml` counts `batteryAvailable` |
-| `0008` Hyprland IPC throttle | `1b51f7a` (+ `204f22f` intent) | hand-ported, routing widened | pinned `HyprlandData.qml` throttles or coalesces `onRawEvent` |
-| `0009` trust on Always connect | `local` | local | pinned `BluetoothDeviceItem.qml` trusts devices it pairs |
-| `0010` thumbnail hash for symlinked wallpapers | `local` | local | pinned thumbnail scripts hash the listed path, not its realpath |
-| `0011` unterminated OSC in terminal sequences | `local` | local | pinned `sequences.txt` ends with `ESC \` |
+### `01-fixes`
 
-`0008`: coalesces bursts of raw Hyprland events (a drag fires dozens) into
-hyprctl queries with a leading-edge throttle. The first event flushes
-immediately; after that, at most one round runs per 60ms. A query still
-running when the timer ticks is never killed; its pending flag retries on
-the next tick instead of restarting it.
+Fixes backported from [pctrade/end4-pC](https://github.com/pctrade/end4-pC)
+(`0001` to `0008`) plus local fixes (`0009` to `0011`): thumbnails,
+notifications, colors, Bluetooth, and a throttle on raw Hyprland events.
+Non-obvious runtime effects:
 
-`0009` to `0011` are not fork backports. `0009`: ii's sidebar registers no
-BlueZ agent, so pairing needs one running (the `bluetooth-agent` root system
-service in `modules/nixos/desktop/bluetooth.nix`, bound to `bluetooth.service`;
-check with `systemctl status bluetooth-agent`), and even then a
-paired-but-untrusted device makes BlueZ ask that agent to authorize every
-profile connection. `0009` sets `trusted` right after `pair()` so audio
-reconnects stop dropping. The agent has no pin file, so legacy PIN-only
-devices and pairings the remote device starts are refused; pairing started
-from ii (Just Works) still works.
+- `0001` (atomic thumbnail writes) has no effect at the pin: the wallpaper
+  selector does not use `ThumbnailImage`'s own generation
+  (`generateThumbnail: false` in `WallpaperDirectoryItem.qml`).
+- `0009` sets `trusted` right after `pair()` so audio reconnects stop
+  dropping. ii's sidebar registers no BlueZ agent, so pairing needs the
+  `bluetooth-agent` root service (`modules/nixos/desktop/bluetooth.nix`,
+  bound to `bluetooth.service`; check with `systemctl status bluetooth-agent`).
+  The agent has no pin file, so legacy PIN-only devices and pairings the
+  remote device starts are refused; pairing started from ii (Just Works)
+  still works.
+- `0011` terminates the last OSC in `sequences.txt`. Without it kitty
+  swallows a program's output after a color change, Neovim looks frozen and
+  the shell then gets every key on press and on release.
 
-`0010`: `generate-thumbnails-magick.sh` hashed
-`realpath "$src"`, the symlink target, while the wallpaper selector's
-`ThumbnailImage` hashes the path as listed; home-manager's wallpaper symlinks
-into `/nix/store` made every thumbnail miss. `0010` hashes `realpath -s "$src"`
-instead, which resolves `.`/`..` and makes the path absolute but leaves
-symlinks unresolved.
+### `02-translator`
 
-`0011`: `applycolor.sh` writes the filled-in `sequences.txt` into every
-`/dev/pts/N`, and the template's last OSC (708) ended with a bare `ESC`
-instead of `ESC \`. kitty then stayed inside that OSC and discarded the
-foreground program's output until a later terminator arrived: Neovim looked
-frozen, and its exit sequences, including the kitty keyboard-protocol pop,
-were lost, so the shell afterwards got every key on press and on release.
-`0011` appends the missing `\`.
-
-At the pin, the wallpaper selector does not use `ThumbnailImage`'s own
-generation (`generateThumbnail: false` in `WallpaperDirectoryItem.qml`), so
-`0001` has no effect until something enables it.
-
-Not portable: `37a9fab` (optimizes CPU-temperature and disk readers that the
-pinned `ResourceUsage.qml` does not have), `204f22f` as its own patch (it
-changes only a fork-only settings component) and `9c7b0e1` (the pinned
-`Background.qml` wallpaper is a `StyledImage`, which already decodes at the
-rendered size times the device pixel ratio; the fork's other hunks touch
-fork-only files or a fork-only config key).
-
-### Translator (`02-translator`)
-
-The left sidebar's Translator tab, restyled after the fork (input box,
-centred source/swap/target row, output box, surfaces tinted from the
-wallpaper palette), plus five fixes the fork lacked: pill hover feedback,
-scrolling inside each box, selectable output text, a swap that also exchanges
-the texts, and a paste icon that keeps a fixed colour instead of greying
-out with the clear button.
-
-| Patch | Fork commit | Port | Drop when |
-|---|---|---|---|
-| `0001` null-safe character counter | `966162c` (`TextCanvas.qml` hunk) | clean | pinned `TextCanvas.qml` counter reads `inputLoader.item?.text` |
-| `0002` restyle with swap button | `4da3e83` + `c7aaeb5` + `6868389` (translator hunks) | hand-ported | never; revisit if upstream restyles `Translator.qml` |
-| `0003` enable by default | none | new | upstream defaults `sidebar.translator.enable` to `true` |
-| `0004` selectable output | none | new | pinned `TextCanvas.qml` output area is selectable |
-| `0005` swap texts with languages | none | new | pinned `Translator.qml` swap exchanges the texts |
-| `0006` paste icon keeps a fixed colour | none | new | pinned `Translator.qml` paste icon colour no longer depends on `deleteButton.enabled` |
-
-`0003` is a patch, not a `kraneIiPatches` sed, because `property bool enable:`
-occurs many times in `Config.qml`: a sed would need a range address that stops
-matching without an error, while a patch that stops applying fails the build.
+The left sidebar's Translator tab, restyled after the fork, plus fixes the
+fork lacked. `0003` enables it by default. It is a patch, not a
+`kraneIiPatches` sed, because `property bool enable:` occurs many times in
+`Config.qml`: a sed would need a range address that stops matching without
+an error, while a patch that stops applying fails the build.
 
 The `0003` default only reaches hosts whose `config.json` has no
-`sidebar.translator.enable` key yet (a fresh host). ii saves its whole
-options tree, so a host where ii has already run holds an explicit `false`:
-turn the translator on once in Settings, Interface, "Enable translator", or
-from a terminal with bash (ii applies it live; `--indent 4` keeps ii's own
-formatting):
+`sidebar.translator.enable` key yet. ii saves its whole options tree, so a
+host where ii has already run holds an explicit `false`: turn it on once in
+Settings, Interface, "Enable translator", or from a terminal (ii applies it
+live; `--indent 4` keeps ii's formatting):
 
 ```sh
 bash -c 'f=~/.config/illogical-impulse/config.json; jq --indent 4 ".sidebar.translator.enable = true" "$f" > "$f.tmp" && mv "$f.tmp" "$f"'
 ```
 
-Not ported: `9f63cce`, which hardcodes `trans -e bing`; Bing rejects the
-default `auto` source and target.
+### `04-agents`
 
-### Agents (`04-agents`)
-
-New work, not from the fork: a left-sidebar Agents tab that lists Claude Code
-sessions (usage under "Claude Code" below).
-
-| Patch | Adds | Drop when |
-|---|---|---|
-| `0001` ClaudeAgents service | `services/ClaudeAgents.qml`, `services/claude-agents.js`, `scripts/claude/agents.sh`, config `sidebar.agents.enable` (default `true`) | pinned ii ships an equivalent agents tab, or `claude agents --json` is removed |
-| `0002` Agents tab | `modules/ii/sidebarLeft/Agents.qml`, `agents/AgentRow.qml`, tab and polling switch in `SidebarLeftContent.qml` | same as `0001` |
-| `0003` group by directory | grouping in `claude-agents.js` (`annotate`'s `group`/`groupStart`, `tildePath`), header rendering in `agents/AgentRow.qml` | same as `0001` |
-| `0004` normalize group paths | `normalizePath` in `claude-agents.js`, used by `tildePath`/`groupLabel` so `annotate` groups on one normalized cwd per session and normalizes home once | same as `0001` |
-
-Tests, runnable against the clone (default) or a built source:
+New work, not from the fork: the left-sidebar Agents tab (usage under
+"Claude Code" below). Drop the series if pinned ii ships an equivalent tab
+or `claude agents --json` is removed. Tests, runnable against the clone
+(default) or a built source:
 
 ```sh
 bash scripts/ii-agents/test-agents-sh.sh [<ii root>]
@@ -401,39 +324,28 @@ node scripts/ii-agents/test-logic.mjs [<ii root>]
 `<ii root>` is `…/dots/.config/quickshell/ii`, for example inside the
 `dots-hyprland-patched` store path.
 
-### Notifications (`06-notifications`)
+### `05-settings`
 
-| Patch | Fork commit | Port | Drop when |
-|---|---|---|---|
-| `0001` start expanded when flagged `x-ii-expanded` | `local` | local | pinned `NotificationGroup.qml`'s `expanded` default reads a per-notification hint |
+The settings port; see "Settings persistence".
 
-A notification popup starts collapsed unless its sender set the
+### `06-notifications`
+
+`0001`: a notification popup starts collapsed unless its sender set the
 `x-ii-expanded` hint, which `scripts/flake-update-notify.sh` does so its
-action buttons are visible without a right-click.
+action buttons are visible without a right-click. Drop when pinned
+`NotificationGroup.qml` reads a per-notification expanded hint.
 
-### Idle (`07-idle`)
+### `07-idle`
 
-| Patch | Fork commit | Port | Drop when |
-|---|---|---|---|
-| `0001` keep awake by default and across reboots | `local` | local | pinned `Idle.qml` restores `states.idle.inhibit` on a new Hyprland instance and defaults it to `true` |
-| `0002` re-arm the inhibitor once its surface is mapped | `local` | local | Hyprland rechecks idle inhibitors when a layer surface maps |
-| `0003` also hold a logind idle lock while Keep awake is on | `local` | local | Hyprland counts layer-surface inhibitors regardless of the layer's alpha |
-
-Upstream resets "Keep awake" to off on every new Hyprland instance, so it
-never survives a reboot. `0001` defaults it to on and always restores the
-saved value from `~/.local/state/quickshell/states.json`.
-
-`0002`: Quickshell creates the inhibitor before its layer surface is mapped,
-Hyprland counts it as not visible and only rechecks on window or focus
-events, so "Keep awake" could stay ineffective after login. The patch
-recreates the inhibitor once, 3 s after start.
-
-`0003`: Hyprland also ignores the inhibitor while its layer's alpha is zero,
-which happens during the fade-in and whenever a fullscreen window covers the
-monitor, so hypridle could still lock with "Keep awake" on. While it is on,
-`Idle.qml` also runs `systemd-inhibit --what=idle ... cat`, an idle lock that
-hypridle honours on its own. `cat` exits on stdin EOF, so the lock goes away
-when the toggle turns off or Quickshell exits.
+"Keep awake" defaults to on and survives reboots (`0001`; upstream resets it
+on every new Hyprland instance and stores it in
+`~/.local/state/quickshell/states.json`). `0002` re-creates the inhibitor
+3 s after start, because Hyprland ignores it until its layer surface is
+mapped. `0003`: while "Keep awake" is on, `Idle.qml` also runs
+`systemd-inhibit --what=idle ... cat`, an idle lock hypridle honours even
+when Hyprland ignores the layer-surface inhibitor (zero alpha during fade-in
+or under a fullscreen window). `cat` exits on stdin EOF, so the lock goes
+away when the toggle turns off or Quickshell exits.
 
 ### Workflow
 
@@ -508,20 +420,20 @@ To remove one fix, drop its commit (`git am --skip` while re-applying, or
 only works when no later patch changes the same file. Stage `patches/ii`
 (`git -C ~/.dotfiles add patches/ii`) before running `nixos-rebuild`: it reads
 the flake's git tree, so an unstaged patch edit has no effect on the build.
+
 ### When to stop using patches
 
 Stay with patch series. A private fork as a flake input would have to be
 fetchable everywhere the flake is evaluated: every host, root's nix daemon
 during `nixos-rebuild`, the `just check` Docker container and `install.sh` on a
 fresh machine, which copies only this repo. A private remote also needs
-credentials that sops can decrypt only after that install. The patch files in
-this repo need none of it. Re-evaluate a private fork of dots-hyprland as the
-flake input if:
+credentials that sops can decrypt only after that install. Re-evaluate a
+private fork of dots-hyprland as the flake input if:
 
 - a pin bump needs more than 5 hand-resolved conflict hunks, or more than one
   sitting; or
-- the user sets up a private remote that every host and the docker check can
-  already reach; or
+- a private remote exists that every host and the docker check can already
+  reach; or
 - upstream ii ships its own rewrite of settings that overlaps the settings
   port.
 
@@ -550,24 +462,25 @@ a `config-only` reload brings the Nix or upstream value back without a switch.
 
 Nix owns every key it sets: each `krane.hypr.settings` leaf, every entry of
 `krane.hypr.guiLocked`, the non-null fields of each `krane.hypr.monitors`
-entry (`output`, `mode`, `scale` and `disabled` always; `position` only when set, and
-the GUI owns it otherwise), and
-`idle` when `krane.hypr.idle` or `idleTimeouts = false` is set. The settings
-window shows those controls disabled with "Set in Nix", and
-`krane-ii-settings` refuses them. Every other key in
-`pkgs/krane-ii-settings/schema.json` belongs to the GUI file. A key in
+entry (`output`, `mode`, `scale` and `disabled` always; `position` only when
+set, and the GUI owns it otherwise), and `idle` when `krane.hypr.idle` or
+`idleTimeouts = false` is set. The settings window shows those controls
+disabled with "Set in Nix", and `krane-ii-settings` refuses them. Every other
+key in `pkgs/krane-ii-settings/schema.json` belongs to the GUI file. A key in
 both places fails evaluation, naming both files: delete it from one. To hand
 a key to the GUI, delete it from `display.nix` in the same commit that adds
-it to `ii-settings.json`. Monitor positions are handed over this way: `position`
-is null in every host's `display.nix`, and a host with a fixed layout keeps it in
+it to `ii-settings.json`.
+
+Monitor positions are handed over this way: `position` is null in every
+host's `display.nix`, and a host with a fixed layout keeps it in
 `ii-settings.json` (one without, such as taractias, renders `auto`). A
 position depends on the neighbours' Nix-owned scale, so after changing a scale
-in Nix, re-drag the positions in the settings window. Keyboard layout stays in Nix because
-`qwertz-binds.nix` depends on it.
+in Nix, re-drag the positions in the settings window. Keyboard layout stays in
+Nix because `qwertz-binds.nix` depends on it.
 
-Only keys in `schema.json` can be written; each was checked against
-Hyprland 0.56's source. Adding one means checking it the same way, then listing
-it in `schema.json` with its type and range.
+Only keys in `schema.json` can be written. To add one, check the key in
+Hyprland's source for the pinned version, then list it in `schema.json` with
+its type and range.
 
 ### The writer
 
@@ -577,76 +490,71 @@ manifest) is the only writer of `ii-settings.json`:
 - `set` / `reset <section> <key>`: validate, write the repo file atomically
   under a lock, re-render the live file, reload. It never creates the repo
   file (an untracked file is invisible to flake evaluation, so a new one would
-  not persist) and refuses to write one it cannot parse. If Hyprland reports an error
-  in `krane_gui.lua` after the reload, it restores both files.
+  not persist) and refuses to write one it cannot parse. If Hyprland reports an
+  error in `krane_gui.lua` after the reload, it restores both files.
 - `apply`: re-render the live file from the repo file, after a hand edit or a
   `git checkout`. The settings window offers the same as "Apply now" when it
   sees the file change; nothing is applied on its own.
 - `activate`: run at every home-manager activation (`home.activation.kraneIiActivate`
-  in `modules/home/desktop/ii-settings.nix`), not just at login. home-manager re-runs
-  activation at every boot from the last `nixos-rebuild switch`'s build-time
-  render, so without this step any GUI change made since that switch would be
-  lost on reboot; `activate` re-renders the live file and the idle config from
-  the current repo file instead. It never calls `hyprctl`, never reloads,
-  never restarts hypridle and never touches the pending file or the revert
-  timer, because it runs before Hyprland is up. It must never fail activation:
-  a missing, unparseable or ownership-rejected repo file just prints a
-  warning and leaves the existing build-time render in place. Before login
-  `$XDG_RUNTIME_DIR` may not exist yet; the lock then falls back to
+  in `modules/home/desktop/ii-settings.nix`). home-manager re-runs activation at
+  every boot from the last `nixos-rebuild switch`'s build-time render, so
+  without this step any GUI change made since that switch would be lost on
+  reboot; `activate` re-renders the live file and the idle config from the
+  current repo file instead. It runs before Hyprland is up, so it never calls
+  `hyprctl`, restarts hypridle or touches the pending file or revert timer.
+  It must never fail activation: a missing, unparseable or ownership-rejected
+  repo file prints a warning and leaves the build-time render in place. Before
+  login `$XDG_RUNTIME_DIR` may not exist yet; the lock then falls back to
   `hosts/<host>/.ii-settings.lock` (git-ignored).
 - `try monitor …` / `confirm`: a display change is live at once, and a
   transient systemd timer (`krane-ii-settings-revert`, 15 s) reverts it
   unless Keep is pressed. The previous live file is kept aside so the revert
   never depends on the repo file being readable. While the timer is pending,
-  the Displays page disables every control until Keep or Revert. Kept
-  changes carry `bootConfirmed: false`; `boot-check` (run at login) waits
-  for the session to lock then unlock, re-arms the same timer and asks
-  again. If it is not kept before the timer runs out, `revert-unconfirmed`
-  deletes the whole `monitors.<output>` entry, not just the changed fields.
-  `confirm` validates the repo file and the merge before it stops the
-  timer, so a repo file it cannot read or a rejected merge leaves the timer
-  armed and the change still reverts. `boot-check` only asks about outputs
-  Hyprland currently reports connected; an output that is disconnected at
-  boot keeps `bootConfirmed: false` untouched and is asked about again once
-  it is reconnected. `confirm` and `revert-unconfirmed` only act on the
-  outputs the pending boot check actually listed, never on every
-  `bootConfirmed: false` entry, so a still-disconnected output is never
-  swept up by either.
+  the Hyprland page disables every section (Displays, Layout, Input, Idle,
+  Visual & Aesthetics, Autostart Apps, Animations) until Keep or Revert.
+  `confirm` validates the repo file and the merge before it stops the timer,
+  so a repo file it cannot read or a rejected merge leaves the timer armed and
+  the change still reverts.
+- `boot-check` / `revert-unconfirmed`: kept changes carry
+  `bootConfirmed: false`. `boot-check` (run at login) waits for the session to
+  lock then unlock, re-arms the same timer and asks again. If it is not kept
+  in time, `revert-unconfirmed` deletes the whole `monitors.<output>` entry,
+  not just the changed fields. Only outputs Hyprland reports connected are
+  asked about, and `confirm` and `revert-unconfirmed` act only on the outputs
+  the pending boot check listed, so a disconnected output keeps
+  `bootConfirmed: false` until it is reconnected.
 - `get`: the state the settings window shows.
+
+Tests: `pkgs/krane-ii-settings/tests` (command validation, the displays
+confirm-or-revert flow, the boot path and the Lua render output).
 
 The GUI never commits. `config.json` changes on every wallpaper switch
 (`wallpaperPath`), so `git status` shows it often; commit selectively.
-`ai/` and `*.tmp` are ignored; `actions/` and `presets/` are tracked.
-Read a host's whole `config.json` before committing it for the first time:
-it can hold the weather city, a booru username and AI endpoints.
+`ai/`, `*.tmp` and `presets/*.zip` are ignored. Read a host's whole
+`config.json` before committing it for the first time: it can hold the
+weather city, a booru username and AI endpoints.
 
 ### Hotplug and reload: KRANE_GUI_MONITORS
 
 A host's `display.nix` can define `extraMonitorsLua` to re-send a monitor
 rule outside the GUI's own `monitors.<output>` block, for example to keep a
 laptop panel scaled correctly as external monitors come and go. That Lua
-runs with only the fields `display.nix` itself knows: `output`, `mode` and
-`scale`. Fields the settings window owns (transform, VRR,
-color management, HDR) are not in scope there, so a naive re-send would
-silently drop them on every hotplug or `hyprctl reload`.
+knows only the fields `display.nix` sets (`output`, `mode`, `scale`), so a
+naive re-send would drop the GUI-owned fields (transform, VRR, color
+management, HDR) on every hotplug or `hyprctl reload`.
 
-The writer renders a `KRANE_GUI_MONITORS` Lua global into `custom/krane_gui.lua`
-alongside each `hl.monitor({...})` call, keyed by output name, holding the
-full rendered rule it just sent to Hyprland — `output`, `mode`, `position`
-and `scale` included, alongside every GUI-owned field. The `monitors.lua`
-trailer requires `custom/krane_gui.lua` last, then calls `krane_after_gui()`
-if the host defined one (`modules/home/desktop/hypr-config.nix`'s `monitorsFile`).
-A host that needs its `extraMonitorsLua` to survive hotplug sets
-`krane_after_gui` to a function that merges `KRANE_GUI_MONITORS[output]`
-into each rule it re-sends before calling `hl.monitor`, skipping `output`,
-`mode` and `scale` itself so Nix's own computed values for those fields are
-not clobbered by the GUI's last-rendered ones. Position is the exception: it is
-GUI-owned, so the function reads it from `KRANE_GUI_MONITORS`.
-`hosts/tarmantria/display.nix`'s `scale_internal` is the example: it merges
-eDP-1's GUI fields back in, filtering out those keys, whenever a
-monitor is added or removed (the panel's position comes from the GUI entry of
-eDP-1 or, as the panel name flips with the GPU mux, eDP-2), so a transform or color change set from the
-settings window is not lost on the next hotplug.
+The writer renders a `KRANE_GUI_MONITORS` Lua global into `custom/krane_gui.lua`,
+keyed by output name, holding the full rule it sent to Hyprland. The
+`monitors.lua` trailer requires `custom/krane_gui.lua` last, then calls
+`krane_after_gui()` if the host defined one
+(`modules/home/desktop/hypr-config.nix`'s `monitorsFile`). A host that needs
+its `extraMonitorsLua` to survive hotplug sets `krane_after_gui` to a function
+that merges `KRANE_GUI_MONITORS[output]` into each rule it re-sends, skipping
+`output`, `mode` and `scale` so Nix's values win; `position` is GUI-owned and
+read from `KRANE_GUI_MONITORS`. `hosts/tarmantria/display.nix`'s
+`scale_internal` is the example: it merges eDP-1's GUI fields back in whenever
+a monitor is added or removed (the panel's position comes from the GUI entry
+of eDP-1 or, as the panel name flips with the GPU mux, eDP-2).
 
 ### Escape hatches
 
@@ -673,9 +581,8 @@ not ship, or only remove pin behaviour), and `ConfigSelectionShapeArray`,
 `LayoutSection` and `WidgetsMonitorSelector` (only dropped controls used them).
 Not ported: the Niri page, the fork's panel-style settings overlay (ii's
 standalone window stays, so a broken page crashes only the settings process,
-not the bar or lock screen), About's
-"Update dots" and "System update", Profile's hostname editing and online
-presets.
+not the bar or lock screen), About's "Update dots" and "System update",
+Profile's hostname editing and online presets.
 
 | Page | Control (section) | Key | Reason |
 |---|---|---|---|
@@ -712,29 +619,20 @@ presets.
 | Interface | Samples (Style: Blurred) | `lock.blur.size` | fork-only feature |
 | Interface | Show home directory in quick access, Close after selection, Show blur background, Columns in grid view, Wallpaper change interval, Always show search bar, Custom Wallpaper Folder, Live Wallpaper Folder (Wallpaper selector) | `wallpaperSelector.{showHomePath,closeAfterSelection,showBlurBackground,columns,changeInterval,showSearchbar,userPath,liveWallpapersPath}` | fork-only feature |
 | Services | Icons, Keybinds (Prefixes) | `search.prefix.{symbols,keybinds}` | fork-only feature |
-| About | Packages, Updates cards; Update Dots, System update buttons | none | pacman-only / out of scope (spec) |
-| Profile | Online presets; hostname editing (shown read-only) | `profile.onlinePresets` | out of scope (spec) |
-| Hyprland | Displays section of the fork's `monitors.lua` writer; "add a require line" notice | none | replaced by `krane-ii-settings` (Design B, C) |
-
-The writer's own test suite (`pkgs/krane-ii-settings/tests`) covers this
-behaviour: 53 tests across command validation, the displays confirm-or-revert
-flow and the Lua render output.
+| About | Packages, Updates cards; Update Dots, System update buttons | none | pacman-only / out of scope |
+| Profile | Online presets; hostname editing (shown read-only) | `profile.onlinePresets` | out of scope |
+| Hyprland | Displays section of the fork's `monitors.lua` writer; "add a require line" notice | none | replaced by `krane-ii-settings` |
 
 ## Claude Code
 
 ### Agents tab
 
 The left sidebar's Agents tab (`patches/ii/04-agents`) lists every Claude
-Code session on the machine that has a window or runs in the background:
-name, `bg` for background sessions, last activity, and a dot for the state
-(error colour and the `waitingFor` reason while a session waits on you, a
-pulsing primary colour while busy). Rows are grouped by working directory,
-each group under a `~`-relative path header, with the group holding the
-most urgent session (waiting, then busy, then idle) listed first. Clicking
-a row focuses the session's terminal window on any workspace. For a
-background session that no terminal is attached to, it runs `kitty -e
-claude attach <id>`. The tab never answers, approves, stops or deletes
-anything.
+Code session on the machine that has a window or runs in the background,
+grouped by working directory, most urgent group first. Clicking a row focuses
+the session's terminal window on any workspace, or, for a background session
+with no terminal attached, runs `kitty -e claude attach <id>`. The tab never
+answers, approves, stops or deletes anything.
 
 An interactive session is matched to its window by walking the session's pid
 chain up to a Hyprland client. A background session is never walked, because
@@ -743,18 +641,17 @@ terminal title (Claude Code titles the window with the session name) and only
 when exactly one window has that name; otherwise a click opens an attach
 terminal instead of focusing a guessed window.
 
-It runs `scripts/claude/agents.sh` (`claude agents --json`, plus the pid
+It runs ii's `scripts/claude/agents.sh` (`claude agents --json`, plus the pid
 chain up to the terminal and the transcript's mtime; transcript content is
-never read) every 3 s, backing off to 15 s when a run is slow. It runs only
+never read) every 3 s, backing off to 15 s when a run is slow, and only
 while the tab is visible, so a closed sidebar starts no `claude` process.
 Sessions whose process has no terminal window (SDK sessions such as the
 claude-mem observer, tmux, SSH, TTYs) are hidden and counted as
 "headless hidden".
 
-To turn the tab off, use Settings, Interface, "Agents tab", or add
-`"sidebar": {"agents": {"enable": false}}` to
-`~/.config/illogical-impulse/config.json` (this host's file in the repo, see
-"Settings persistence"; not written by Nix).
+To turn the tab off, use Settings, Interface, "Agents tab", or set
+`"sidebar": {"agents": {"enable": false}}` in
+`~/.config/illogical-impulse/config.json` (see "Settings persistence").
 
 `claude agents --json` belongs to agent view, a research preview. After
 every `just update-claude`, check its fields:
@@ -773,12 +670,12 @@ line instead of failing silently.
 
 The Agents tab only refreshes while open, so it cannot tell you that a
 session is blocked. Claude Code's own terminal notifications do that
-(checked 2026-09-30 from ii's notification history (`~/.cache/quickshell/notifications/notifications.json`) with `preferredNotifChannel` unset (`auto`) in
-`~/.claude/settings.json`, the claude-dotfiles repo): a permission prompt in
-a kitty window on another workspace produces an ii notification popup. If it
-stops working, add a `Notification` hook that calls `notify-send` in
-`~/.claude/settings.json` (matcher `permission_prompt|idle_prompt|elicitation_dialog`,
-body from the hook JSON's `message`). That file is not in this repo.
+(checked 2026-09-30 from ii's notification history,
+`~/.cache/quickshell/notifications/notifications.json`, with
+`preferredNotifChannel` unset in `~/.claude/settings.json`): a permission
+prompt in a kitty window on another workspace produces an ii notification
+popup. If it stops working, add a `Notification` hook that calls
+`notify-send` in `~/.claude/settings.json` (not in this repo).
 
 ### Claude in the sidebar chat
 
@@ -822,16 +719,13 @@ line: `patches/illogical-flake-kde-platformtheme.patch` drops the flake's
 `custom/general.lua` follows the same pattern with its plugin comment
 block in place of the `PATH` fixes.
 
-`patches/illogical-flake-cheatsheet-fkeys.patch` fixes the cheatsheet's
-number-key collapsing logic, which used a bare digit-substring test and so
-also matched F-keys containing a "1" (F1, F10, F11) and dropped F9 (digit
-9, no "1"); it now only collapses keys that are purely digits.
-
 ## Rollback and escape hatches
 
 - UWSM session misbehaves: set `programs.hyprland.withUWSM = false` in
   `modules/nixos/desktop/desktop.nix`. The plain Hyprland session is already on
-  the greeter, so this is a one-line, one-rebuild rollback.
+  the greeter, so this is a one-line, one-rebuild rollback. ii starts
+  programs with `hl.dsp.exec_cmd`, not UWSM-scoped launches, so some
+  processes landing outside a UWSM scope is expected, not a fault.
 - Autologin/lock-on-start misbehaves: `systemctl restart greetd` gives you
   tuigreet back, not another autologin, because greetd's
   `/run/greetd.run` runfile blocks a second autologin within the same
@@ -840,12 +734,20 @@ also matched F-keys containing a "1" (F1, F10, F11) and dropped F9 (digit
   switch re-renders the file without it. Appended files need no
   hand-editing, since the copy step recreates them from scratch and our
   step replaces everything from the sentinel down.
-- The soymou module breaks or goes stale: it is a single-maintainer
-  flake, and `copyIllogicalImpulseConfigs` is an internal name this repo
-  asserts on. [FALLBACK-VENDORING.md](./FALLBACK-VENDORING.md) documents
-  vendoring `dots-hyprland` directly and replacing the copy step,
-  keeping `krane.hypr.*` and this DAG entry unchanged.
+- The soymou module breaks or goes stale: see "If the soymou module breaks"
+  below.
 - Updating either input: `nix flake update dots-hyprland illogical-flake`
   is a reviewed change, not routine maintenance. Re-check the wipe-set
   table, the sourcing order, and that `copyIllogicalImpulseConfigs`
   still exists, then test two consecutive switches on the target.
+
+## If the soymou module breaks
+
+Trigger: the single-maintainer soymou module stops working, not just goes
+quiet. Approach: self-vendor `dots-hyprland` (already a pinned input) and
+drop `illogical-flake`; `krane.iiVendored.enable`
+(`modules/home/desktop/fallback-vendoring.nix`) is a stub that fails the build.
+What has to be ported from the module source at the pin: the copy step (wipe
+set above), the env.lua and general.lua snippets, ii's runtime packages,
+Quickshell build flags and the Python environment. `krane.hypr.*`, `display.nix`
+and `kraneIiOverrides` stay; the `copyIllogicalImpulseConfigs` assertion goes.
