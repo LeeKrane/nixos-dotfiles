@@ -54,7 +54,11 @@ run_in_container() {
         "$IMAGE" sh -c "
             git config --global --add safe.directory /work
             $1
-        "
+        " || {
+        local rc=$?
+        [ "$rc" -eq 137 ] && echo "Container was OOM-killed at DOCKER_MEMORY=${DOCKER_MEMORY:-14g}; nix flake check needs about 5 GiB. Run it on a host with more free RAM." >&2
+        return "$rc"
+    }
 }
 
 # The host list comes from the flake (scripts/hosts.nix): x86_64-linux hosts only, as the container cannot build aarch64 toplevels.
@@ -71,6 +75,18 @@ load_hosts() {
 }
 
 mode="${1:-check}"
+
+host_mem_kib=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
+requested_mem="${DOCKER_MEMORY:-14g}"
+case "$requested_mem" in
+    *g) requested_kib=$((${requested_mem%g} * 1024 * 1024)) ;;
+    *m) requested_kib=$((${requested_mem%m} * 1024)) ;;
+    *) requested_kib=0 ;;
+esac
+if [ "$requested_kib" -gt "$host_mem_kib" ]; then
+    echo "DOCKER_MEMORY=$requested_mem exceeds this host's $((host_mem_kib / 1024 / 1024)) GiB RAM; the container would be OOM-killed. Set DOCKER_MEMORY lower." >&2
+    exit 1
+fi
 
 seed_volume_if_missing
 
