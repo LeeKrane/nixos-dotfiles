@@ -324,9 +324,7 @@ action buttons are visible without a right-click. Drop when pinned
 ### `07-idle`
 
 "Keep awake" defaults to on and survives reboots. `0003`: while "Keep awake" is on, `Idle.qml` also runs
-`systemd-inhibit --what=idle ... cat`, an idle lock hypridle honours even
-when Hyprland ignores the layer-surface inhibitor (zero alpha during fade-in
-or under a fullscreen window). `cat` exits on stdin EOF, so the lock goes
+`systemd-inhibit --what=idle ... cat`, an idle lock hypridle honours. `cat` exits on stdin EOF, so the lock goes
 away when the toggle turns off or Quickshell exits.
 
 ### Workflow
@@ -616,8 +614,7 @@ with no terminal attached, runs `kitty -e claude attach <id>`. The tab never
 answers, approves, stops or deletes anything.
 
 An interactive session is matched to its window by walking the session's pid
-chain up to a Hyprland client. A background session is never walked, because
-a supervisor spawned it and its ancestry leads elsewhere. It is matched by
+chain up to a Hyprland client. A background session is never walked. It is matched by
 terminal title (Claude Code titles the window with the session name) and only
 when exactly one window has that name; otherwise a click opens an attach
 terminal instead of focusing a guessed window.
@@ -647,24 +644,11 @@ Expected: `cwd`, `id`, `kind`, `name`, `pid`, `sessionId`, `startedAt`,
 up here before the tab breaks; the tab then shows the raw value or an error
 line instead of failing silently.
 
-### Desktop notifications for blocked sessions
-
-The Agents tab only refreshes while open, so it cannot tell you that a
-session is blocked. Claude Code's own terminal notifications do that
-(checked 2026-09-30 from ii's notification history,
-`~/.cache/quickshell/notifications/notifications.json`, with
-`preferredNotifChannel` unset in `~/.claude/settings.json`): a permission
-prompt in a kitty window on another workspace produces an ii notification
-popup. If it stops working, add a `Notification` hook that calls
-`notify-send` in `~/.claude/settings.json` (not in this repo).
-
 ### Claude in the sidebar chat
 
 Optional and billed per token through an Anthropic API key. The Claude Code
 subscription cannot be used here: routing the teamclaude proxy or Claude
 Code's OAuth credentials into ii's requests falls outside Anthropic's terms.
-Anthropic describes its OpenAI-compatible endpoint as meant for testing and
-comparison, not long-term use.
 
 Add to `ai.extraModels` in `~/.config/illogical-impulse/config.json`:
 
@@ -685,9 +669,7 @@ Add to `ai.extraModels` in `~/.config/illogical-impulse/config.json`:
 Then pick it with `/model` in the Intelligence tab and store the key with
 `/key <key>` (ii keeps it in the keyring, never in this repo). `"tools": []`
 is required: ii's `openai` strategy does not parse tool calls, so a reply
-that calls one of ii's tools would arrive empty. Opus 5.5 works the same
-with `"model": "claude-opus-5-5"`.
-
+that calls one of ii's tools would arrive empty.
 ## Verifying on the target
 
 See [docs/VERIFY.md](VERIFY.md)'s on-target checklist for the commands,
@@ -707,10 +689,6 @@ block in place of the `PATH` fixes.
   the greeter, so this is a one-line, one-rebuild rollback. ii starts
   programs with `hl.dsp.exec_cmd`, not UWSM-scoped launches, so some
   processes landing outside a UWSM scope is expected, not a fault.
-- Autologin/lock-on-start misbehaves: `systemctl restart greetd` gives you
-  tuigreet back, not another autologin, because greetd's
-  `/run/greetd.run` runfile blocks a second autologin within the same
-  boot.
 - A single override misbehaves: delete the option value. The next
   switch re-renders the file without it. Appended files need no
   hand-editing, since the copy step recreates them from scratch and our

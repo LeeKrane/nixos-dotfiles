@@ -35,9 +35,9 @@
 
 | Host | Role | GPU / hardware |
 | --- | --- | --- |
-| `tariognatha` | Desktop | NVIDIA RTX-4070-Ti-class, open kernel module, single GPU |
+| `tariognatha` | Desktop | NVIDIA, open kernel module, single GPU |
 | `tarmantria` | Laptop | Intel iGPU + NVIDIA dGPU, PRIME offload |
-| `taractias` | Laptop | AMD Vega iGPU, no dGPU |
+| `taractias` | Laptop | AMD iGPU, no dGPU |
 | `taragarmr` | Server | x86_64 mini PC (AZW SER, Ryzen 7 6800H): the server stack, WireGuard hub and public ingress |
 | `taronychus` | Server | Raspberry Pi 5, aarch64 |
 | `tarritator` | Server | Raspberry Pi 5, aarch64 |
@@ -53,8 +53,7 @@ This repo pulls ii in as the soymou module instead of reimplementing ii's instal
 
 Things that are easy to break here:
 
-- The update pull requests are opened with `GITHUB_TOKEN`, so GitHub does not run `check.yml` on them. `update-lane.yml` calls it itself and reports the result in the PR body; `check.yml` runs again on `main` after the merge. Opening them needs "Allow GitHub Actions to create and approve pull requests" under the repository's Settings, Actions, General.
-- Every gated `main` commit reaches the servers, including desktop-only ones, because `system.configurationRevision` (`lib/mk-host.nix`) is the commit. Such a commit causes a revision-only activation, and the upgrade hooks compare that revision with `deploy`, so do not remove it. A desktop-lane `nixpkgs` bump also changes the server closures: `modules/home/server/default.nix` takes `codegraph` from `nixpkgs-unstable`. The PR body's "Merging deploys to" line lists the servers a PR reaches.
+- The update pull requests are opened with `GITHUB_TOKEN`, so GitHub does not run `check.yml` on them. `update-lane.yml` calls it itself and reports the result in the PR body; `check.yml` runs again on `main` after the merge.- Every gated `main` commit reaches the servers, including desktop-only ones, because `system.configurationRevision` (`lib/mk-host.nix`) is the commit. Such a commit causes a revision-only activation, and the upgrade hooks compare that revision with `deploy`, so do not remove it. A desktop-lane `nixpkgs` bump also changes the server closures: `modules/home/server/default.nix` takes `codegraph` from `nixpkgs-unstable`. The PR body's "Merging deploys to" line lists the servers a PR reaches.
 - A server upgrade that fails its health check rolls back, including after the reboot a kernel change triggers (`scripts/server-upgrade-hooks.sh`, `boot-health`). A kernel that does not boot never reaches that check.
 - The desktop notifier (`modules/home/desktop/flake-update-notify.nix`) parses the PR body's `### Package versions`, `### Inputs` and `### Security` headings from `scripts/update-summary.sh` and `scripts/security-summary.sh`. Rename them only together with `scripts/flake-update-notify.sh`.
 

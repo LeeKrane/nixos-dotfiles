@@ -2,7 +2,7 @@
 
 One [sops](https://github.com/getsops/sops)-encrypted `<hostname>.yaml` per host. There is no shared secrets file. `tariognatha-vm` shares `tariognatha.yaml` (`lib/host-secrets.nix` keys on `hostName`).
 
-Commit each file. Flakes only see git-tracked or staged files, so an untracked `secrets/<host>.yaml` evaluates as absent: `sops.secrets`, the wg0 tunnel and the Proton Drive seed stay off with no error. Only `secrets/*.key` is gitignored.
+Commit each file: flakes only see git-tracked or staged files. Only `secrets/*.key` is gitignored.
 
 Each host decrypts with an age identity derived from its SSH host key (`modules/nixos/common/sops.nix`, `sops.age.sshKeyPaths`), so a compromised host exposes only its own file.
 
@@ -64,13 +64,13 @@ A desktop's recipients in `.sops.yaml` start as `age1PLACEHOLDER_...` values (`i
 
 ## Servers
 
-Servers do not use `scripts/bootstrap-sops.sh`. Their SSH host keys are generated ahead of install and kept in the password manager; their age recipients are already the `&host_<name>` entries in `.sops.yaml`. taragarmr gets its key through `nixos-anywhere --extra-files <dir>` (key under `<dir>/etc/ssh/`). The image hosts (taronychus, tarronax, tarritator) get `ssh_host_ed25519_key` (root:root 0600) and `.pub` (0644) copied into `/etc/ssh` on the flashed root partition before first boot. sshd only generates a host key when the file is missing, so the pre-placed key is kept. The login password is not in sops; it is set on site at install (see each host's header comment).
+Servers do not use `scripts/bootstrap-sops.sh`. Their age recipients are already the `&host_<name>` entries in `.sops.yaml`. taragarmr gets its key through `nixos-anywhere --extra-files <dir>` (key under `<dir>/etc/ssh/`). The image hosts (taronychus, tarronax, tarritator) get `ssh_host_ed25519_key` (root:root 0600) and `.pub` (0644) copied into `/etc/ssh` on the flashed root partition before first boot. sshd only generates a host key when the file is missing, so the pre-placed key is kept. The login password is not in sops; it is set on site at install (see each host's header comment).
 
 ### Server upgrade secrets
 
 `modules/nixos/server/auto-upgrade.nix` needs `server-upgrade/github-token` and `ntfy/publish-token` in every server file, plus `ntfy/server-env` on taragarmr; the desktops need `ntfy/read-token`.
 
-`server-upgrade/github-token` is a fine-grained PAT limited to `LeeKrane/nixos-dotfiles` with Issues: read and write. To replace a lost or leaked one, run from the repo root on tariognatha or tarmantria, in bash (the login shell is fish, which cannot run the `for` loop):
+To replace a lost or leaked `server-upgrade/github-token`, run from the repo root on tariognatha or tarmantria, in bash (the login shell is fish, which cannot run the `for` loop):
 
 ```sh
 for h in taragarmr taronychus tarritator tarronax; do

@@ -40,10 +40,8 @@ Every host autologins into Hyprland (`initial_session` in `modules/nixos/desktop
 | Keybinds survived the switch (no latched emergency mode) | `hyprctl binds \| head -5` | All |
 | Cursor theme from `modules/home/desktop/cursor.nix` installed and set for GTK, want `Bibata-Modern-Classic` twice | `ls /etc/profiles/per-user/$USER/share/icons \| grep Bibata-Modern-Classic$; grep gtk-cursor-theme-name ~/.config/gtk-3.0/settings.ini` | All |
 | Monitor layout matches `hosts/<host>/display.nix` and the GUI-owned positions in `ii-settings.json` | `hyprctl monitors -j \| jq '.[] \| {name, width, height, refreshRate, scale, transform}'` | All |
-| Logitech G502 libinput name matches `display.nix`'s `devices[].name`, otherwise the block applies to nothing | `hyprctl devices \| grep -i logitech` | tariognatha |
-| Vega iGPU VA-API decode uses Mesa's radeonsi | `vainfo \| grep -i driver` | taractias |
 | PRIME offload reaches the dGPU | `nvidia-offload glxinfo \| grep vendor` | tarmantria |
-| Wi-Fi came up after the first reboot (needs `hardware.enableRedistributableFirmware`; `rtw88` on taractias) | `nmcli device status \| grep -i wifi` | tarmantria, taractias |
+| Wi-Fi came up after the first reboot (needs `hardware.enableRedistributableFirmware`) | `nmcli device status \| grep -i wifi` | tarmantria, taractias |
 | Bluetooth came up after the first reboot | `bluetoothctl show \| grep -i powered` | tarmantria, taractias |
 | Windows dual-boot entry present, if expected. See [docs/INSTALL.md](INSTALL.md) "Windows dual-boot entry" | `sudo bootctl list` | All, if dual-booting |
 | Proton Drive mounted | `systemctl --user status proton-drive-mount` | All |

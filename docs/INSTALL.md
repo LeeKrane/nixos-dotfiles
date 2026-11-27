@@ -8,10 +8,9 @@ Desktops and laptops only. The servers (`taragarmr`, `taronychus`, `tarritator`,
 
 ## 0. Before you start
 
-- `tariognatha`: NVIDIA RTX-4070-Ti-class desktop GPU, single GPU, open kernel module.
+- `tariognatha`: NVIDIA GPU, single GPU, open kernel module.
 - `tarmantria`: Intel iGPU plus NVIDIA dGPU laptop, PRIME offload.
-- `taractias`: AMD Vega iGPU laptop, no dGPU.
-- On `taractias`, press `e` in the ISO boot menu and append `iommu=pt` to the kernel line, or use a wired connection. The QCA9377 Wi-Fi stalls under the default IOMMU mode. The installed system sets `iommu=pt` itself (`hosts/taractias/default.nix`).
+- `taractias`: AMD iGPU laptop, no dGPU.
 - UEFI boot, Secure Boot off. systemd-boot does not handle Secure Boot.
 - A NixOS unstable minimal installer ISO, written to USB.
 - Network once booted. `install.sh` re-execs itself through `nix shell` for `gum` and other tools the minimal ISO lacks, and enables flakes itself, so `/etc/nix/nix.conf` needs no edit. The ISO ships NetworkManager: `nmtui`, or `nmcli device wifi connect SSID password PW`.
@@ -59,7 +58,7 @@ Log in, then from `~/.dotfiles`:
 On an installed system this runs setup mode:
 
 1. Bootstraps sops-nix (`scripts/bootstrap-sops.sh <host>`): derives this host's age recipient and offers to commit `.sops.yaml`. If you decline, commit later with Appendix A step 10. sshd runs only so `sshd-keygen` creates the host key at boot; `openFirewall = false`.
-2. Offers to edit `secrets/<host>.yaml` with `sops` (skipped under `--yes`/`--dry-run`) and to commit it. An uncommitted secrets file evaluates as absent to sops-nix. Keys: [secrets/README.md](../secrets/README.md).
+2. Offers to edit `secrets/<host>.yaml` with `sops` (skipped under `--yes`/`--dry-run`) and to commit it. Keys: [secrets/README.md](../secrets/README.md).
 3. Offers the Rust toolchain (`rustup default stable` plus components).
 4. Offers the flathub remote.
 5. Runs the [VERIFY checklist](VERIFY.md#2-on-target-checklist), reporting each check OK, WARN or SKIP.
@@ -124,7 +123,7 @@ On a non-NixOS system `install.sh` defaults to install mode. Pass `--dry-run` or
 
 `--dry-run` is safe anywhere, as any user. Mutating steps print `+ the command`; read-only probes still run. `just install-test` (`scripts/docker-check.sh install-test`) runs it and checks `git status --porcelain` and `git rev-parse HEAD` before and after.
 
-### DNS timeouts ("Resolving timed out")
+### Pinning public DNS
 
 The DNS check (install step 3) offers to pin public DNS. By hand:
 
@@ -134,23 +133,11 @@ nmcli con mod "<connection name>" ipv4.dns "1.1.1.1 9.9.9.9" ipv4.ignore-auto-dn
 nmcli con up "<connection name>"
 ```
 
-## NVIDIA black-screen ladder (`tariognatha`, or `tarmantria`'s dGPU path)
+## Kernel packages
 
 Out-of-tree modules (`v4l2loopback`, NVIDIA) build against `boot.kernelPackages`, `linuxPackages_latest` by default (`mkDefault` in `modules/nixos/desktop/boot.nix`). If one fails to build on a new kernel, pin an older `linuxPackages_6_x` there.
 
-If Hyprland shows a black screen after switching, try these in order, re-switching after each. Each is a one-line change in `modules/nixos/gpu/nvidia-desktop.nix` or `nvidia-prime.nix`.
-
-1. `hardware.nvidia.open = false;`: the proprietary kernel module.
-2. `hardware.nvidia.package = config.boot.kernelPackages.nvidiaPackages.beta;`: a newer driver.
-3. `boot.kernelParams = [ "nvidia_drm.fbdev=0" ];`, replacing the `=1` in `nvidia-desktop.nix`: disables the NVIDIA DRM framebuffer console.
-
 ## Windows dual-boot entry
-
-systemd-boot lists a Windows install on the same ESP automatically. Check with:
-
-```sh
-sudo bootctl list
-```
 
 Windows on a separate disk's ESP needs an explicit entry. `modules/nixos/desktop/t7-win11.nix` is the working example (`tariognatha`, `tarmantria`): `boot.loader.systemd-boot.extraEntries` plus an EDK2 shell `startup.nsh` that boots the filesystem carrying a marker file, because systemd-boot cannot chainload from another disk and `fsN` handles shift with attached drives. Copy it for another disk, then confirm with `efibootmgr -v` and `sudo bootctl list`.
 
@@ -249,7 +236,7 @@ Replace `<host>` with `tariognatha`, `tarmantria`, or `taractias`. Paths assume 
     sudo nixos-rebuild switch --flake ~/.dotfiles#<host>
     ```
 
-10. Bootstrap sops-nix and fill in secrets. Commit both: an uncommitted secrets file evaluates as absent.
+10. Bootstrap sops-nix and fill in secrets. Commit both.
 
     ```sh
     scripts/bootstrap-sops.sh <host>
