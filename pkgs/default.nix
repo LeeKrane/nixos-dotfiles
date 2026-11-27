@@ -6,6 +6,7 @@ in
   inherit ani-cli-launcher;
   ani-cli-launcher-sign = ani-cli-launcher.sign;
 
+  caveman-cli = pkgs.callPackage ./caveman-cli/package.nix { };
   claude-code = pkgs.callPackage ./claude-code/package.nix { };
   krane-ii-settings = pkgs.callPackage ./krane-ii-settings { };
 

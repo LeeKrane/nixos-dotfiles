@@ -52,6 +52,7 @@ in
     p7zip
     wget
     curl
+    caveman-cli
 
     # sshd is enabled (modules/nixos/common/users.nix) only so sshd-keygen creates the host key
     # sops-nix derives its age identity from; listed explicitly, not a transitive dep of the client.
