@@ -61,3 +61,16 @@ Every host autologins into Hyprland (`initial_session` in `modules/nixos/desktop
 - Displays: a change reverts after 15 s unless kept; a kept change asks again after the next reboot.
 - `systemctl --user is-active krane-ii-settings-revert.timer` is `inactive` when no change is pending.
 - After a reboot with no switch, `krane_gui.lua` still matches a `set`/`reset` made before it.
+
+### Bar icon popouts
+
+- Each of the network, Bluetooth, speaker and mic icons opens its popout next to the icon, on your real bar layout.
+- Typing a Wi-Fi password in the Wi-Fi popout works.
+- The Wi-Fi and Bluetooth power switches work.
+- Lock the screen with a popout open; after unlock it stays closed.
+- Click outside, Esc, a second click on the icon and Details each close a popout.
+- Mute buttons and sliders work; scrolling over the bar moves the speaker slider.
+- The notification icon and empty indicator space still toggle the right sidebar.
+- With Settings > Bar > Icon popouts off, speaker and mic icons appear only when muted and every click opens the sidebar.
+- The sidebar volume dialogs and the overlay mixer show the new mute button and slider, nothing else changed.
+- The look (card size, spacing, shadow, corners) fits the rest of the shell.

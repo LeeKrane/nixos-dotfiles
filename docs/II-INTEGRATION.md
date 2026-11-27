@@ -328,6 +328,17 @@ on, `Idle.qml` also runs `systemd-inhibit --what=idle ... cat`, an idle lock
 hypridle honours. `cat` exits on stdin EOF, so the lock goes away when the
 toggle turns off or Quickshell exits.
 
+### `08-bar-popouts`
+
+Clicking the network, Bluetooth, speaker or mic bar icon opens a popout for that
+icon instead of the right sidebar. `0001`: the volume dialog content gets a
+mute button and a master slider, so the sidebar dialogs, the overlay mixer and
+the popouts share them. `0002`: Wi-Fi and Bluetooth dialog content move into
+their own files, a per-screen popout window with its own focus grab
+(`BarIconPopout.qml`) is added, and `bar.iconPopouts` (default `true`)
+controls it and keeps the speaker and mic icons always visible. With it off the
+bar behaves as upstream.
+
 ### Workflow
 
 The clone at `~/src/dots-hyprland` is a disposable workspace; the patch files

@@ -1,0 +1,62 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Fri, 27 Nov 2026 23:09:29 +0100
+Subject: [PATCH] feat(volume): mute button and master slider in the volume
+ dialog
+
+---
+ .../volumeMixer/VolumeDialogContent.qml       | 34 ++++++++++++++++++-
+ 1 file changed, 33 insertions(+), 1 deletion(-)
+
+diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarRight/volumeMixer/VolumeDialogContent.qml b/dots/.config/quickshell/ii/modules/ii/sidebarRight/volumeMixer/VolumeDialogContent.qml
+index dab92df5..84977745 100644
+--- a/dots/.config/quickshell/ii/modules/ii/sidebarRight/volumeMixer/VolumeDialogContent.qml
++++ b/dots/.config/quickshell/ii/modules/ii/sidebarRight/volumeMixer/VolumeDialogContent.qml
+@@ -15,6 +15,38 @@ ColumnLayout {
+     readonly property bool hasApps: appPwNodes.length > 0
+     spacing: 16
+ 
++    RowLayout {
++        Layout.fillWidth: true
++        Layout.topMargin: -22
++        spacing: 8
++
++        RippleButton {
++            id: muteButton
++            readonly property bool muted: (root.isSink ? Audio.sink?.audio?.muted : Audio.source?.audio?.muted) ?? false
++            implicitWidth: 40
++            implicitHeight: 40
++            buttonRadius: Appearance.rounding.full
++            onClicked: root.isSink ? Audio.toggleMute() : Audio.toggleMicMute()
++
++            MaterialSymbol {
++                anchors.centerIn: parent
++                iconSize: Appearance.font.pixelSize.larger
++                color: Appearance.colors.colOnLayer1
++                text: root.isSink ? (muteButton.muted ? "volume_off" : "volume_up") : (muteButton.muted ? "mic_off" : "mic")
++            }
++        }
++
++        StyledSlider {
++            Layout.fillWidth: true
++            configuration: StyledSlider.Configuration.M
++            value: (root.isSink ? Audio.sink?.audio?.volume : Audio.source?.audio?.volume) ?? 0
++            onMoved: {
++                const node = root.isSink ? Audio.sink : Audio.source;
++                if (node?.audio) node.audio.volume = value;
++            }
++        }
++    }
++
+     DialogSectionListView {
+         Layout.fillHeight: true
+         topMargin: 14
+@@ -64,7 +96,7 @@ ColumnLayout {
+ 
+     component DialogSectionListView: StyledListView {
+         Layout.fillWidth: true
+-        Layout.topMargin: -22
++        Layout.topMargin: 0
+         Layout.bottomMargin: -16
+         Layout.leftMargin: -Appearance.rounding.large
+         Layout.rightMargin: -Appearance.rounding.large

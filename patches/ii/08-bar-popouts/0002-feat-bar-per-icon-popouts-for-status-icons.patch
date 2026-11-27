@@ -1,0 +1,795 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Fri, 27 Nov 2026 23:31:24 +0100
+Subject: [PATCH] feat(bar): per-icon popouts for status icons
+
+---
+ dots/.config/quickshell/ii/GlobalStates.qml   |  14 ++
+ .../quickshell/ii/modules/common/Config.qml   |   1 +
+ .../quickshell/ii/modules/ii/bar/Bar.qml      |   4 +
+ .../ii/modules/ii/bar/BarContent.qml          |  30 +--
+ .../ii/modules/ii/bar/BarIconPopout.qml       | 182 ++++++++++++++++++
+ .../ii/modules/ii/bar/BarPopoutHeader.qml     |  33 ++++
+ .../ii/modules/ii/bar/BarPopoutIcon.qml       |  33 ++++
+ .../ii/modules/ii/bar/ClockWidget.qml         |   1 +
+ .../ii/modules/ii/bar/Workspaces.qml          |   1 +
+ .../bluetoothDevices/BluetoothDialog.qml      |  36 +---
+ .../BluetoothDialogContent.qml                |  50 +++++
+ .../sidebarRight/wifiNetworks/WifiDialog.qml  |  32 +--
+ .../wifiNetworks/WifiDialogContent.qml        |  46 +++++
+ .../ii/modules/ii/verticalBar/VerticalBar.qml |   5 +
+ .../ii/verticalBar/VerticalBarContent.qml     |  30 +--
+ .../ii/verticalBar/VerticalClockWidget.qml    |   1 +
+ .../ii/modules/settings/BarConfig.qml         |   6 +
+ 17 files changed, 415 insertions(+), 90 deletions(-)
+ create mode 100644 dots/.config/quickshell/ii/modules/ii/bar/BarIconPopout.qml
+ create mode 100644 dots/.config/quickshell/ii/modules/ii/bar/BarPopoutHeader.qml
+ create mode 100644 dots/.config/quickshell/ii/modules/ii/bar/BarPopoutIcon.qml
+ create mode 100644 dots/.config/quickshell/ii/modules/ii/sidebarRight/bluetoothDevices/BluetoothDialogContent.qml
+ create mode 100644 dots/.config/quickshell/ii/modules/ii/sidebarRight/wifiNetworks/WifiDialogContent.qml
+
+diff --git a/dots/.config/quickshell/ii/GlobalStates.qml b/dots/.config/quickshell/ii/GlobalStates.qml
+index bfb531e6..8415ff3e 100644
+--- a/dots/.config/quickshell/ii/GlobalStates.qml
++++ b/dots/.config/quickshell/ii/GlobalStates.qml
+@@ -10,6 +10,9 @@ pragma ComponentBehavior: Bound
+ Singleton {
+     id: root
+     property bool barOpen: true
++    property string barPopout: ""
++    property string barPopoutScreen: ""
++    property var barPopoutAnchor: ({ x: 0, y: 0, width: 0, height: 0 })
+     property bool crosshairOpen: false
+     property bool sidebarLeftOpen: false
+     property bool sidebarRightOpen: false
+@@ -31,7 +34,18 @@ Singleton {
+     property bool wallpaperSelectorOpen: false
+     property bool workspaceShowNumbers: false
+ 
++    onScreenLockedChanged: if (screenLocked) barPopout = ""
++    onBarOpenChanged: if (!barOpen) barPopout = ""
++
++    Connections {
++        target: Config.options.bar
++        function onIconPopoutsChanged() {
++            if (!Config.options.bar.iconPopouts) root.barPopout = "";
++        }
++    }
++
+     onSidebarRightOpenChanged: {
++        if (GlobalStates.sidebarRightOpen) GlobalStates.barPopout = "";
+         if (GlobalStates.sidebarRightOpen) {
+             Notifications.timeoutAll();
+             Notifications.markAllRead();
+diff --git a/dots/.config/quickshell/ii/modules/common/Config.qml b/dots/.config/quickshell/ii/modules/common/Config.qml
+index 8ad7c53c..c9a2b3e3 100644
+--- a/dots/.config/quickshell/ii/modules/common/Config.qml
++++ b/dots/.config/quickshell/ii/modules/common/Config.qml
+@@ -268,6 +268,7 @@ Singleton {
+                 property bool borderless: false // true for no grouping of items
+                 property string topLeftIcon: "spark" // Options: "distro" or any icon name in ~/.config/quickshell/ii/assets/icons
+                 property bool showBackground: true
++                property bool iconPopouts: true
+                 property bool verbose: true
+                 property bool vertical: false
+                 property JsonObject resources: JsonObject {
+diff --git a/dots/.config/quickshell/ii/modules/ii/bar/Bar.qml b/dots/.config/quickshell/ii/modules/ii/bar/Bar.qml
+index 67e73067..ffba403f 100644
+--- a/dots/.config/quickshell/ii/modules/ii/bar/Bar.qml
++++ b/dots/.config/quickshell/ii/modules/ii/bar/Bar.qml
+@@ -83,6 +83,10 @@ Scope {
+                     GlobalFocusGrab.removePersistent(barRoot);
+                 }
+ 
++                BarIconPopout {
++                    barWindow: barRoot
++                }
++
+                 MouseArea  {
+                     id: hoverRegion
+                     hoverEnabled: true
+diff --git a/dots/.config/quickshell/ii/modules/ii/bar/BarContent.qml b/dots/.config/quickshell/ii/modules/ii/bar/BarContent.qml
+index 3bec7589..3b108a3a 100644
+--- a/dots/.config/quickshell/ii/modules/ii/bar/BarContent.qml
++++ b/dots/.config/quickshell/ii/modules/ii/bar/BarContent.qml
+@@ -12,6 +12,11 @@ import qs.modules.common.functions
+ Item { // Bar content region
+     id: root
+ 
++    TapHandler {
++        gesturePolicy: TapHandler.DragThreshold
++        onTapped: GlobalStates.barPopout = ""
++    }
++
+     property var screen: root.QsWindow.window?.screen
+     property var brightnessMonitor: Brightness.getMonitorForScreen(screen)
+     property real useShortenedForm: (Appearance.sizes.barHellaShortenScreenWidthThreshold >= screen?.width) ? 2 : (Appearance.sizes.barShortenScreenWidthThreshold >= screen?.width) ? 1 : 0
+@@ -161,6 +166,7 @@ Item { // Bar content region
+             implicitHeight: rightCenterGroupContent.implicitHeight
+ 
+             onPressed: {
++                GlobalStates.barPopout = "";
+                 GlobalStates.sidebarRightOpen = !GlobalStates.sidebarRightOpen;
+             }
+ 
+@@ -259,28 +265,28 @@ Item { // Bar content region
+                     spacing: 0
+ 
+                     Revealer {
+-                        reveal: Audio.sink?.audio?.muted ?? false
++                        reveal: Config.options.bar.iconPopouts || (Audio.sink?.audio?.muted ?? false)
+                         Layout.fillHeight: true
+                         Layout.rightMargin: reveal ? indicatorsRowLayout.realSpacing : 0
+                         Behavior on Layout.rightMargin {
+                             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                         }
+-                        MaterialSymbol {
+-                            text: "volume_off"
+-                            iconSize: Appearance.font.pixelSize.larger
++                        BarPopoutIcon {
++                            popout: "speaker"
++                            text: (Audio.sink?.audio?.muted ?? false) ? "volume_off" : "volume_up"
+                             color: rightSidebarButton.colText
+                         }
+                     }
+                     Revealer {
+-                        reveal: Audio.source?.audio?.muted ?? false
++                        reveal: Config.options.bar.iconPopouts || (Audio.source?.audio?.muted ?? false)
+                         Layout.fillHeight: true
+                         Layout.rightMargin: reveal ? indicatorsRowLayout.realSpacing : 0
+                         Behavior on Layout.rightMargin {
+                             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                         }
+-                        MaterialSymbol {
+-                            text: "mic_off"
+-                            iconSize: Appearance.font.pixelSize.larger
++                        BarPopoutIcon {
++                            popout: "mic"
++                            text: (Audio.source?.audio?.muted ?? false) ? "mic_off" : "mic"
+                             color: rightSidebarButton.colText
+                         }
+                     }
+@@ -302,16 +308,16 @@ Item { // Bar content region
+                             id: notificationUnreadCount
+                         }
+                     }
+-                    MaterialSymbol {
++                    BarPopoutIcon {
++                        popout: "network"
+                         text: Network.materialSymbol
+-                        iconSize: Appearance.font.pixelSize.larger
+                         color: rightSidebarButton.colText
+                     }
+-                    MaterialSymbol {
++                    BarPopoutIcon {
++                        popout: "bluetooth"
+                         Layout.leftMargin: indicatorsRowLayout.realSpacing
+                         visible: BluetoothStatus.available
+                         text: BluetoothStatus.connected ? "bluetooth_connected" : BluetoothStatus.enabled ? "bluetooth" : "bluetooth_disabled"
+-                        iconSize: Appearance.font.pixelSize.larger
+                         color: rightSidebarButton.colText
+                     }
+                 }
+diff --git a/dots/.config/quickshell/ii/modules/ii/bar/BarIconPopout.qml b/dots/.config/quickshell/ii/modules/ii/bar/BarIconPopout.qml
+new file mode 100644
+index 00000000..247515d3
+--- /dev/null
++++ b/dots/.config/quickshell/ii/modules/ii/bar/BarIconPopout.qml
+@@ -0,0 +1,182 @@
++import qs
++import qs.services
++import qs.modules.common
++import qs.modules.common.widgets
++import qs.modules.ii.sidebarRight.wifiNetworks
++import qs.modules.ii.sidebarRight.bluetoothDevices
++import qs.modules.ii.sidebarRight.volumeMixer
++import QtQuick
++import QtQuick.Layouts
++import Quickshell
++import Quickshell.Bluetooth
++import Quickshell.Hyprland
++import Quickshell.Wayland
++
++Scope {
++    id: root
++    required property var barWindow
++    readonly property string screenName: barWindow.screen.name
++    readonly property bool open: GlobalStates.barPopout !== "" && GlobalStates.barPopoutScreen === screenName
++    readonly property real gap: Appearance.sizes.elevationMargin
++    readonly property bool vertical: Config.options.bar.vertical
++    readonly property bool atBottomOrRight: Config.options.bar.bottom
++    readonly property var anchorRect: GlobalStates.barPopoutAnchor
++    readonly property real cardWidth: 350
++    readonly property real cardHeight: 600
++
++    function close() { GlobalStates.barPopout = ""; }
++    function openDetails(command) {
++        Quickshell.execDetached(["bash", "-c", command]);
++        close();
++    }
++
++    onOpenChanged: {
++        if (GlobalStates.barPopout !== "bluetooth" && Bluetooth.defaultAdapter) Bluetooth.defaultAdapter.discovering = false;
++    }
++
++    Connections {
++        target: GlobalStates
++        function onBarPopoutChanged() {
++            const p = GlobalStates.barPopout;
++            if (!root.open) return;
++            if (p === "network") {
++                Network.enableWifi();
++                Network.rescanWifi();
++            }
++            if (p === "bluetooth" && Bluetooth.defaultAdapter) {
++                Bluetooth.defaultAdapter.enabled = true;
++                Bluetooth.defaultAdapter.discovering = true;
++            } else if (Bluetooth.defaultAdapter) {
++                Bluetooth.defaultAdapter.discovering = false;
++            }
++        }
++    }
++
++    Connections {
++        target: Bluetooth
++        function onDefaultAdapterChanged() {
++            if (!Bluetooth.defaultAdapter && GlobalStates.barPopout === "bluetooth") root.close();
++        }
++    }
++
++    LazyLoader {
++        active: root.open
++
++        PanelWindow {
++            id: popup
++            screen: root.barWindow.screen
++            color: "transparent"
++            exclusionMode: ExclusionMode.Ignore
++            WlrLayershell.namespace: "quickshell:barPopout"
++            WlrLayershell.layer: WlrLayer.Overlay
++            WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
++
++            anchors { top: true; bottom: true; left: true; right: true }
++            mask: Region { item: card }
++
++            HyprlandFocusGrab {
++                windows: [popup, root.barWindow]
++                active: popup.visible
++                onCleared: root.close()
++            }
++
++            Item {
++                anchors.fill: parent
++                focus: true
++                Keys.onEscapePressed: root.close()
++                Component.onCompleted: forceActiveFocus()
++
++                StyledRectangularShadow { target: card }
++
++                Rectangle {
++                    id: card
++                    width: root.cardWidth
++                    height: root.cardHeight
++                    radius: Appearance.rounding.windowRounding
++                    color: Appearance.m3colors.m3surfaceContainerHigh
++
++                    readonly property real cx: root.anchorRect.x + root.anchorRect.width / 2
++                    readonly property real cy: root.anchorRect.y + root.anchorRect.height / 2
++                    readonly property real barSize: root.vertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.barHeight
++
++                    x: root.vertical
++                        ? (root.atBottomOrRight ? popup.width - barSize - width - root.gap : barSize + root.gap)
++                        : Math.max(root.gap, Math.min(cx - width / 2, popup.width - width - root.gap))
++                    y: root.vertical
++                        ? Math.max(root.gap, Math.min(cy - height / 2, popup.height - height - root.gap))
++                        : (root.atBottomOrRight ? popup.height - barSize - height - root.gap : barSize + root.gap)
++
++                    ColumnLayout {
++                        anchors {
++                            fill: parent
++                            margins: Appearance.rounding.large
++                        }
++                        spacing: 16
++
++                        Loader {
++                            Layout.fillWidth: true
++                            Layout.fillHeight: true
++                            sourceComponent: ({
++                                network: networkComp,
++                                bluetooth: bluetoothComp,
++                                speaker: speakerComp,
++                                mic: micComp
++                            })[GlobalStates.barPopout]
++                        }
++                    }
++                }
++            }
++        }
++    }
++
++    Component {
++        id: networkComp
++        ColumnLayout {
++            spacing: 16
++            BarPopoutHeader {
++                title: Translation.tr("Wi-Fi")
++                showSwitch: true
++                switchChecked: Network.wifiEnabled
++                onSwitched: checked => Network.enableWifi(checked)
++                onDetailsClicked: root.openDetails(Network.ethernet ? Config.options.apps.networkEthernet : Config.options.apps.network)
++            }
++            WifiDialogContent {}
++        }
++    }
++    Component {
++        id: bluetoothComp
++        ColumnLayout {
++            spacing: 16
++            BarPopoutHeader {
++                title: Translation.tr("Bluetooth")
++                showSwitch: true
++                switchChecked: Bluetooth.defaultAdapter?.enabled ?? false
++                onSwitched: checked => { if (Bluetooth.defaultAdapter) Bluetooth.defaultAdapter.enabled = checked; }
++                onDetailsClicked: root.openDetails(Config.options.apps.bluetooth)
++            }
++            BluetoothDialogContent {}
++        }
++    }
++    Component {
++        id: speakerComp
++        ColumnLayout {
++            spacing: 16
++            BarPopoutHeader {
++                title: Translation.tr("Audio output")
++                onDetailsClicked: root.openDetails(Config.options.apps.volumeMixer)
++            }
++            VolumeDialogContent { isSink: true }
++        }
++    }
++    Component {
++        id: micComp
++        ColumnLayout {
++            spacing: 16
++            BarPopoutHeader {
++                title: Translation.tr("Audio input")
++                onDetailsClicked: root.openDetails(Config.options.apps.volumeMixer)
++            }
++            VolumeDialogContent { isSink: false }
++        }
++    }
++}
+diff --git a/dots/.config/quickshell/ii/modules/ii/bar/BarPopoutHeader.qml b/dots/.config/quickshell/ii/modules/ii/bar/BarPopoutHeader.qml
+new file mode 100644
+index 00000000..d728b252
+--- /dev/null
++++ b/dots/.config/quickshell/ii/modules/ii/bar/BarPopoutHeader.qml
+@@ -0,0 +1,33 @@
++import qs.services
++import qs.modules.common
++import qs.modules.common.widgets
++import QtQuick
++import QtQuick.Layouts
++
++RowLayout {
++    id: root
++    property string title
++    property bool showSwitch: false
++    property bool switchChecked: false
++    signal switched(bool checked)
++    signal detailsClicked()
++
++    Layout.fillWidth: true
++    spacing: 8
++
++    StyledText {
++        Layout.fillWidth: true
++        text: root.title
++        font.pixelSize: Appearance.font.pixelSize.larger
++        color: Appearance.colors.colOnSurfaceVariant
++    }
++    StyledSwitch {
++        visible: root.showSwitch
++        checked: root.switchChecked
++        onClicked: root.switched(!root.switchChecked)
++    }
++    DialogButton {
++        buttonText: Translation.tr("Details")
++        onClicked: root.detailsClicked()
++    }
++}
+diff --git a/dots/.config/quickshell/ii/modules/ii/bar/BarPopoutIcon.qml b/dots/.config/quickshell/ii/modules/ii/bar/BarPopoutIcon.qml
+new file mode 100644
+index 00000000..148a4d6f
+--- /dev/null
++++ b/dots/.config/quickshell/ii/modules/ii/bar/BarPopoutIcon.qml
+@@ -0,0 +1,33 @@
++import qs
++import qs.modules.common
++import qs.modules.common.widgets
++import QtQuick
++import Quickshell
++
++MaterialSymbol {
++    id: root
++    required property string popout
++    iconSize: Appearance.font.pixelSize.larger
++
++    MouseArea {
++        anchors.fill: parent
++        anchors.margins: -4
++        enabled: Config.options.bar.iconPopouts
++        acceptedButtons: Qt.LeftButton
++        cursorShape: Qt.PointingHandCursor
++        preventStealing: true
++        onPressed: mouse => mouse.accepted = true
++        onClicked: {
++            if (GlobalStates.barPopout === root.popout) {
++                GlobalStates.barPopout = "";
++                return;
++            }
++            const win = root.QsWindow.window;
++            const p = root.mapToItem(null, 0, 0);
++            GlobalStates.barPopoutScreen = win.screen.name;
++            GlobalStates.barPopoutAnchor = { x: p.x, y: p.y, width: root.width, height: root.height };
++            GlobalStates.sidebarRightOpen = false;
++            GlobalStates.barPopout = root.popout;
++        }
++    }
++}
+diff --git a/dots/.config/quickshell/ii/modules/ii/bar/ClockWidget.qml b/dots/.config/quickshell/ii/modules/ii/bar/ClockWidget.qml
+index 1d4b9f86..4f74f4fa 100644
+--- a/dots/.config/quickshell/ii/modules/ii/bar/ClockWidget.qml
++++ b/dots/.config/quickshell/ii/modules/ii/bar/ClockWidget.qml
+@@ -40,6 +40,7 @@ Item {
+     MouseArea {
+         id: mouseArea
+         anchors.fill: parent
++        acceptedButtons: Qt.NoButton
+         hoverEnabled: !Config.options.bar.tooltips.clickToShow
+ 
+         ClockWidgetPopup {
+diff --git a/dots/.config/quickshell/ii/modules/ii/bar/Workspaces.qml b/dots/.config/quickshell/ii/modules/ii/bar/Workspaces.qml
+index 34b2c573..cd46311e 100644
+--- a/dots/.config/quickshell/ii/modules/ii/bar/Workspaces.qml
++++ b/dots/.config/quickshell/ii/modules/ii/bar/Workspaces.qml
+@@ -62,6 +62,7 @@ ButtonMouseArea {
+     }
+ 
+     onPressed: mouse => {
++        GlobalStates.barPopout = "";
+         if (mouse.button == Qt.LeftButton)
+             switchWorkspaceToHovered();
+         else if (mouse.button == Qt.RightButton)
+diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarRight/bluetoothDevices/BluetoothDialog.qml b/dots/.config/quickshell/ii/modules/ii/sidebarRight/bluetoothDevices/BluetoothDialog.qml
+index 8c56a8f1..e2d24392 100644
+--- a/dots/.config/quickshell/ii/modules/ii/sidebarRight/bluetoothDevices/BluetoothDialog.qml
++++ b/dots/.config/quickshell/ii/modules/ii/sidebarRight/bluetoothDevices/BluetoothDialog.qml
+@@ -20,41 +20,7 @@ WindowDialog {
+     WindowDialogTitle {
+         text: Translation.tr("Bluetooth devices")
+     }
+-    WindowDialogSeparator {
+-        visible: !(Bluetooth.defaultAdapter?.discovering ?? false)
+-    }
+-    StyledIndeterminateProgressBar {
+-        visible: Bluetooth.defaultAdapter?.discovering ?? false
+-        Layout.fillWidth: true
+-        Layout.topMargin: -8
+-        Layout.bottomMargin: -8
+-        Layout.leftMargin: -Appearance.rounding.large
+-        Layout.rightMargin: -Appearance.rounding.large
+-    }
+-    StyledListView {
+-        Layout.fillHeight: true
+-        Layout.fillWidth: true
+-        Layout.topMargin: -15
+-        Layout.bottomMargin: -16
+-        Layout.leftMargin: -Appearance.rounding.large
+-        Layout.rightMargin: -Appearance.rounding.large
+-
+-        clip: true
+-        spacing: 0
+-        animateAppearance: false
+-
+-        model: ScriptModel {
+-            values: BluetoothStatus.friendlyDeviceList
+-        }
+-        delegate: BluetoothDeviceItem {
+-            required property BluetoothDevice modelData
+-            device: modelData
+-            anchors {
+-                left: parent?.left
+-                right: parent?.right
+-            }
+-        }
+-    }
++    BluetoothDialogContent {}
+     WindowDialogSeparator {}
+     WindowDialogButtonRow {
+         DialogButton {
+diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarRight/bluetoothDevices/BluetoothDialogContent.qml b/dots/.config/quickshell/ii/modules/ii/sidebarRight/bluetoothDevices/BluetoothDialogContent.qml
+new file mode 100644
+index 00000000..62b03179
+--- /dev/null
++++ b/dots/.config/quickshell/ii/modules/ii/sidebarRight/bluetoothDevices/BluetoothDialogContent.qml
+@@ -0,0 +1,50 @@
++import qs
++import qs.services
++import qs.modules.common
++import qs.modules.common.widgets
++import QtQuick
++import QtQuick.Layouts
++import Quickshell
++import Quickshell.Bluetooth
++
++ColumnLayout {
++    spacing: 16
++    Layout.fillWidth: true
++    Layout.fillHeight: true
++
++    WindowDialogSeparator {
++        visible: !(Bluetooth.defaultAdapter?.discovering ?? false)
++    }
++    StyledIndeterminateProgressBar {
++        visible: Bluetooth.defaultAdapter?.discovering ?? false
++        Layout.fillWidth: true
++        Layout.topMargin: -8
++        Layout.bottomMargin: -8
++        Layout.leftMargin: -Appearance.rounding.large
++        Layout.rightMargin: -Appearance.rounding.large
++    }
++    StyledListView {
++        Layout.fillHeight: true
++        Layout.fillWidth: true
++        Layout.topMargin: -15
++        Layout.bottomMargin: -16
++        Layout.leftMargin: -Appearance.rounding.large
++        Layout.rightMargin: -Appearance.rounding.large
++
++        clip: true
++        spacing: 0
++        animateAppearance: false
++
++        model: ScriptModel {
++            values: BluetoothStatus.friendlyDeviceList
++        }
++        delegate: BluetoothDeviceItem {
++            required property BluetoothDevice modelData
++            device: modelData
++            anchors {
++                left: parent?.left
++                right: parent?.right
++            }
++        }
++    }
++}
+diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarRight/wifiNetworks/WifiDialog.qml b/dots/.config/quickshell/ii/modules/ii/sidebarRight/wifiNetworks/WifiDialog.qml
+index f1de76a5..a51e9e68 100644
+--- a/dots/.config/quickshell/ii/modules/ii/sidebarRight/wifiNetworks/WifiDialog.qml
++++ b/dots/.config/quickshell/ii/modules/ii/sidebarRight/wifiNetworks/WifiDialog.qml
+@@ -14,37 +14,7 @@ WindowDialog {
+     WindowDialogTitle {
+         text: Translation.tr("Connect to Wi-Fi")
+     }
+-    WindowDialogSeparator {
+-        visible: !Network.wifiScanning
+-    }
+-    StyledIndeterminateProgressBar {
+-        visible: Network.wifiScanning
+-        Layout.fillWidth: true
+-        Layout.topMargin: -8
+-        Layout.bottomMargin: -8
+-        Layout.leftMargin: -Appearance.rounding.large
+-        Layout.rightMargin: -Appearance.rounding.large
+-    }
+-    ListView {
+-        Layout.fillHeight: true
+-        Layout.fillWidth: true
+-        Layout.topMargin: -15
+-        Layout.bottomMargin: -16
+-        Layout.leftMargin: -Appearance.rounding.large
+-        Layout.rightMargin: -Appearance.rounding.large
+-
+-        clip: true
+-        spacing: 0
+-
+-        model: ScriptModel {
+-            values: Network.friendlyWifiNetworks
+-        }
+-        delegate: WifiNetworkItem {
+-            required property WifiAccessPoint modelData
+-            wifiNetwork: modelData
+-            width: ListView.view.width
+-        }
+-    }
++    WifiDialogContent {}
+     WindowDialogSeparator {}
+     WindowDialogButtonRow {
+         DialogButton {
+diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarRight/wifiNetworks/WifiDialogContent.qml b/dots/.config/quickshell/ii/modules/ii/sidebarRight/wifiNetworks/WifiDialogContent.qml
+new file mode 100644
+index 00000000..f7429c18
+--- /dev/null
++++ b/dots/.config/quickshell/ii/modules/ii/sidebarRight/wifiNetworks/WifiDialogContent.qml
+@@ -0,0 +1,46 @@
++import qs
++import qs.services
++import qs.services.network
++import qs.modules.common
++import qs.modules.common.widgets
++import QtQuick
++import QtQuick.Layouts
++import Quickshell
++
++ColumnLayout {
++    spacing: 16
++    Layout.fillWidth: true
++    Layout.fillHeight: true
++
++    WindowDialogSeparator {
++        visible: !Network.wifiScanning
++    }
++    StyledIndeterminateProgressBar {
++        visible: Network.wifiScanning
++        Layout.fillWidth: true
++        Layout.topMargin: -8
++        Layout.bottomMargin: -8
++        Layout.leftMargin: -Appearance.rounding.large
++        Layout.rightMargin: -Appearance.rounding.large
++    }
++    ListView {
++        Layout.fillHeight: true
++        Layout.fillWidth: true
++        Layout.topMargin: -15
++        Layout.bottomMargin: -16
++        Layout.leftMargin: -Appearance.rounding.large
++        Layout.rightMargin: -Appearance.rounding.large
++
++        clip: true
++        spacing: 0
++
++        model: ScriptModel {
++            values: Network.friendlyWifiNetworks
++        }
++        delegate: WifiNetworkItem {
++            required property WifiAccessPoint modelData
++            wifiNetwork: modelData
++            width: ListView.view.width
++        }
++    }
++}
+diff --git a/dots/.config/quickshell/ii/modules/ii/verticalBar/VerticalBar.qml b/dots/.config/quickshell/ii/modules/ii/verticalBar/VerticalBar.qml
+index bf11091d..fe007624 100644
+--- a/dots/.config/quickshell/ii/modules/ii/verticalBar/VerticalBar.qml
++++ b/dots/.config/quickshell/ii/modules/ii/verticalBar/VerticalBar.qml
+@@ -10,6 +10,7 @@ import qs.services
+ import qs.modules.common
+ import qs.modules.common.widgets
+ import qs.modules.common.functions
++import qs.modules.ii.bar as Bar
+ 
+ Scope {
+     id: bar
+@@ -82,6 +83,10 @@ Scope {
+                     GlobalFocusGrab.removePersistent(barRoot);
+                 }
+ 
++                Bar.BarIconPopout {
++                    barWindow: barRoot
++                }
++
+                 MouseArea  {
+                     id: hoverRegion
+                     hoverEnabled: true
+diff --git a/dots/.config/quickshell/ii/modules/ii/verticalBar/VerticalBarContent.qml b/dots/.config/quickshell/ii/modules/ii/verticalBar/VerticalBarContent.qml
+index b9689be8..fc611256 100644
+--- a/dots/.config/quickshell/ii/modules/ii/verticalBar/VerticalBarContent.qml
++++ b/dots/.config/quickshell/ii/modules/ii/verticalBar/VerticalBarContent.qml
+@@ -13,6 +13,11 @@ import qs.modules.ii.bar as Bar
+ Item { // Bar content region
+     id: root
+ 
++    TapHandler {
++        gesturePolicy: TapHandler.DragThreshold
++        onTapped: GlobalStates.barPopout = ""
++    }
++
+     property var screen: root.QsWindow.window?.screen
+     property var brightnessMonitor: Brightness.getMonitorForScreen(screen)
+ 
+@@ -169,6 +174,7 @@ Item { // Bar content region
+         onMovedAway: GlobalStates.osdVolumeOpen = false;
+         onPressed: event => {
+             if (event.button === Qt.LeftButton) {
++                GlobalStates.barPopout = "";
+                 GlobalStates.sidebarRightOpen = !GlobalStates.sidebarRightOpen;
+             }
+         }
+@@ -226,29 +232,29 @@ Item { // Bar content region
+ 
+                     Revealer {
+                         vertical: true
+-                        reveal: Audio.sink?.audio?.muted ?? false
++                        reveal: Config.options.bar.iconPopouts || (Audio.sink?.audio?.muted ?? false)
+                         Layout.fillWidth: true
+                         Layout.bottomMargin: reveal ? indicatorsColumnLayout.realSpacing : 0
+                         Behavior on Layout.bottomMargin {
+                             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                         }
+-                        MaterialSymbol {
+-                            text: "volume_off"
+-                            iconSize: Appearance.font.pixelSize.larger
++                        Bar.BarPopoutIcon {
++                            popout: "speaker"
++                            text: (Audio.sink?.audio?.muted ?? false) ? "volume_off" : "volume_up"
+                             color: rightSidebarButton.colText
+                         }
+                     }
+                     Revealer {
+                         vertical: true
+-                        reveal: Audio.source?.audio?.muted ?? false
++                        reveal: Config.options.bar.iconPopouts || (Audio.source?.audio?.muted ?? false)
+                         Layout.fillWidth: true
+                         Layout.bottomMargin: reveal ? indicatorsColumnLayout.realSpacing : 0
+                         Behavior on Layout.topMargin {
+                             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                         }
+-                        MaterialSymbol {
+-                            text: "mic_off"
+-                            iconSize: Appearance.font.pixelSize.larger
++                        Bar.BarPopoutIcon {
++                            popout: "mic"
++                            text: (Audio.source?.audio?.muted ?? false) ? "mic_off" : "mic"
+                             color: rightSidebarButton.colText
+                         }
+                     }
+@@ -272,16 +278,16 @@ Item { // Bar content region
+                             id: notificationUnreadCount
+                         }
+                     }
+-                    MaterialSymbol {
++                    Bar.BarPopoutIcon {
++                        popout: "network"
+                         text: Network.materialSymbol
+-                        iconSize: Appearance.font.pixelSize.larger
+                         color: rightSidebarButton.colText
+                     }
+-                    MaterialSymbol {
++                    Bar.BarPopoutIcon {
++                        popout: "bluetooth"
+                         Layout.topMargin: indicatorsColumnLayout.realSpacing
+                         visible: BluetoothStatus.available
+                         text: BluetoothStatus.connected ? "bluetooth_connected" : BluetoothStatus.enabled ? "bluetooth" : "bluetooth_disabled"
+-                        iconSize: Appearance.font.pixelSize.larger
+                         color: rightSidebarButton.colText
+                     }
+                 }
+diff --git a/dots/.config/quickshell/ii/modules/ii/verticalBar/VerticalClockWidget.qml b/dots/.config/quickshell/ii/modules/ii/verticalBar/VerticalClockWidget.qml
+index 6c878871..022ccb36 100644
+--- a/dots/.config/quickshell/ii/modules/ii/verticalBar/VerticalClockWidget.qml
++++ b/dots/.config/quickshell/ii/modules/ii/verticalBar/VerticalClockWidget.qml
+@@ -51,6 +51,7 @@ Item {
+     MouseArea {
+         id: mouseArea
+         anchors.fill: parent
++        acceptedButtons: Qt.NoButton
+         hoverEnabled: !Config.options.bar.tooltips.clickToShow
+ 
+         Bar.ClockWidgetPopup {
+diff --git a/dots/.config/quickshell/ii/modules/settings/BarConfig.qml b/dots/.config/quickshell/ii/modules/settings/BarConfig.qml
+index 27594fec..20228b98 100644
+--- a/dots/.config/quickshell/ii/modules/settings/BarConfig.qml
++++ b/dots/.config/quickshell/ii/modules/settings/BarConfig.qml
+@@ -177,6 +177,12 @@ ContentPage {
+                         checked: Config.options.bar.showBackground
+                         onCheckedChanged: { Config.options.bar.showBackground = checked; }
+                     }
++                    ConfigSwitch {
++                        buttonIcon: "web_asset"
++                        text: Translation.tr("Icon popouts")
++                        checked: Config.options.bar.iconPopouts
++                        onCheckedChanged: { Config.options.bar.iconPopouts = checked; }
++                    }
+                     ConfigSelectionArray {
+                         text: Translation.tr("Autohide")
+                         icon: "preview_off"
