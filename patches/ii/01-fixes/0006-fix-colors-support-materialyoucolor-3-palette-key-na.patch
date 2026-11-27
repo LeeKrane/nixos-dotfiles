@@ -6,7 +6,7 @@ Subject: [PATCH] fix(colors): support materialyoucolor >= 3 palette key name
 Backport of pctrade/end4-pC 3dad196
 https://github.com/pctrade/end4-pC/commit/3dad196
 Problem: materialyoucolor 3.x renamed primary_paletteKeyColor to primaryPaletteKeyColor, so switchwall.sh threw KeyError and left material_colors.scss empty.
-Port: clean, comments trimmed. Replaces the iiPatches sed entry in modules/home/desktop/illogical-impulse.nix.
+Port: clean, comments trimmed. Replaces the kraneIiPatches sed entry in modules/home/desktop/illogical-impulse.nix.
 Drop when: the pinned scripts/colors/generate_colors_material.py reads primaryPaletteKeyColor.
 ---
  .../ii/scripts/colors/generate_colors_material.py      | 10 +++++++++-

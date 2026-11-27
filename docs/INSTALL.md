@@ -4,7 +4,7 @@ Path from a blank machine to a working `tariognatha`, `tarmantria`, or `taractia
 
 Desktops and laptops only. The servers (`taragarmr`, `taronychus`, `tarritator`, `tarronax`) are not installed with `install.sh`: see their `hosts/<name>/default.nix` header comments and the Servers section of [secrets/README.md](../secrets/README.md).
 
-`install.sh` drives disko, `nixos-install`, secrets bootstrap, the Rust toolchain, flathub and the required second `nixos-rebuild switch`. Every destructive step has a `--dry-run` preview. Appendix A is the manual path, The last section lists `install.sh`'s mode detection and dry-run invariants.
+`install.sh` drives disko, `nixos-install`, secrets bootstrap, the Rust toolchain, flathub and the required second `nixos-rebuild switch`. Every destructive step has a `--dry-run` preview. Appendix A is the manual path. The last section lists `install.sh`'s mode detection and dry-run invariants.
 
 ## 0. Before you start
 
@@ -47,7 +47,7 @@ On a live ISO this runs install mode:
 
 ## 2. After first boot: setup mode
 
-Every host autologins into the plain (non-UWSM) Hyprland session and locks it at once, so the ii lock screen is the first thing you see (`modules/nixos/desktop/desktop.nix`). The lock-on-start reason is in [II-INTEGRATION.md](II-INTEGRATION.md); skipping the greeter costs nothing because no host encrypts its disk. tuigreet appears after logout or `systemctl restart greetd`; "Hyprland (UWSM)" is its normal session, plain "Hyprland" the fallback ([II-INTEGRATION.md "Rollback and escape hatches"](II-INTEGRATION.md#rollback-and-escape-hatches)).
+Every host autologins into the plain (non-UWSM) Hyprland session and locks it at once, so the ii lock screen is the first thing you see (`modules/nixos/desktop/desktop.nix`). The lock-on-start reason is in [II-INTEGRATION.md](II-INTEGRATION.md); skipping the greeter costs nothing because no host encrypts its disk. tuigreet appears after logout; "Hyprland (UWSM)" is its normal session, plain "Hyprland" the fallback ([II-INTEGRATION.md "Rollback and escape hatches"](II-INTEGRATION.md#rollback-and-escape-hatches)).
 
 Log in, then from `~/.dotfiles`:
 

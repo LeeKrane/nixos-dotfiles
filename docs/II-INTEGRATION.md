@@ -323,9 +323,10 @@ action buttons are visible without a right-click. Drop when pinned
 
 ### `07-idle`
 
-"Keep awake" defaults to on and survives reboots. `0003`: while "Keep awake" is on, `Idle.qml` also runs
-`systemd-inhibit --what=idle ... cat`, an idle lock hypridle honours. `cat` exits on stdin EOF, so the lock goes
-away when the toggle turns off or Quickshell exits.
+"Keep awake" defaults to on and survives reboots. `0003`: while "Keep awake" is
+on, `Idle.qml` also runs `systemd-inhibit --what=idle ... cat`, an idle lock
+hypridle honours. `cat` exits on stdin EOF, so the lock goes away when the
+toggle turns off or Quickshell exits.
 
 ### Workflow
 
@@ -670,6 +671,7 @@ Then pick it with `/model` in the Intelligence tab and store the key with
 `/key <key>` (ii keeps it in the keyring, never in this repo). `"tools": []`
 is required: ii's `openai` strategy does not parse tool calls, so a reply
 that calls one of ii's tools would arrive empty.
+
 ## Verifying on the target
 
 See [docs/VERIFY.md](VERIFY.md)'s on-target checklist for the commands,

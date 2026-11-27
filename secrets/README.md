@@ -64,13 +64,13 @@ A desktop's recipients in `.sops.yaml` start as `age1PLACEHOLDER_...` values (`i
 
 ## Servers
 
-Servers do not use `scripts/bootstrap-sops.sh`. Their age recipients are already the `&host_<name>` entries in `.sops.yaml`. taragarmr gets its key through `nixos-anywhere --extra-files <dir>` (key under `<dir>/etc/ssh/`). The image hosts (taronychus, tarronax, tarritator) get `ssh_host_ed25519_key` (root:root 0600) and `.pub` (0644) copied into `/etc/ssh` on the flashed root partition before first boot. sshd only generates a host key when the file is missing, so the pre-placed key is kept. The login password is not in sops; it is set on site at install (see each host's header comment).
+Servers do not use `scripts/bootstrap-sops.sh`. Their age recipients are already the `&host_<name>` entries in `.sops.yaml`. taragarmr gets its key through `nixos-anywhere --extra-files <dir>` (key under `<dir>/etc/ssh/`). The image hosts (taronychus, tarronax, tarritator) get `ssh_host_ed25519_key` (root:root 0600) and `.pub` (0644) copied into `/etc/ssh` on the flashed root partition before first boot. sshd only generates a host key when the file is missing, so the pre-placed key is kept. A reinstalled server with a new SSH host key needs its `&host_<name>` recipient in `.sops.yaml` replaced and `sops updatekeys` run on its file (see [Rotating or re-keying](#rotating-or-re-keying)). The login password is not in sops; it is set on site at install (see each host's header comment).
 
 ### Server upgrade secrets
 
 `modules/nixos/server/auto-upgrade.nix` needs `server-upgrade/github-token` and `ntfy/publish-token` in every server file, plus `ntfy/server-env` on taragarmr; the desktops need `ntfy/read-token`.
 
-To replace a lost or leaked `server-upgrade/github-token`, run from the repo root on tariognatha or tarmantria, in bash (the login shell is fish, which cannot run the `for` loop):
+To replace a lost or leaked `server-upgrade/github-token`, create a GitHub token with Issues read and write on `LeeKrane/nixos-dotfiles` (it lists, creates, comments on and closes issues: `scripts/server-upgrade-report.sh`), then run from the repo root on tariognatha or tarmantria, in bash (the login shell is fish, which cannot run the `for` loop):
 
 ```sh
 for h in taragarmr taronychus tarritator tarronax; do

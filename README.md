@@ -10,7 +10,7 @@
 
 <div align="center">
 
-**end-4's illogical-impulse Hyprland shell, made fully declarative on NixOS, across seven machines: three desktops and four servers.**
+**end-4's illogical-impulse Hyprland shell, made fully declarative on NixOS, across seven machines: one desktop, two laptops and four servers.**
 
 <sub>Built on [end-4's dots-hyprland](https://github.com/end-4/dots-hyprland), wrapped by [soymou's illogical-flake](https://github.com/soymou/illogical-flake), with fixes from [pctrade's end4-pC](https://github.com/pctrade/end4-pC).</sub>
 
@@ -53,7 +53,8 @@ This repo pulls ii in as the soymou module instead of reimplementing ii's instal
 
 Things that are easy to break here:
 
-- The update pull requests are opened with `GITHUB_TOKEN`, so GitHub does not run `check.yml` on them. `update-lane.yml` calls it itself and reports the result in the PR body; `check.yml` runs again on `main` after the merge.- Every gated `main` commit reaches the servers, including desktop-only ones, because `system.configurationRevision` (`lib/mk-host.nix`) is the commit. Such a commit causes a revision-only activation, and the upgrade hooks compare that revision with `deploy`, so do not remove it. A desktop-lane `nixpkgs` bump also changes the server closures: `modules/home/server/default.nix` takes `codegraph` from `nixpkgs-unstable`. The PR body's "Merging deploys to" line lists the servers a PR reaches.
+- The update pull requests are opened with `GITHUB_TOKEN`, so GitHub does not run `check.yml` on them. `update-lane.yml` calls it itself and reports the result in the PR body; `check.yml` runs again on `main` after the merge.
+- Every gated `main` commit reaches the servers, including desktop-only ones, because `system.configurationRevision` (`lib/mk-host.nix`) is the commit. Such a commit causes a revision-only activation, and the upgrade hooks compare that revision with `deploy`, so do not remove it. A desktop-lane `nixpkgs` bump also changes the server closures: `modules/home/server/default.nix` takes `codegraph` from `nixpkgs-unstable`. The PR body's "Merging deploys to" line lists the servers a PR reaches.
 - A server upgrade that fails its health check rolls back, including after the reboot a kernel change triggers (`scripts/server-upgrade-hooks.sh`, `boot-health`). A kernel that does not boot never reaches that check.
 - The desktop notifier (`modules/home/desktop/flake-update-notify.nix`) parses the PR body's `### Package versions`, `### Inputs` and `### Security` headings from `scripts/update-summary.sh` and `scripts/security-summary.sh`. Rename them only together with `scripts/flake-update-notify.sh`.
 
