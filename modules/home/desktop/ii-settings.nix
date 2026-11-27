@@ -147,9 +147,7 @@ let
       ) guiMonitors
     );
 
-  overlap = map (k: "hyprland.${k}") (
-    lib.filter (k: lib.elem k nixHyprKeys) (lib.attrNames guiHypr)
-  );
+  overlap = map (k: "hyprland.${k}") (lib.filter (k: lib.elem k nixHyprKeys) (lib.attrNames guiHypr));
 in
 {
   options.krane.hypr.guiLocked = lib.mkOption {
