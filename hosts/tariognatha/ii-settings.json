@@ -1,9 +1,25 @@
 {
   "hyprland": {
-    "general:layout": "dwindle"
+    "animations:enabled": true,
+    "decoration:blur:enabled": true,
+    "decoration:rounding": 18,
+    "general:border_size": 1,
+    "general:gaps_in": 4,
+    "general:gaps_out": 5,
+    "general:layout": "dwindle",
+    "input:kb_layout": "at",
+    "input:kb_variant": "nodeadkeys"
+  },
+  "idle": {
+    "lock": 900,
+    "suspend": 7200
   },
   "monitors": {
     "DP-1": {
+      "bootConfirmed": false,
+      "bootPrevious": {
+        "position": "2560x0"
+      },
       "position": "2560x0"
     },
     "DP-2": {

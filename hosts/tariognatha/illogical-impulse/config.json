@@ -453,7 +453,7 @@
         "columns": 5,
         "toggles": [
           {
-            "size": 2,
+            "size": 1,
             "type": "network"
           },
           {
@@ -483,6 +483,10 @@
           {
             "size": 1,
             "type": "notifications"
+          },
+          {
+            "size": 1,
+            "type": "easyEffects"
           }
         ]
       },
