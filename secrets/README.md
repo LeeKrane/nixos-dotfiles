@@ -38,7 +38,7 @@ To turn a feature off on a host (`wireguard:`, `rclone:`, `ntfy:`, ...), delete 
 
 A desktop's recipients in `.sops.yaml` start as `age1PLACEHOLDER_...` values (`install.sh` adds them when it scaffolds a host) that decrypt nothing until step 1. The seven existing hosts are already bootstrapped.
 
-1. Run `scripts/bootstrap-sops.sh <hostname>` on the target host after its first boot (it needs `/etc/ssh/ssh_host_ed25519_key.pub`). It derives the host's age recipient with `ssh-to-age`, generates a personal admin key at `~/.config/sops/age/keys.txt` (`$SOPS_AGE_KEY_FILE` if set) if needed, and patches both into that host's placeholders in `.sops.yaml`. It never writes a secret value. Back the personal key up: without it only root on that host can edit the file, via the SSH host key, until a replacement key is re-keyed in.
+1. Run `scripts/bootstrap-sops.sh <hostname>` on the target host after its first boot, as the admin user, not root (it needs `/etc/ssh/ssh_host_ed25519_key.pub`). It derives the host's age recipient with `ssh-to-age`, generates a personal admin key at `~/.config/sops/age/keys.txt` (`$SOPS_AGE_KEY_FILE` if set) if needed, and patches both into that host's placeholders in `.sops.yaml`. It never writes a secret value. Back the personal key up: without it only root on that host can edit the file, via the SSH host key, until a replacement key is re-keyed in.
 2. `git add .sops.yaml && git commit`.
 3. `sops secrets/<hostname>.yaml` opens `$EDITOR` on a decrypted buffer and encrypts on save. Skeleton:
 
@@ -59,7 +59,7 @@ A desktop's recipients in `.sops.yaml` start as `age1PLACEHOLDER_...` values (`i
    ```
 
    Single values can be set without the editor: `sops set secrets/<host>.yaml '["wireguard"]["listen-port"]' '"51820"'`.
-4. `git add secrets/<hostname>.yaml && git commit`. Skipping this evaluates as if the file never existed.
+4. `git add secrets/<hostname>.yaml && git commit` (see the top of this file for why).
 5. `just switch` on the host (or `sudo nixos-rebuild switch --flake .#<hostname>`). Secrets decrypt to `/run/secrets/...` at activation.
 
 ## Servers
@@ -102,6 +102,8 @@ sops set secrets/$(hostname).yaml '["ntfy"]["read-token"]' '"<read token>"'
 
 Commit on each machine, and pull or rebase before committing on the next.
 
+To subscribe a phone (also needed when it is replaced), point the ntfy app at topic `server-upgrades` on `http://192.168.82.1:2586` (taragarmr's WireGuard address, `lib/ntfy.nix`; WireGuard must be on), log in as `krane` with the password kept above, and enable instant delivery. Check: on a server, `curl -H "Authorization: Bearer $(sudo cat /run/secrets/ntfy/publish-token)" -d test http://192.168.82.1:2586/server-upgrades` reaches the phone and the desktops; the same request on a desktop with `$(command cat /run/secrets/ntfy/read-token)` must be refused with HTTP 403.
+
 The `server-upgrade` GitHub label is not created by `scripts/server-upgrade-report.sh`; create it once:
 
 ```sh
@@ -116,9 +118,11 @@ After changing a host's recipients in `.sops.yaml`, the file is still encrypted 
 sudo env SOPS_AGE_SSH_PRIVATE_KEY_FILE=/etc/ssh/ssh_host_ed25519_key sops updatekeys secrets/<host>.yaml
 ```
 
+To change a desktop's admin recipient, move the old `keys.txt` aside, put that host's `age1PLACEHOLDER_ADMIN_<HOST>_REPLACE_VIA_BOOTSTRAP_SOPS_SH` line back in `.sops.yaml` in place of the old recipient, re-run `scripts/bootstrap-sops.sh <host>`, then run `updatekeys` as root as above.
+
 Commit the re-encrypted file.
 
 ## Never
 
 - Never put a real secret value in `.sops.yaml`, a Nix file or a commit message: the repo history is permanent. Only `sops`-encrypted `secrets/*.yaml` may hold values.
-- Never hand-edit the `age1...` recipients in `.sops.yaml`: a wrong key locks the host out of its file. `scripts/bootstrap-sops.sh` writes them.
+- Never hand-edit a desktop's `age1...` recipients in `.sops.yaml`: a typo plus `updatekeys` locks the host out of its file. `scripts/bootstrap-sops.sh` writes them.
