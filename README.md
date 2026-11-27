@@ -56,6 +56,13 @@ ii ships its own installer logic, not a plain dotfiles checkout, so this repo pu
 
 CI runs the same eval and lint gate on every push to `main` and every pull request, except for documentation-only changes (`.github/workflows/check.yml`), and a weekly job (`.github/workflows/update.yml`) opens two pull requests, one per update lane: servers (stable channel, shared inputs, claude-code) and desktops (everything else). `.github/workflows/update-lane.yml` does each lane's work. Hosts are evaluated, not built; CI builds only the nvim checks, the Lua syntax check and the server-only packages (`server-upgrade`, `claude-code`). When a commit on `main` passes the check, `.github/workflows/promote.yml` moves the `deploy` branch to it, and the servers auto-upgrade from `deploy`.
 
+Things that are easy to break here:
+
+- The update pull requests are opened with `GITHUB_TOKEN`, so GitHub does not run `check.yml` on them. `.github/workflows/update-lane.yml` calls it itself and reports the result in the PR body; `check.yml` runs again on `main` after the merge. Opening them needs "Allow GitHub Actions to create and approve pull requests" under the repository's Settings, Actions, General.
+- Every gated `main` commit reaches the servers, including desktop-only ones, because `system.configurationRevision` (`lib/mk-host.nix`) is the commit. Such a commit causes a revision-only activation, and the upgrade hooks compare that revision with `deploy`, so do not remove it. A desktop-lane `nixpkgs` bump also changes the server closures: `modules/home/server/default.nix` takes `codegraph` from `nixpkgs-unstable`. The PR body's "Merging deploys to" line lists the servers a PR reaches.
+- A failed server upgrade rolls back, also after a kernel-change reboot. A kernel that does not boot never reaches the health check; choosing the previous generation in the bootloader then needs physical access.
+- The desktop notifier (`modules/home/desktop/flake-update-notify.nix`) parses the PR body's `### Package versions`, `### Inputs` and `### Security` headings from `scripts/update-summary.sh` and `scripts/security-summary.sh`. Rename them only together with `scripts/flake-update-notify.sh`.
+
 ## Installs
 
 The desktops and laptops are installed from a NixOS unstable minimal ISO by `install.sh`. It previews every step with `--dry-run`, erases the selected disk only after typed confirmation, and can scaffold a new host from `templates/host/`. An install takes 20-60+ minutes, longer on the CUDA host (`tariognatha`), because `nixos-install` compiles quickshell from source. The full runbook is [docs/INSTALL.md](docs/INSTALL.md).

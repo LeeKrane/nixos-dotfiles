@@ -281,6 +281,12 @@ directories in lexical order, and the files in each directory in lexical
 order, which is commit order. The table below covers `01-fixes`. Each patch's commit message records the fork
 commit, the problem, how it was ported and when to drop it.
 
+A patch must not change or add text that a `kraneIiPatches` sed matches: the
+sed would silently stop matching or rewrite the patch's own code. The line at
+risk is `launchOnStartup` in `Config.qml`, which several patch series touch. A
+patch that has to change such a line takes over the sed's job, and the sed
+entry goes in the same commit.
+
 | Patch | Fork commit | Port | Drop when |
 |---|---|---|---|
 | `0001` thumbnail temp file + `mv` | `05b50d9` | clean, $tmp escaping fixed | pinned `ThumbnailImage.qml` writes via a temp file |
@@ -355,6 +361,10 @@ out with the clear button.
 | `0005` swap texts with languages | none | new | pinned `Translator.qml` swap exchanges the texts |
 | `0006` paste icon keeps a fixed colour | none | new | pinned `Translator.qml` paste icon colour no longer depends on `deleteButton.enabled` |
 
+`0003` is a patch, not a `kraneIiPatches` sed, because `property bool enable:`
+occurs many times in `Config.qml`: a sed would need a range address that stops
+matching without an error, while a patch that stops applying fails the build.
+
 The `0003` default only reaches hosts whose `config.json` has no
 `sidebar.translator.enable` key yet (a fresh host). ii saves its whole
 options tree, so a host where ii has already run holds an explicit `false`:
@@ -372,8 +382,7 @@ default `auto` source and target.
 ### Agents (`04-agents`)
 
 New work, not from the fork: a left-sidebar Agents tab that lists Claude Code
-sessions (spec: `docs/superpowers/specs/2026-09-27-ii-agent-overview-design.md`;
-usage under "Claude Code" below).
+sessions (usage under "Claude Code" below).
 
 | Patch | Adds | Drop when |
 |---|---|---|
@@ -501,9 +510,13 @@ only works when no later patch changes the same file. Stage `patches/ii`
 the flake's git tree, so an unstaged patch edit has no effect on the build.
 ### When to stop using patches
 
-Stay with patch series (decided in the settings spec,
-`docs/superpowers/specs/2026-09-27-ii-settings-design.md`). Re-evaluate a
-private fork of dots-hyprland as the flake input if:
+Stay with patch series. A private fork as a flake input would have to be
+fetchable everywhere the flake is evaluated: every host, root's nix daemon
+during `nixos-rebuild`, the `just check` Docker container and `install.sh` on a
+fresh machine, which copies only this repo. A private remote also needs
+credentials that sops can decrypt only after that install. The patch files in
+this repo need none of it. Re-evaluate a private fork of dots-hyprland as the
+flake input if:
 
 - a pin bump needs more than 5 hand-resolved conflict hunks, or more than one
   sitting; or
@@ -529,6 +542,10 @@ choices, derive consequences.
 | Border colors | config.json, `hyprland.general.borderColor` (roles and opacity) | resolved from the palette into `shellOverrides/main.lua` |
 | Hyprlock 12h clock | config.json, `time.format` | `shell.qml` seds `hyprlock.conf` on ready, on change and on every reload |
 
+GUI values live in their own file, `custom/krane_gui.lua`, not merged into
+`custom/general.lua`. Resetting a key then just removes it from that file, and
+a `config-only` reload brings the Nix or upstream value back without a switch.
+
 ### One owner per key
 
 Nix owns every key it sets: each `krane.hypr.settings` leaf, every entry of
@@ -549,8 +566,8 @@ in Nix, re-drag the positions in the settings window. Keyboard layout stays in N
 `qwertz-binds.nix` depends on it.
 
 Only keys in `schema.json` can be written; each was checked against
-Hyprland 0.56's source. Adding one means checking it the same way (Task 12
-of `docs/superpowers/plans/2026-09-27-ii-settings.md`).
+Hyprland 0.56's source. Adding one means checking it the same way, then listing
+it in `schema.json` with its type and range.
 
 ### The writer
 
@@ -559,7 +576,8 @@ manifest) is the only writer of `ii-settings.json`:
 
 - `set` / `reset <section> <key>`: validate, write the repo file atomically
   under a lock, re-render the live file, reload. It never creates the repo
-  file and refuses to write one it cannot parse. If Hyprland reports an error
+  file (an untracked file is invisible to flake evaluation, so a new one would
+  not persist) and refuses to write one it cannot parse. If Hyprland reports an error
   in `krane_gui.lua` after the reload, it restores both files.
 - `apply`: re-render the live file from the repo file, after a hand edit or a
   `git checkout`. The settings window offers the same as "Apply now" when it
@@ -653,7 +671,9 @@ services added: 15 (`AboutCard`, `AndroidClock`, `Carousel`,
 `MaterialSymbol`, `StyledImage` and `Fonts` (they need font files the pin does
 not ship, or only remove pin behaviour), and `ConfigSelectionShapeArray`,
 `LayoutSection` and `WidgetsMonitorSelector` (only dropped controls used them).
-Not ported: the Niri page, the fork's panel-style settings overlay, About's
+Not ported: the Niri page, the fork's panel-style settings overlay (ii's
+standalone window stays, so a broken page crashes only the settings process,
+not the bar or lock screen), About's
 "Update dots" and "System update", Profile's hostname editing and online
 presets.
 
@@ -716,6 +736,13 @@ background session that no terminal is attached to, it runs `kitty -e
 claude attach <id>`. The tab never answers, approves, stops or deletes
 anything.
 
+An interactive session is matched to its window by walking the session's pid
+chain up to a Hyprland client. A background session is never walked, because
+a supervisor spawned it and its ancestry leads elsewhere. It is matched by
+terminal title (Claude Code titles the window with the session name) and only
+when exactly one window has that name; otherwise a click opens an attach
+terminal instead of focusing a guessed window.
+
 It runs `scripts/claude/agents.sh` (`claude agents --json`, plus the pid
 chain up to the terminal and the transcript's mtime; transcript content is
 never read) every 3 s, backing off to 15 s when a run is slow. It runs only
@@ -749,8 +776,9 @@ session is blocked. Claude Code's own terminal notifications do that
 (checked 2026-09-30 from ii's notification history (`~/.cache/quickshell/notifications/notifications.json`) with `preferredNotifChannel` unset (`auto`) in
 `~/.claude/settings.json`, the claude-dotfiles repo): a permission prompt in
 a kitty window on another workspace produces an ii notification popup. If it
-stops working, add a `Notification` hook that calls `notify-send`; see
-step 0 of `docs/superpowers/specs/2026-09-27-ii-agent-overview-design.md`.
+stops working, add a `Notification` hook that calls `notify-send` in
+`~/.claude/settings.json` (matcher `permission_prompt|idle_prompt|elicitation_dialog`,
+body from the hook JSON's `message`). That file is not in this repo.
 
 ### Claude in the sidebar chat
 
