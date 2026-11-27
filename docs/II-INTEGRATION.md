@@ -275,29 +275,16 @@ the sed entry goes in the same commit.
 Fixes backported from [pctrade/end4-pC](https://github.com/pctrade/end4-pC)
 (`0001` to `0008`) plus local fixes (`0009` to `0011`): thumbnails,
 notifications, colors, Bluetooth, and a throttle on raw Hyprland events.
-Non-obvious runtime effects:
-
-- `0001` (atomic thumbnail writes) has no effect at the pin: the wallpaper
-  selector does not use `ThumbnailImage`'s own generation
-  (`generateThumbnail: false` in `WallpaperDirectoryItem.qml`).
-- `0009` sets `trusted` right after `pair()` so audio reconnects stop
-  dropping. ii's sidebar registers no BlueZ agent, so pairing needs the
-  `bluetooth-agent` root service (`modules/nixos/desktop/bluetooth.nix`,
-  bound to `bluetooth.service`; check with `systemctl status bluetooth-agent`).
-  The agent has no pin file, so legacy PIN-only devices and pairings the
-  remote device starts are refused; pairing started from ii (Just Works)
-  still works.
-- `0011` terminates the last OSC in `sequences.txt`. Without it kitty
-  swallows a program's output after a color change, Neovim looks frozen and
-  the shell then gets every key on press and on release.
+`0009` (trust devices on pair) depends on this repo: ii's sidebar registers
+no BlueZ agent, so pairing needs the `bluetooth-agent` root service
+(`modules/nixos/desktop/bluetooth.nix`; check with
+`systemctl status bluetooth-agent`). Only pairing started from ii works.
 
 ### `02-translator`
 
 The left sidebar's Translator tab, restyled after the fork, plus fixes the
-fork lacked. `0003` enables it by default. It is a patch, not a
-`kraneIiPatches` sed, because `property bool enable:` occurs many times in
-`Config.qml`: a sed would need a range address that stops matching without
-an error, while a patch that stops applying fails the build.
+fork lacked. `0003` enables it by default; a patch, not a sed, because
+`property bool enable:` occurs many times in `Config.qml`.
 
 The `0003` default only reaches hosts whose `config.json` has no
 `sidebar.translator.enable` key yet. ii saves its whole options tree, so a
@@ -312,8 +299,7 @@ bash -c 'f=~/.config/illogical-impulse/config.json; jq --indent 4 ".sidebar.tran
 ### `04-agents`
 
 New work, not from the fork: the left-sidebar Agents tab (usage under
-"Claude Code" below). Drop the series if pinned ii ships an equivalent tab
-or `claude agents --json` is removed. Tests, runnable against the clone
+"Claude Code" below). Tests, runnable against the clone
 (default) or a built source:
 
 ```sh
@@ -337,11 +323,7 @@ action buttons are visible without a right-click. Drop when pinned
 
 ### `07-idle`
 
-"Keep awake" defaults to on and survives reboots (`0001`; upstream resets it
-on every new Hyprland instance and stores it in
-`~/.local/state/quickshell/states.json`). `0002` re-creates the inhibitor
-3 s after start, because Hyprland ignores it until its layer surface is
-mapped. `0003`: while "Keep awake" is on, `Idle.qml` also runs
+"Keep awake" defaults to on and survives reboots. `0003`: while "Keep awake" is on, `Idle.qml` also runs
 `systemd-inhibit --what=idle ... cat`, an idle lock hypridle honours even
 when Hyprland ignores the layer-surface inhibitor (zero alpha during fade-in
 or under a fullscreen window). `cat` exits on stdin EOF, so the lock goes
@@ -423,11 +405,10 @@ the flake's git tree, so an unstaged patch edit has no effect on the build.
 
 ### When to stop using patches
 
-Stay with patch series. A private fork as a flake input would have to be
-fetchable everywhere the flake is evaluated: every host, root's nix daemon
-during `nixos-rebuild`, the `just check` Docker container and `install.sh` on a
-fresh machine, which copies only this repo. A private remote also needs
-credentials that sops can decrypt only after that install. Re-evaluate a
+Stay with patch series: a private fork as a flake input would have to be
+fetchable, with credentials, everywhere the flake is evaluated (every host,
+root's nix daemon, the `just check` container, `install.sh` on a fresh
+machine before sops can decrypt anything). Re-evaluate a
 private fork of dots-hyprland as the flake input if:
 
 - a pin bump needs more than 5 hand-resolved conflict hunks, or more than one
