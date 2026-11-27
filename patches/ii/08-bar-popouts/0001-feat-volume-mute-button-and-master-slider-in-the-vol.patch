@@ -5,20 +5,26 @@ Subject: [PATCH] feat(volume): mute button and master slider in the volume
  dialog
 
 ---
- .../volumeMixer/VolumeDialogContent.qml       | 34 ++++++++++++++++++-
- 1 file changed, 33 insertions(+), 1 deletion(-)
+ .../volumeMixer/VolumeDialogContent.qml       | 38 ++++++++++++++++++-
+ 1 file changed, 37 insertions(+), 1 deletion(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarRight/volumeMixer/VolumeDialogContent.qml b/dots/.config/quickshell/ii/modules/ii/sidebarRight/volumeMixer/VolumeDialogContent.qml
-index dab92df5..84977745 100644
+index dab92df5..7394e638 100644
 --- a/dots/.config/quickshell/ii/modules/ii/sidebarRight/volumeMixer/VolumeDialogContent.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/sidebarRight/volumeMixer/VolumeDialogContent.qml
-@@ -15,6 +15,38 @@ ColumnLayout {
+@@ -10,11 +10,47 @@ import Quickshell.Services.Pipewire
+ ColumnLayout {
+     id: root
+     required property bool isSink
++    property real topInset: -22
+     readonly property list<var> appPwNodes: isSink ? Audio.outputAppNodes : Audio.inputAppNodes
+     readonly property list<var> devices: isSink ? Audio.outputDevices : Audio.inputDevices
      readonly property bool hasApps: appPwNodes.length > 0
      spacing: 16
  
 +    RowLayout {
 +        Layout.fillWidth: true
-+        Layout.topMargin: -22
++        Layout.topMargin: root.topInset
 +        spacing: 8
 +
 +        RippleButton {
@@ -27,7 +33,10 @@ index dab92df5..84977745 100644
 +            implicitWidth: 40
 +            implicitHeight: 40
 +            buttonRadius: Appearance.rounding.full
-+            onClicked: root.isSink ? Audio.toggleMute() : Audio.toggleMicMute()
++            onClicked: {
++                const node = root.isSink ? Audio.sink : Audio.source;
++                if (node?.audio) node.audio.muted = !node.audio.muted;
++            }
 +
 +            MaterialSymbol {
 +                anchors.centerIn: parent
@@ -51,7 +60,7 @@ index dab92df5..84977745 100644
      DialogSectionListView {
          Layout.fillHeight: true
          topMargin: 14
-@@ -64,7 +96,7 @@ ColumnLayout {
+@@ -64,7 +100,7 @@ ColumnLayout {
  
      component DialogSectionListView: StyledListView {
          Layout.fillWidth: true

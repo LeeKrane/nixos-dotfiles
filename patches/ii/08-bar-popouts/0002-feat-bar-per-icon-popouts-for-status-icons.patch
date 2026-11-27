@@ -1,14 +1,14 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: krane <chris@krane.dev>
-Date: Fri, 27 Nov 2026 23:31:24 +0100
+Date: Sat, 28 Nov 2026 00:07:35 +0100
 Subject: [PATCH] feat(bar): per-icon popouts for status icons
 
 ---
  dots/.config/quickshell/ii/GlobalStates.qml   |  14 ++
  .../quickshell/ii/modules/common/Config.qml   |   1 +
- .../quickshell/ii/modules/ii/bar/Bar.qml      |   4 +
+ .../quickshell/ii/modules/ii/bar/Bar.qml      |   6 +-
  .../ii/modules/ii/bar/BarContent.qml          |  30 +--
- .../ii/modules/ii/bar/BarIconPopout.qml       | 182 ++++++++++++++++++
+ .../ii/modules/ii/bar/BarIconPopout.qml       | 187 ++++++++++++++++++
  .../ii/modules/ii/bar/BarPopoutHeader.qml     |  33 ++++
  .../ii/modules/ii/bar/BarPopoutIcon.qml       |  33 ++++
  .../ii/modules/ii/bar/ClockWidget.qml         |   1 +
@@ -17,11 +17,11 @@ Subject: [PATCH] feat(bar): per-icon popouts for status icons
  .../BluetoothDialogContent.qml                |  50 +++++
  .../sidebarRight/wifiNetworks/WifiDialog.qml  |  32 +--
  .../wifiNetworks/WifiDialogContent.qml        |  46 +++++
- .../ii/modules/ii/verticalBar/VerticalBar.qml |   5 +
+ .../ii/modules/ii/verticalBar/VerticalBar.qml |   7 +-
  .../ii/verticalBar/VerticalBarContent.qml     |  30 +--
  .../ii/verticalBar/VerticalClockWidget.qml    |   1 +
  .../ii/modules/settings/BarConfig.qml         |   6 +
- 17 files changed, 415 insertions(+), 90 deletions(-)
+ 17 files changed, 422 insertions(+), 92 deletions(-)
  create mode 100644 dots/.config/quickshell/ii/modules/ii/bar/BarIconPopout.qml
  create mode 100644 dots/.config/quickshell/ii/modules/ii/bar/BarPopoutHeader.qml
  create mode 100644 dots/.config/quickshell/ii/modules/ii/bar/BarPopoutIcon.qml
@@ -74,9 +74,18 @@ index 8ad7c53c..c9a2b3e3 100644
                  property bool vertical: false
                  property JsonObject resources: JsonObject {
 diff --git a/dots/.config/quickshell/ii/modules/ii/bar/Bar.qml b/dots/.config/quickshell/ii/modules/ii/bar/Bar.qml
-index 67e73067..ffba403f 100644
+index 67e73067..2f6ce044 100644
 --- a/dots/.config/quickshell/ii/modules/ii/bar/Bar.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/bar/Bar.qml
+@@ -51,7 +51,7 @@ Scope {
+                     }
+                 }
+                 property bool superShow: false
+-                property bool mustShow: hoverRegion.containsMouse || superShow
++                property bool mustShow: hoverRegion.containsMouse || superShow || (GlobalStates.barPopout !== "" && GlobalStates.barPopoutScreen === screen.name)
+                 exclusionMode: ExclusionMode.Ignore
+                 exclusiveZone: (Config?.options.bar.autoHide.enable && (!mustShow || !Config?.options.bar.autoHide.pushWindows)) ? 0 :
+                     Appearance.sizes.baseBarHeight + (Config.options.bar.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0)
 @@ -83,6 +83,10 @@ Scope {
                      GlobalFocusGrab.removePersistent(barRoot);
                  }
@@ -89,7 +98,7 @@ index 67e73067..ffba403f 100644
                      id: hoverRegion
                      hoverEnabled: true
 diff --git a/dots/.config/quickshell/ii/modules/ii/bar/BarContent.qml b/dots/.config/quickshell/ii/modules/ii/bar/BarContent.qml
-index 3bec7589..3b108a3a 100644
+index 3bec7589..29145700 100644
 --- a/dots/.config/quickshell/ii/modules/ii/bar/BarContent.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/bar/BarContent.qml
 @@ -12,6 +12,11 @@ import qs.modules.common.functions
@@ -117,7 +126,7 @@ index 3bec7589..3b108a3a 100644
  
                      Revealer {
 -                        reveal: Audio.sink?.audio?.muted ?? false
-+                        reveal: Config.options.bar.iconPopouts || (Audio.sink?.audio?.muted ?? false)
++                        reveal: (Config.options.bar.iconPopouts && !!Audio.sink) || (Audio.sink?.audio?.muted ?? false)
                          Layout.fillHeight: true
                          Layout.rightMargin: reveal ? indicatorsRowLayout.realSpacing : 0
                          Behavior on Layout.rightMargin {
@@ -134,7 +143,7 @@ index 3bec7589..3b108a3a 100644
                      }
                      Revealer {
 -                        reveal: Audio.source?.audio?.muted ?? false
-+                        reveal: Config.options.bar.iconPopouts || (Audio.source?.audio?.muted ?? false)
++                        reveal: (Config.options.bar.iconPopouts && !!Audio.source) || (Audio.source?.audio?.muted ?? false)
                          Layout.fillHeight: true
                          Layout.rightMargin: reveal ? indicatorsRowLayout.realSpacing : 0
                          Behavior on Layout.rightMargin {
@@ -172,10 +181,10 @@ index 3bec7589..3b108a3a 100644
                  }
 diff --git a/dots/.config/quickshell/ii/modules/ii/bar/BarIconPopout.qml b/dots/.config/quickshell/ii/modules/ii/bar/BarIconPopout.qml
 new file mode 100644
-index 00000000..247515d3
+index 00000000..6a009e38
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/modules/ii/bar/BarIconPopout.qml
-@@ -0,0 +1,182 @@
+@@ -0,0 +1,187 @@
 +import qs
 +import qs.services
 +import qs.modules.common
@@ -216,17 +225,16 @@ index 00000000..247515d3
 +        target: GlobalStates
 +        function onBarPopoutChanged() {
 +            const p = GlobalStates.barPopout;
-+            if (!root.open) return;
-+            if (p === "network") {
-+                Network.enableWifi();
-+                Network.rescanWifi();
-+            }
-+            if (p === "bluetooth" && Bluetooth.defaultAdapter) {
-+                Bluetooth.defaultAdapter.enabled = true;
-+                Bluetooth.defaultAdapter.discovering = true;
-+            } else if (Bluetooth.defaultAdapter) {
-+                Bluetooth.defaultAdapter.discovering = false;
-+            }
++            if (GlobalStates.barPopoutScreen !== root.screenName) return;
++            if (p === "network" && Network.wifiEnabled) Network.rescanWifi();
++            if (Bluetooth.defaultAdapter) Bluetooth.defaultAdapter.discovering = p === "bluetooth" && Bluetooth.defaultAdapter.enabled;
++        }
++    }
++
++    Connections {
++        target: Bluetooth.defaultAdapter
++        function onEnabledChanged() {
++            if (root.open && GlobalStates.barPopout === "bluetooth") Bluetooth.defaultAdapter.discovering = Bluetooth.defaultAdapter.enabled;
 +        }
 +    }
 +
@@ -269,7 +277,7 @@ index 00000000..247515d3
 +                Rectangle {
 +                    id: card
 +                    width: root.cardWidth
-+                    height: root.cardHeight
++                    height: Math.min(root.cardHeight, root.vertical ? popup.height - 2 * root.gap : popup.height - barSize - 2 * root.gap)
 +                    radius: Appearance.rounding.windowRounding
 +                    color: Appearance.m3colors.m3surfaceContainerHigh
 +
@@ -315,7 +323,10 @@ index 00000000..247515d3
 +                title: Translation.tr("Wi-Fi")
 +                showSwitch: true
 +                switchChecked: Network.wifiEnabled
-+                onSwitched: checked => Network.enableWifi(checked)
++                onSwitched: checked => {
++                    Network.enableWifi(checked);
++                    if (checked) Network.rescanWifi();
++                }
 +                onDetailsClicked: root.openDetails(Network.ethernet ? Config.options.apps.networkEthernet : Config.options.apps.network)
 +            }
 +            WifiDialogContent {}
@@ -329,7 +340,10 @@ index 00000000..247515d3
 +                title: Translation.tr("Bluetooth")
 +                showSwitch: true
 +                switchChecked: Bluetooth.defaultAdapter?.enabled ?? false
-+                onSwitched: checked => { if (Bluetooth.defaultAdapter) Bluetooth.defaultAdapter.enabled = checked; }
++                onSwitched: checked => {
++                    if (!Bluetooth.defaultAdapter) return;
++                    Bluetooth.defaultAdapter.enabled = checked;
++                }
 +                onDetailsClicked: root.openDetails(Config.options.apps.bluetooth)
 +            }
 +            BluetoothDialogContent {}
@@ -343,7 +357,7 @@ index 00000000..247515d3
 +                title: Translation.tr("Audio output")
 +                onDetailsClicked: root.openDetails(Config.options.apps.volumeMixer)
 +            }
-+            VolumeDialogContent { isSink: true }
++            VolumeDialogContent { isSink: true; topInset: 0 }
 +        }
 +    }
 +    Component {
@@ -354,7 +368,7 @@ index 00000000..247515d3
 +                title: Translation.tr("Audio input")
 +                onDetailsClicked: root.openDetails(Config.options.apps.volumeMixer)
 +            }
-+            VolumeDialogContent { isSink: false }
++            VolumeDialogContent { isSink: false; topInset: 0 }
 +        }
 +    }
 +}
@@ -399,7 +413,7 @@ index 00000000..d728b252
 +}
 diff --git a/dots/.config/quickshell/ii/modules/ii/bar/BarPopoutIcon.qml b/dots/.config/quickshell/ii/modules/ii/bar/BarPopoutIcon.qml
 new file mode 100644
-index 00000000..148a4d6f
+index 00000000..8676d3f6
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/modules/ii/bar/BarPopoutIcon.qml
 @@ -0,0 +1,33 @@
@@ -423,11 +437,11 @@ index 00000000..148a4d6f
 +        preventStealing: true
 +        onPressed: mouse => mouse.accepted = true
 +        onClicked: {
-+            if (GlobalStates.barPopout === root.popout) {
++            const win = root.QsWindow.window;
++            if (GlobalStates.barPopout === root.popout && GlobalStates.barPopoutScreen === win.screen.name) {
 +                GlobalStates.barPopout = "";
 +                return;
 +            }
-+            const win = root.QsWindow.window;
 +            const p = root.mapToItem(null, 0, 0);
 +            GlobalStates.barPopoutScreen = win.screen.name;
 +            GlobalStates.barPopoutAnchor = { x: p.x, y: p.y, width: root.width, height: root.height };
@@ -659,7 +673,7 @@ index 00000000..f7429c18
 +    }
 +}
 diff --git a/dots/.config/quickshell/ii/modules/ii/verticalBar/VerticalBar.qml b/dots/.config/quickshell/ii/modules/ii/verticalBar/VerticalBar.qml
-index bf11091d..fe007624 100644
+index bf11091d..3ae9e2f1 100644
 --- a/dots/.config/quickshell/ii/modules/ii/verticalBar/VerticalBar.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/verticalBar/VerticalBar.qml
 @@ -10,6 +10,7 @@ import qs.services
@@ -670,6 +684,15 @@ index bf11091d..fe007624 100644
  
  Scope {
      id: bar
+@@ -54,7 +55,7 @@ Scope {
+                     }
+                 }
+                 property bool superShow: false
+-                property bool mustShow: hoverRegion.containsMouse || superShow
++                property bool mustShow: hoverRegion.containsMouse || superShow || (GlobalStates.barPopout !== "" && GlobalStates.barPopoutScreen === screen.name)
+                 exclusionMode: ExclusionMode.Ignore
+                 exclusiveZone: (Config?.options.bar.autoHide.enable && (!mustShow || !Config?.options.bar.autoHide.pushWindows)) ? 0 :
+                     Appearance.sizes.baseVerticalBarWidth + (Config.options.bar.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0)
 @@ -82,6 +83,10 @@ Scope {
                      GlobalFocusGrab.removePersistent(barRoot);
                  }
@@ -682,7 +705,7 @@ index bf11091d..fe007624 100644
                      id: hoverRegion
                      hoverEnabled: true
 diff --git a/dots/.config/quickshell/ii/modules/ii/verticalBar/VerticalBarContent.qml b/dots/.config/quickshell/ii/modules/ii/verticalBar/VerticalBarContent.qml
-index b9689be8..fc611256 100644
+index b9689be8..46ca90e8 100644
 --- a/dots/.config/quickshell/ii/modules/ii/verticalBar/VerticalBarContent.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/verticalBar/VerticalBarContent.qml
 @@ -13,6 +13,11 @@ import qs.modules.ii.bar as Bar
@@ -710,7 +733,7 @@ index b9689be8..fc611256 100644
                      Revealer {
                          vertical: true
 -                        reveal: Audio.sink?.audio?.muted ?? false
-+                        reveal: Config.options.bar.iconPopouts || (Audio.sink?.audio?.muted ?? false)
++                        reveal: (Config.options.bar.iconPopouts && !!Audio.sink) || (Audio.sink?.audio?.muted ?? false)
                          Layout.fillWidth: true
                          Layout.bottomMargin: reveal ? indicatorsColumnLayout.realSpacing : 0
                          Behavior on Layout.bottomMargin {
@@ -728,7 +751,7 @@ index b9689be8..fc611256 100644
                      Revealer {
                          vertical: true
 -                        reveal: Audio.source?.audio?.muted ?? false
-+                        reveal: Config.options.bar.iconPopouts || (Audio.source?.audio?.muted ?? false)
++                        reveal: (Config.options.bar.iconPopouts && !!Audio.source) || (Audio.source?.audio?.muted ?? false)
                          Layout.fillWidth: true
                          Layout.bottomMargin: reveal ? indicatorsColumnLayout.realSpacing : 0
                          Behavior on Layout.topMargin {

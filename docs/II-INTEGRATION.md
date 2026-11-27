@@ -336,8 +336,9 @@ mute button and a master slider, so the sidebar dialogs, the overlay mixer and
 the popouts share them. `0002`: Wi-Fi and Bluetooth dialog content move into
 their own files, a per-screen popout window with its own focus grab
 (`BarIconPopout.qml`) is added, and `bar.iconPopouts` (default `true`)
-controls it and keeps the speaker and mic icons always visible. With it off the
-bar behaves as upstream.
+controls it and keeps the speaker and mic icons always visible. With it off,
+indicator clicks open the sidebar and the speaker and mic icons show only when
+muted.
 
 ### Workflow
 
