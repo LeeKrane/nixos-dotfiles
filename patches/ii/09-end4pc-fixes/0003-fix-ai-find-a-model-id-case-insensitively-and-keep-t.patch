@@ -10,20 +10,19 @@ Problem: setModel lowercased the requested id, so a model whose id has uppercase
 Port: clean (offset)
 Drop when: the pinned setModel matches ids case-insensitively without rewriting the stored id.
 ---
- dots/.config/quickshell/ii/services/Ai.qml | 6 ++++--
- 1 file changed, 4 insertions(+), 2 deletions(-)
+ dots/.config/quickshell/ii/services/Ai.qml | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/services/Ai.qml b/dots/.config/quickshell/ii/services/Ai.qml
-index 57036af0..0b80ffff 100644
+index 57036af0..198da685 100644
 --- a/dots/.config/quickshell/ii/services/Ai.qml
 +++ b/dots/.config/quickshell/ii/services/Ai.qml
-@@ -485,8 +485,10 @@ Singleton {
+@@ -485,8 +485,9 @@ Singleton {
  
      function setModel(modelId, feedback = true, setPersistentState = true) {
          if (!modelId) modelId = ""
 -        modelId = modelId.toLowerCase()
 -        if (modelList.indexOf(modelId) !== -1) {
-+        // Find the real model ID case-insensitively.
 +        const matchedModelId = modelList.find(id => id.toLowerCase() === modelId.toLowerCase())
 +        if (matchedModelId !== undefined) {
 +            modelId = matchedModelId

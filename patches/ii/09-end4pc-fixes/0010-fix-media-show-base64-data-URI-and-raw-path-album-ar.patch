@@ -5,15 +5,15 @@ Subject: [PATCH] fix(media): show base64 data URI and raw path album art
 
 Backport of pctrade/end4-pC d6c8d5d (reimplemented for mediaControls/PlayerControl.qml)
 https://github.com/pctrade/end4-pC/commit/d6c8d5d
-Problem: PlayerControl curled every album art URL, so a data: URI or a bare file path (Telegram and others) never ren...
-Port: reimplemented, the fork commit patches Player.qml and other files that do not exist here; data: and file: art i...
+Problem: PlayerControl curled every album art URL, so a data: URI or a bare file path (Telegram and others) never rendered; the URL was also spliced into a shell string.
+Port: reimplemented, the fork commit patches Player.qml and other files that do not exist here; http(s) art is downloaded and counts as downloaded only when curl exits 0, a path gets file:// with each segment URI-encoded, any other scheme (data:, file:, qrc:) is used as given, and the URL and target path go to curl as arguments
 Drop when: the pinned PlayerControl.qml accepts data: and file: art and downloads only http(s).
 ---
- .../ii/mediaControls/PlayerControl.qml        | 19 ++++++++++++-------
- 1 file changed, 12 insertions(+), 7 deletions(-)
+ .../ii/mediaControls/PlayerControl.qml        | 21 ++++++++++++-------
+ 1 file changed, 13 insertions(+), 8 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/ii/mediaControls/PlayerControl.qml b/dots/.config/quickshell/ii/modules/ii/mediaControls/PlayerControl.qml
-index 7f0eabbc..7dccdace 100644
+index 7f0eabbc..55832e22 100644
 --- a/dots/.config/quickshell/ii/modules/ii/mediaControls/PlayerControl.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/mediaControls/PlayerControl.qml
 @@ -15,7 +15,7 @@ import Quickshell.Services.Mpris
@@ -60,12 +60,15 @@ index 7f0eabbc..7dccdace 100644
          coverArtDownloader.running = true
      }
  
-@@ -77,7 +82,7 @@ Item { // Player instance
+@@ -77,9 +82,9 @@ Item { // Player instance
          id: coverArtDownloader
          property string targetFile: root.artUrl
          property string artFilePath: root.artFilePath
 -        command: [ "bash", "-c", `[ -f ${artFilePath} ] || curl -4 -sSL '${targetFile}' -o '${artFilePath}'` ]
 +        command: [ "bash", "-c", `[ -f "$2" ] || curl -4 -sSL "$1" -o "$2"`, "_", targetFile, artFilePath ]
          onExited: (exitCode, exitStatus) => {
-             root.downloaded = true
+-            root.downloaded = true
++            root.downloaded = exitCode === 0
          }
+     }
+ 

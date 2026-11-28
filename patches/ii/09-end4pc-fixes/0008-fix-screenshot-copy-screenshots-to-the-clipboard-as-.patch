@@ -7,13 +7,34 @@ Subject: [PATCH] fix(screenshot): copy screenshots to the clipboard as
 Backport of pctrade/end4-pC 6de2c5f
 https://github.com/pctrade/end4-pC/commit/6de2c5f
 Problem: magick wrote the crop to stdout without a format and wl-copy got no MIME type, so clipboard-aware apps did not recognise the image and pasting failed on Wayland.
-Port: RegionSelector.qml not ported (its grim line is absent here)
-Drop when: the pinned ScreenshotAction.qml and Recorder.qml force PNG:- and wl-copy --type image/png.
+Port: RegionSelector.qml not ported (its grim line is absent here); the Print and CTRL + Print binds in keybinds.lua get the same --type
+Drop when: the pinned ScreenshotAction.qml, Recorder.qml and the Print binds force PNG:- and wl-copy --type image/png.
 ---
+ dots/.config/hypr/hyprland/keybinds.lua                     | 4 ++--
  .../quickshell/ii/modules/common/utils/ScreenshotAction.qml | 6 +++---
  .../quickshell/ii/modules/ii/overlay/recorder/Recorder.qml  | 2 +-
- 2 files changed, 4 insertions(+), 4 deletions(-)
+ 3 files changed, 6 insertions(+), 6 deletions(-)
 
+diff --git a/dots/.config/hypr/hyprland/keybinds.lua b/dots/.config/hypr/hyprland/keybinds.lua
+index f388263b..72c17c18 100644
+--- a/dots/.config/hypr/hyprland/keybinds.lua
++++ b/dots/.config/hypr/hyprland/keybinds.lua
+@@ -93,13 +93,13 @@ hl.bind("SUPER + SHIFT + ALT + R", hl.dsp.exec_cmd(qsScripts .. "/videos/record.
+     { locked = true, description = "Utilities: Record screen (with sound)" })
+ --# Fullscreen screenshot
+ local grimhyprctl = "grim -o \"$(hyprctl activeworkspace -j | jq -r '.monitor')\""
+-hl.bind("Print", hl.dsp.exec_cmd(grimhyprctl .. " - | wl-copy"),
++hl.bind("Print", hl.dsp.exec_cmd(grimhyprctl .. " - | wl-copy --type image/png"),
+     { locked = true, description = "Utilities: Screenshot >> clipboard" })
+ hl.bind("CTRL + Print", hl.dsp.exec_cmd(
+     "mkdir -p $(xdg-user-dir PICTURES)/Screenshots && " ..
+     grimhyprctl .. " $(xdg-user-dir PICTURES)/Screenshots/Screenshot_\"$(date '+%Y-%m-%d_%H.%M.%S')\".png"
+ ), { locked = true, non_consuming = true, description = "Utilities: Screenshot >> clipboard & file" })
+-hl.bind("CTRL + Print", hl.dsp.exec_cmd(grimhyprctl .. " - | wl-copy"), { locked = true, non_consuming = true })
++hl.bind("CTRL + Print", hl.dsp.exec_cmd(grimhyprctl .. " - | wl-copy --type image/png"), { locked = true, non_consuming = true })
+ --# AI
+ hl.bind("SUPER + SHIFT + ALT + mouse:273", hl.dsp.exec_cmd(hyprScripts .. "/ai/primary-buffer-query.sh"),
+     { description = "Utilities: Generate AI summary for selected text" })
 diff --git a/dots/.config/quickshell/ii/modules/common/utils/ScreenshotAction.qml b/dots/.config/quickshell/ii/modules/common/utils/ScreenshotAction.qml
 index c4eae679..c1e53ef2 100644
 --- a/dots/.config/quickshell/ii/modules/common/utils/ScreenshotAction.qml
