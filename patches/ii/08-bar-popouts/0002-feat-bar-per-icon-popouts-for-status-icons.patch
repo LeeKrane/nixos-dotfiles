@@ -4,30 +4,43 @@ Date: Sat, 28 Nov 2026 00:07:35 +0100
 Subject: [PATCH] feat(bar): per-icon popouts for status icons
 
 ---
+ dots/.config/hypr/hyprland/rules.lua          |   1 +
  dots/.config/quickshell/ii/GlobalStates.qml   |  14 ++
  .../quickshell/ii/modules/common/Config.qml   |   1 +
  .../quickshell/ii/modules/ii/bar/Bar.qml      |   6 +-
- .../ii/modules/ii/bar/BarContent.qml          |  30 +--
- .../ii/modules/ii/bar/BarIconPopout.qml       | 187 ++++++++++++++++++
- .../ii/modules/ii/bar/BarPopoutHeader.qml     |  33 ++++
- .../ii/modules/ii/bar/BarPopoutIcon.qml       |  33 ++++
+ .../ii/modules/ii/bar/BarContent.qml          |  64 +++++-
+ .../ii/modules/ii/bar/BarIconPopout.qml       | 211 ++++++++++++++++++
+ .../ii/modules/ii/bar/BarPopoutHeader.qml     |  33 +++
+ .../ii/modules/ii/bar/BarPopoutIcon.qml       |  37 +++
  .../ii/modules/ii/bar/ClockWidget.qml         |   1 +
  .../ii/modules/ii/bar/Workspaces.qml          |   1 +
- .../bluetoothDevices/BluetoothDialog.qml      |  36 +---
+ .../bluetoothDevices/BluetoothDialog.qml      |  36 +--
  .../BluetoothDialogContent.qml                |  50 +++++
  .../sidebarRight/wifiNetworks/WifiDialog.qml  |  32 +--
- .../wifiNetworks/WifiDialogContent.qml        |  46 +++++
+ .../wifiNetworks/WifiDialogContent.qml        |  46 ++++
  .../ii/modules/ii/verticalBar/VerticalBar.qml |   7 +-
- .../ii/verticalBar/VerticalBarContent.qml     |  30 +--
+ .../ii/verticalBar/VerticalBarContent.qml     |  71 +++++-
  .../ii/verticalBar/VerticalClockWidget.qml    |   1 +
  .../ii/modules/settings/BarConfig.qml         |   6 +
- 17 files changed, 422 insertions(+), 92 deletions(-)
+ 18 files changed, 547 insertions(+), 71 deletions(-)
  create mode 100644 dots/.config/quickshell/ii/modules/ii/bar/BarIconPopout.qml
  create mode 100644 dots/.config/quickshell/ii/modules/ii/bar/BarPopoutHeader.qml
  create mode 100644 dots/.config/quickshell/ii/modules/ii/bar/BarPopoutIcon.qml
  create mode 100644 dots/.config/quickshell/ii/modules/ii/sidebarRight/bluetoothDevices/BluetoothDialogContent.qml
  create mode 100644 dots/.config/quickshell/ii/modules/ii/sidebarRight/wifiNetworks/WifiDialogContent.qml
 
+diff --git a/dots/.config/hypr/hyprland/rules.lua b/dots/.config/hypr/hyprland/rules.lua
+index 0e2ac657..85ff318c 100644
+--- a/dots/.config/hypr/hyprland/rules.lua
++++ b/dots/.config/hypr/hyprland/rules.lua
+@@ -138,6 +138,7 @@ hl.layer_rule({ match = { namespace = "quickshell:.*" }, blur = true})
+ hl.layer_rule({ match = { namespace = "quickshell:.*" }, ignore_alpha = 0.79})
+ hl.layer_rule({ match = { namespace = "quickshell:background" }, blur = false})
+ hl.layer_rule({ match = { namespace = "quickshell:bar" }, animation = "slide"})
++hl.layer_rule({ match = { namespace = "quickshell:barPopout" }, no_anim = true})
+ hl.layer_rule({ match = { namespace = "quickshell:actionCenter" }, no_anim = true})
+ hl.layer_rule({ match = { namespace = "quickshell:cheatsheet" }, animation = "slide bottom"})
+ hl.layer_rule({ match = { namespace = "quickshell:dock" }, animation = "slide bottom"})
 diff --git a/dots/.config/quickshell/ii/GlobalStates.qml b/dots/.config/quickshell/ii/GlobalStates.qml
 index bfb531e6..8415ff3e 100644
 --- a/dots/.config/quickshell/ii/GlobalStates.qml
@@ -98,7 +111,7 @@ index 67e73067..2f6ce044 100644
                      id: hoverRegion
                      hoverEnabled: true
 diff --git a/dots/.config/quickshell/ii/modules/ii/bar/BarContent.qml b/dots/.config/quickshell/ii/modules/ii/bar/BarContent.qml
-index 3bec7589..29145700 100644
+index 3bec7589..6ce3b964 100644
 --- a/dots/.config/quickshell/ii/modules/ii/bar/BarContent.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/bar/BarContent.qml
 @@ -12,6 +12,11 @@ import qs.modules.common.functions
@@ -121,70 +134,104 @@ index 3bec7589..29145700 100644
                  GlobalStates.sidebarRightOpen = !GlobalStates.sidebarRightOpen;
              }
  
-@@ -259,28 +265,28 @@ Item { // Bar content region
+@@ -259,6 +265,7 @@ Item { // Bar content region
                      spacing: 0
  
                      Revealer {
--                        reveal: Audio.sink?.audio?.muted ?? false
-+                        reveal: (Config.options.bar.iconPopouts && !!Audio.sink) || (Audio.sink?.audio?.muted ?? false)
++                        visible: !Config.options.bar.iconPopouts
+                         reveal: Audio.sink?.audio?.muted ?? false
                          Layout.fillHeight: true
                          Layout.rightMargin: reveal ? indicatorsRowLayout.realSpacing : 0
-                         Behavior on Layout.rightMargin {
-                             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                         }
--                        MaterialSymbol {
--                            text: "volume_off"
--                            iconSize: Appearance.font.pixelSize.larger
-+                        BarPopoutIcon {
-+                            popout: "speaker"
-+                            text: (Audio.sink?.audio?.muted ?? false) ? "volume_off" : "volume_up"
-                             color: rightSidebarButton.colText
+@@ -272,6 +279,7 @@ Item { // Bar content region
                          }
                      }
                      Revealer {
--                        reveal: Audio.source?.audio?.muted ?? false
-+                        reveal: (Config.options.bar.iconPopouts && !!Audio.source) || (Audio.source?.audio?.muted ?? false)
++                        visible: !Config.options.bar.iconPopouts
+                         reveal: Audio.source?.audio?.muted ?? false
                          Layout.fillHeight: true
                          Layout.rightMargin: reveal ? indicatorsRowLayout.realSpacing : 0
-                         Behavior on Layout.rightMargin {
-                             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                         }
--                        MaterialSymbol {
--                            text: "mic_off"
--                            iconSize: Appearance.font.pixelSize.larger
-+                        BarPopoutIcon {
-+                            popout: "mic"
-+                            text: (Audio.source?.audio?.muted ?? false) ? "mic_off" : "mic"
-                             color: rightSidebarButton.colText
+@@ -303,13 +311,20 @@ Item { // Bar content region
                          }
                      }
-@@ -302,16 +308,16 @@ Item { // Bar content region
-                             id: notificationUnreadCount
-                         }
-                     }
--                    MaterialSymbol {
-+                    BarPopoutIcon {
-+                        popout: "network"
+                     MaterialSymbol {
++                        visible: Config.options.bar.iconPopouts
++                        text: GlobalStates.sidebarRightOpen ? "right_panel_close" : "right_panel_open"
++                        iconSize: Appearance.font.pixelSize.larger
++                        color: rightSidebarButton.colText
++                    }
++                    MaterialSymbol {
++                        visible: !Config.options.bar.iconPopouts
                          text: Network.materialSymbol
--                        iconSize: Appearance.font.pixelSize.larger
+                         iconSize: Appearance.font.pixelSize.larger
                          color: rightSidebarButton.colText
                      }
--                    MaterialSymbol {
-+                    BarPopoutIcon {
-+                        popout: "bluetooth"
+                     MaterialSymbol {
                          Layout.leftMargin: indicatorsRowLayout.realSpacing
-                         visible: BluetoothStatus.available
+-                        visible: BluetoothStatus.available
++                        visible: !Config.options.bar.iconPopouts && BluetoothStatus.available
                          text: BluetoothStatus.connected ? "bluetooth_connected" : BluetoothStatus.enabled ? "bluetooth" : "bluetooth_disabled"
--                        iconSize: Appearance.font.pixelSize.larger
+                         iconSize: Appearance.font.pixelSize.larger
                          color: rightSidebarButton.colText
-                     }
+@@ -317,6 +332,53 @@ Item { // Bar content region
                  }
+             }
+ 
++            RowLayout {
++                id: popoutIconsRow
++                visible: Config.options.bar.iconPopouts
++                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
++                property real realSpacing: 15
++                spacing: 0
++
++                Revealer {
++                    reveal: !!Audio.sink
++                    Layout.alignment: Qt.AlignVCenter
++                    Layout.rightMargin: reveal ? popoutIconsRow.realSpacing : 0
++                    Behavior on Layout.rightMargin {
++                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
++                    }
++                    BarPopoutIcon {
++                        popout: "speaker"
++                        text: (Audio.sink?.audio?.muted ?? false) ? "volume_off" : "volume_up"
++                        color: Appearance.colors.colOnLayer0
++                    }
++                }
++                Revealer {
++                    reveal: !!Audio.source
++                    Layout.alignment: Qt.AlignVCenter
++                    Layout.rightMargin: reveal ? popoutIconsRow.realSpacing : 0
++                    Behavior on Layout.rightMargin {
++                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
++                    }
++                    BarPopoutIcon {
++                        popout: "mic"
++                        text: (Audio.source?.audio?.muted ?? false) ? "mic_off" : "mic"
++                        color: Appearance.colors.colOnLayer0
++                    }
++                }
++                BarPopoutIcon {
++                    popout: "network"
++                    text: Network.materialSymbol
++                    color: Appearance.colors.colOnLayer0
++                }
++                BarPopoutIcon {
++                    popout: "bluetooth"
++                    Layout.leftMargin: popoutIconsRow.realSpacing
++                    visible: BluetoothStatus.available
++                    text: BluetoothStatus.connected ? "bluetooth_connected" : BluetoothStatus.enabled ? "bluetooth" : "bluetooth_disabled"
++                    color: Appearance.colors.colOnLayer0
++                }
++            }
++
+             SysTray {
+                 visible: root.useShortenedForm === 0
+                 Layout.fillWidth: false
 diff --git a/dots/.config/quickshell/ii/modules/ii/bar/BarIconPopout.qml b/dots/.config/quickshell/ii/modules/ii/bar/BarIconPopout.qml
 new file mode 100644
-index 00000000..6a009e38
+index 00000000..63286ad8
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/modules/ii/bar/BarIconPopout.qml
-@@ -0,0 +1,187 @@
+@@ -0,0 +1,211 @@
 +import qs
 +import qs.services
 +import qs.modules.common
@@ -196,7 +243,6 @@ index 00000000..6a009e38
 +import QtQuick.Layouts
 +import Quickshell
 +import Quickshell.Bluetooth
-+import Quickshell.Hyprland
 +import Quickshell.Wayland
 +
 +Scope {
@@ -211,7 +257,14 @@ index 00000000..6a009e38
 +    readonly property real cardWidth: 350
 +    readonly property real cardHeight: 600
 +
++    readonly property bool available: ({
++        speaker: !!Audio.sink,
++        mic: !!Audio.source,
++        bluetooth: BluetoothStatus.available
++    })[GlobalStates.barPopout] ?? true
++
 +    function close() { GlobalStates.barPopout = ""; }
++    onAvailableChanged: if (!available) close()
 +    function openDetails(command) {
 +        Quickshell.execDetached(["bash", "-c", command]);
 +        close();
@@ -260,10 +313,12 @@ index 00000000..6a009e38
 +            anchors { top: true; bottom: true; left: true; right: true }
 +            mask: Region { item: card }
 +
-+            HyprlandFocusGrab {
-+                windows: [popup, root.barWindow]
-+                active: popup.visible
-+                onCleared: root.close()
++            Component.onCompleted: GlobalFocusGrab.addDismissable(popup)
++            Component.onDestruction: GlobalFocusGrab.removeDismissable(popup)
++
++            Connections {
++                target: GlobalFocusGrab
++                function onDismissed() { root.close(); }
 +            }
 +
 +            Item {
@@ -272,14 +327,28 @@ index 00000000..6a009e38
 +                Keys.onEscapePressed: root.close()
 +                Component.onCompleted: forceActiveFocus()
 +
-+                StyledRectangularShadow { target: card }
++                StyledRectangularShadow { target: card; opacity: card.enter }
 +
 +                Rectangle {
 +                    id: card
 +                    width: root.cardWidth
 +                    height: Math.min(root.cardHeight, root.vertical ? popup.height - 2 * root.gap : popup.height - barSize - 2 * root.gap)
 +                    radius: Appearance.rounding.windowRounding
-+                    color: Appearance.m3colors.m3surfaceContainerHigh
++                    color: Appearance.colors.colLayer0
++                    border.width: 1
++                    border.color: Appearance.colors.colLayer0Border
++                    opacity: enter
++                    transform: Translate {
++                        readonly property real slide: (1 - card.enter) * 16 * (root.atBottomOrRight ? 1 : -1)
++                        x: root.vertical ? slide : 0
++                        y: root.vertical ? 0 : slide
++                    }
++
++                    property real enter: 0
++                    Component.onCompleted: enter = 1
++                    Behavior on enter {
++                        animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
++                    }
 +
 +                    readonly property real cx: root.anchorRect.x + root.anchorRect.width / 2
 +                    readonly property real cy: root.anchorRect.y + root.anchorRect.height / 2
@@ -357,6 +426,7 @@ index 00000000..6a009e38
 +                title: Translation.tr("Audio output")
 +                onDetailsClicked: root.openDetails(Config.options.apps.volumeMixer)
 +            }
++            WindowDialogSeparator {}
 +            VolumeDialogContent { isSink: true; topInset: 0 }
 +        }
 +    }
@@ -368,6 +438,7 @@ index 00000000..6a009e38
 +                title: Translation.tr("Audio input")
 +                onDetailsClicked: root.openDetails(Config.options.apps.volumeMixer)
 +            }
++            WindowDialogSeparator {}
 +            VolumeDialogContent { isSink: false; topInset: 0 }
 +        }
 +    }
@@ -413,10 +484,10 @@ index 00000000..d728b252
 +}
 diff --git a/dots/.config/quickshell/ii/modules/ii/bar/BarPopoutIcon.qml b/dots/.config/quickshell/ii/modules/ii/bar/BarPopoutIcon.qml
 new file mode 100644
-index 00000000..8676d3f6
+index 00000000..17a5932c
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/modules/ii/bar/BarPopoutIcon.qml
-@@ -0,0 +1,33 @@
+@@ -0,0 +1,37 @@
 +import qs
 +import qs.modules.common
 +import qs.modules.common.widgets
@@ -426,6 +497,7 @@ index 00000000..8676d3f6
 +MaterialSymbol {
 +    id: root
 +    required property string popout
++    property bool wasOpen: false
 +    iconSize: Appearance.font.pixelSize.larger
 +
 +    MouseArea {
@@ -435,10 +507,13 @@ index 00000000..8676d3f6
 +        acceptedButtons: Qt.LeftButton
 +        cursorShape: Qt.PointingHandCursor
 +        preventStealing: true
-+        onPressed: mouse => mouse.accepted = true
++        onPressed: mouse => {
++            root.wasOpen = GlobalStates.barPopout === root.popout && GlobalStates.barPopoutScreen === root.QsWindow.window.screen.name;
++            mouse.accepted = true;
++        }
 +        onClicked: {
 +            const win = root.QsWindow.window;
-+            if (GlobalStates.barPopout === root.popout && GlobalStates.barPopoutScreen === win.screen.name) {
++            if (root.wasOpen) {
 +                GlobalStates.barPopout = "";
 +                return;
 +            }
@@ -705,7 +780,7 @@ index bf11091d..3ae9e2f1 100644
                      id: hoverRegion
                      hoverEnabled: true
 diff --git a/dots/.config/quickshell/ii/modules/ii/verticalBar/VerticalBarContent.qml b/dots/.config/quickshell/ii/modules/ii/verticalBar/VerticalBarContent.qml
-index b9689be8..46ca90e8 100644
+index b9689be8..81a3e86f 100644
 --- a/dots/.config/quickshell/ii/modules/ii/verticalBar/VerticalBarContent.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/verticalBar/VerticalBarContent.qml
 @@ -13,6 +13,11 @@ import qs.modules.ii.bar as Bar
@@ -728,65 +803,109 @@ index b9689be8..46ca90e8 100644
                  GlobalStates.sidebarRightOpen = !GlobalStates.sidebarRightOpen;
              }
          }
-@@ -226,29 +232,29 @@ Item { // Bar content region
+@@ -190,6 +196,55 @@ Item { // Bar content region
+                 invertSide: Config?.options.bar.bottom
+             }
+ 
++            ColumnLayout {
++                id: popoutIconsColumn
++                visible: Config.options.bar.iconPopouts
++                Layout.alignment: Qt.AlignBottom | Qt.AlignHCenter
++                property real realSpacing: 6
++                spacing: 0
++
++                Revealer {
++                    vertical: true
++                    reveal: !!Audio.sink
++                    Layout.alignment: Qt.AlignHCenter
++                    Layout.bottomMargin: reveal ? popoutIconsColumn.realSpacing : 0
++                    Behavior on Layout.bottomMargin {
++                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
++                    }
++                    Bar.BarPopoutIcon {
++                        popout: "speaker"
++                        text: (Audio.sink?.audio?.muted ?? false) ? "volume_off" : "volume_up"
++                        color: Appearance.colors.colOnLayer0
++                    }
++                }
++                Revealer {
++                    vertical: true
++                    reveal: !!Audio.source
++                    Layout.alignment: Qt.AlignHCenter
++                    Layout.bottomMargin: reveal ? popoutIconsColumn.realSpacing : 0
++                    Behavior on Layout.bottomMargin {
++                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
++                    }
++                    Bar.BarPopoutIcon {
++                        popout: "mic"
++                        text: (Audio.source?.audio?.muted ?? false) ? "mic_off" : "mic"
++                        color: Appearance.colors.colOnLayer0
++                    }
++                }
++                Bar.BarPopoutIcon {
++                    popout: "network"
++                    text: Network.materialSymbol
++                    color: Appearance.colors.colOnLayer0
++                }
++                Bar.BarPopoutIcon {
++                    popout: "bluetooth"
++                    Layout.topMargin: popoutIconsColumn.realSpacing
++                    visible: BluetoothStatus.available
++                    text: BluetoothStatus.connected ? "bluetooth_connected" : BluetoothStatus.enabled ? "bluetooth" : "bluetooth_disabled"
++                    color: Appearance.colors.colOnLayer0
++                }
++            }
++
+             RippleButton { // Right sidebar button
+                 id: rightSidebarButton
+ 
+@@ -225,6 +280,7 @@ Item { // Bar content region
+                     spacing: 0
  
                      Revealer {
++                        visible: !Config.options.bar.iconPopouts
                          vertical: true
--                        reveal: Audio.sink?.audio?.muted ?? false
-+                        reveal: (Config.options.bar.iconPopouts && !!Audio.sink) || (Audio.sink?.audio?.muted ?? false)
+                         reveal: Audio.sink?.audio?.muted ?? false
                          Layout.fillWidth: true
-                         Layout.bottomMargin: reveal ? indicatorsColumnLayout.realSpacing : 0
-                         Behavior on Layout.bottomMargin {
-                             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                         }
--                        MaterialSymbol {
--                            text: "volume_off"
--                            iconSize: Appearance.font.pixelSize.larger
-+                        Bar.BarPopoutIcon {
-+                            popout: "speaker"
-+                            text: (Audio.sink?.audio?.muted ?? false) ? "volume_off" : "volume_up"
-                             color: rightSidebarButton.colText
+@@ -239,11 +295,12 @@ Item { // Bar content region
                          }
                      }
                      Revealer {
++                        visible: !Config.options.bar.iconPopouts
                          vertical: true
--                        reveal: Audio.source?.audio?.muted ?? false
-+                        reveal: (Config.options.bar.iconPopouts && !!Audio.source) || (Audio.source?.audio?.muted ?? false)
+                         reveal: Audio.source?.audio?.muted ?? false
                          Layout.fillWidth: true
                          Layout.bottomMargin: reveal ? indicatorsColumnLayout.realSpacing : 0
-                         Behavior on Layout.topMargin {
+-                        Behavior on Layout.topMargin {
++                        Behavior on Layout.bottomMargin {
                              animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                          }
--                        MaterialSymbol {
--                            text: "mic_off"
--                            iconSize: Appearance.font.pixelSize.larger
-+                        Bar.BarPopoutIcon {
-+                            popout: "mic"
-+                            text: (Audio.source?.audio?.muted ?? false) ? "mic_off" : "mic"
-                             color: rightSidebarButton.colText
+                         MaterialSymbol {
+@@ -273,13 +330,23 @@ Item { // Bar content region
                          }
                      }
-@@ -272,16 +278,16 @@ Item { // Bar content region
-                             id: notificationUnreadCount
-                         }
-                     }
--                    MaterialSymbol {
-+                    Bar.BarPopoutIcon {
-+                        popout: "network"
+                     MaterialSymbol {
++                        visible: Config.options.bar.iconPopouts
++                        Layout.alignment: Qt.AlignHCenter
++                        text: GlobalStates.sidebarRightOpen ? "right_panel_close" : "right_panel_open"
++                        iconSize: Appearance.font.pixelSize.larger
++                        color: rightSidebarButton.colText
++                    }
++                    MaterialSymbol {
++                        visible: !Config.options.bar.iconPopouts
++                        Layout.alignment: Qt.AlignHCenter
                          text: Network.materialSymbol
--                        iconSize: Appearance.font.pixelSize.larger
+                         iconSize: Appearance.font.pixelSize.larger
                          color: rightSidebarButton.colText
                      }
--                    MaterialSymbol {
-+                    Bar.BarPopoutIcon {
-+                        popout: "bluetooth"
+                     MaterialSymbol {
++                        Layout.alignment: Qt.AlignHCenter
                          Layout.topMargin: indicatorsColumnLayout.realSpacing
-                         visible: BluetoothStatus.available
+-                        visible: BluetoothStatus.available
++                        visible: !Config.options.bar.iconPopouts && BluetoothStatus.available
                          text: BluetoothStatus.connected ? "bluetooth_connected" : BluetoothStatus.enabled ? "bluetooth" : "bluetooth_disabled"
--                        iconSize: Appearance.font.pixelSize.larger
+                         iconSize: Appearance.font.pixelSize.larger
                          color: rightSidebarButton.colText
-                     }
-                 }
 diff --git a/dots/.config/quickshell/ii/modules/ii/verticalBar/VerticalClockWidget.qml b/dots/.config/quickshell/ii/modules/ii/verticalBar/VerticalClockWidget.qml
 index 6c878871..022ccb36 100644
 --- a/dots/.config/quickshell/ii/modules/ii/verticalBar/VerticalClockWidget.qml
@@ -800,19 +919,19 @@ index 6c878871..022ccb36 100644
  
          Bar.ClockWidgetPopup {
 diff --git a/dots/.config/quickshell/ii/modules/settings/BarConfig.qml b/dots/.config/quickshell/ii/modules/settings/BarConfig.qml
-index 27594fec..20228b98 100644
+index 27594fec..313282b0 100644
 --- a/dots/.config/quickshell/ii/modules/settings/BarConfig.qml
 +++ b/dots/.config/quickshell/ii/modules/settings/BarConfig.qml
-@@ -177,6 +177,12 @@ ContentPage {
-                         checked: Config.options.bar.showBackground
-                         onCheckedChanged: { Config.options.bar.showBackground = checked; }
+@@ -188,6 +188,12 @@ ContentPage {
+                         ]
                      }
-+                    ConfigSwitch {
-+                        buttonIcon: "web_asset"
-+                        text: Translation.tr("Icon popouts")
-+                        checked: Config.options.bar.iconPopouts
-+                        onCheckedChanged: { Config.options.bar.iconPopouts = checked; }
-+                    }
-                     ConfigSelectionArray {
-                         text: Translation.tr("Autohide")
-                         icon: "preview_off"
+                 }
++                ConfigSwitch {
++                    buttonIcon: "web_asset"
++                    text: Translation.tr("Icon popouts")
++                    checked: Config.options.bar.iconPopouts
++                    onCheckedChanged: { Config.options.bar.iconPopouts = checked; }
++                }
+             }
+         }
+ 
