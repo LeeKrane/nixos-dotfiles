@@ -3,17 +3,17 @@ From: krane <chris@krane.dev>
 Date: Sat, 28 Nov 2026 17:15:00 +0100
 Subject: [PATCH] fix(media): show base64 data URI and raw path album art
 
-Reimplementation of pctrade/end4-pC d6c8d5d for mediaControls/PlayerControl.qml
+Backport of pctrade/end4-pC d6c8d5d (reimplemented for mediaControls/PlayerControl.qml)
 https://github.com/pctrade/end4-pC/commit/d6c8d5d
-Problem: PlayerControl curled every album art URL, so a data: URI or a bare file path (Telegram and others) never rendered; the URL was also spliced into a shell string.
-Port: reimplemented, the fork commit patches Player.qml and other files that do not exist here; data: and file: art is used directly, a path gets file://, only http(s) is downloaded, and the URL and target path go to curl as arguments
+Problem: PlayerControl curled every album art URL, so a data: URI or a bare file path (Telegram and others) never ren...
+Port: reimplemented, the fork commit patches Player.qml and other files that do not exist here; data: and file: art i...
 Drop when: the pinned PlayerControl.qml accepts data: and file: art and downloads only http(s).
 ---
  .../ii/mediaControls/PlayerControl.qml        | 19 ++++++++++++-------
  1 file changed, 12 insertions(+), 7 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/ii/mediaControls/PlayerControl.qml b/dots/.config/quickshell/ii/modules/ii/mediaControls/PlayerControl.qml
-index 7f0eabbc..58ce53e3 100644
+index 7f0eabbc..7dccdace 100644
 --- a/dots/.config/quickshell/ii/modules/ii/mediaControls/PlayerControl.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/mediaControls/PlayerControl.qml
 @@ -15,7 +15,7 @@ import Quickshell.Services.Mpris
@@ -33,9 +33,9 @@ index 7f0eabbc..58ce53e3 100644
 +    readonly property bool artIsRemote: /^https?:\/\//.test(artUrl)
 +    property string displayedArtFilePath: {
 +        if (artUrl.length === 0) return ""
-+        if (artUrl.startsWith("data:") || artUrl.startsWith("file:/")) return artUrl
-+        if (artUrl.startsWith("/")) return "file://" + artUrl
-+        return root.downloaded ? Qt.resolvedUrl(artFilePath) : ""
++        if (artIsRemote) return root.downloaded ? Qt.resolvedUrl(artFilePath) : ""
++        if (artUrl.startsWith("/")) return "file://" + artUrl.split("/").map(encodeURIComponent).join("/")
++        return artUrl
 +    }
  
      component TrackChangeButton: RippleButton {

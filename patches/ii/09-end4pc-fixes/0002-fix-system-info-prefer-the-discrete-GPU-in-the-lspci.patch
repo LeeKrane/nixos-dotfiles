@@ -6,15 +6,15 @@ Subject: [PATCH] fix(system-info): prefer the discrete GPU in the lspci
 
 Backport of pctrade/end4-pC ebeef46
 https://github.com/pctrade/end4-pC/commit/ebeef46
-Problem: the lspci fallback took the first display controller, usually the iGPU, and the space left before "(rev xx)" stopped the bracket extraction from matching.
-Port: clean (offset)
-Drop when: the pinned getGpu picks a non-Intel controller first and strips the space before "(rev xx)".
+Problem: the lspci fallback took the first display controller, usually the iGPU, and the space left before "(rev xx)"...
+Port: clean (offset); the discrete match is NVIDIA, AMD or Radeon instead of not-Intel
+Drop when: the pinned getGpu picks an NVIDIA, AMD or Radeon controller first and strips the space before "(rev xx)".
 ---
  dots/.config/quickshell/ii/services/SystemInfo.qml | 8 ++++++--
  1 file changed, 6 insertions(+), 2 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/services/SystemInfo.qml b/dots/.config/quickshell/ii/services/SystemInfo.qml
-index 5c0a30ba..ff25e57f 100644
+index 5c0a30ba..06aec78c 100644
 --- a/dots/.config/quickshell/ii/services/SystemInfo.qml
 +++ b/dots/.config/quickshell/ii/services/SystemInfo.qml
 @@ -145,9 +145,13 @@ Singleton {
@@ -24,7 +24,7 @@ index 5c0a30ba..ff25e57f 100644
 -                gpu=$(lspci | grep -iE 'vga|3d|display' | head -1 | sed -E '
 +                # Prefer a discrete card: the iGPU usually sits first on the bus
 +                gpus=$(lspci | grep -iE 'vga|3d|display')
-+                line=$(echo "$gpus" | grep -vi 'Intel Corporation' | head -1)
++                line=$(echo "$gpus" | grep -iE 'nvidia|amd|radeon' | head -1)
 +                [ -z "$line" ] && line=$(echo "$gpus" | head -1)
 +                gpu=$(echo "$line" | sed -E '
                      s/.*: //;

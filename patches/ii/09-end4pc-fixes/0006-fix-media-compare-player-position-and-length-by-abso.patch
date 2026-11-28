@@ -6,16 +6,16 @@ Subject: [PATCH] fix(media): compare player position and length by absolute
 
 Backport of pctrade/end4-pC 18737b3
 https://github.com/pctrade/end4-pC/commit/18737b3
-Problem: filterDuplicatePlayers tested p1 - p2 <= 2, true whenever p1 is behind p2, so unrelated players were grouped by order; MprisController read player.playbackState.isPlaying, which the enum does not have, so its fallback never picked a player.
-Port: SidebarRightContent.qml not ported (pattern absent here)
-Drop when: the pinned filterDuplicatePlayers uses Math.abs and MprisController uses player.isPlaying.
+Problem: filterDuplicatePlayers tested p1 - p2 <= 2, true whenever p1 is behind p2, so unrelated players were grouped...
+Port: SidebarRightContent.qml not ported (pattern absent here); the time-based match also requires p1.length > 0
+Drop when: the pinned filterDuplicatePlayers uses Math.abs with a positive length and MprisController uses player.isPlaying.
 ---
  .../quickshell/ii/modules/ii/mediaControls/MediaControls.qml    | 2 +-
  dots/.config/quickshell/ii/services/MprisController.qml         | 2 +-
  2 files changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/ii/mediaControls/MediaControls.qml b/dots/.config/quickshell/ii/modules/ii/mediaControls/MediaControls.qml
-index 3d98be7c..80e64d50 100644
+index 3d98be7c..3ee36209 100644
 --- a/dots/.config/quickshell/ii/modules/ii/mediaControls/MediaControls.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/mediaControls/MediaControls.qml
 @@ -37,7 +37,7 @@ Scope {
@@ -23,7 +23,7 @@ index 3d98be7c..80e64d50 100644
              for (let j = i + 1; j < players.length; ++j) {
                  let p2 = players[j];
 -                if (p1.trackTitle && p2.trackTitle && (p1.trackTitle.includes(p2.trackTitle) || p2.trackTitle.includes(p1.trackTitle)) || (p1.position - p2.position <= 2 && p1.length - p2.length <= 2)) {
-+                if (p1.trackTitle && p2.trackTitle && (p1.trackTitle.includes(p2.trackTitle) || p2.trackTitle.includes(p1.trackTitle)) || (Math.abs(p1.position - p2.position) <= 2 && Math.abs(p1.length - p2.length) <= 2)) {
++                if (p1.trackTitle && p2.trackTitle && (p1.trackTitle.includes(p2.trackTitle) || p2.trackTitle.includes(p1.trackTitle)) || (p1.length > 0 && Math.abs(p1.position - p2.position) <= 2 && Math.abs(p1.length - p2.length) <= 2)) {
                      group.push(j);
                  }
              }

@@ -256,9 +256,10 @@ is lost.
 
 `patches/ii/` holds one `git format-patch` series per sub-project:
 `01-fixes`, `02-translator`, `04-agents`, `05-settings`, `06-notifications`,
-`07-idle`, `08-bar-popouts` and `09-end4pc-fixes`. `lib/mk-host.nix` applies them with `applyPatches`, after
-`patches/illogical-flake-cheatsheet-fkeys.patch`, to build the
-`dots-hyprland-patched` source the soymou module copies: directories in
+`07-idle`, `08-bar-popouts` and `09-end4pc-fixes`. `lib/mk-host.nix` applies
+them with `applyPatches`, after `patches/illogical-flake-cheatsheet-fkeys.patch`,
+to build the `dots-hyprland-patched` source the soymou module copies:
+directories in
 lexical order, files in each directory in lexical order, which is commit
 order. Each patch's commit message records the problem, the port and, for
 most, when to drop it.
@@ -273,7 +274,7 @@ the sed entry goes in the same commit.
 ### `01-fixes`
 
 Fixes backported from [pctrade/end4-pC](https://github.com/pctrade/end4-pC)
-(`0001` to `0008`; later ones are in `09-end4pc-fixes`) plus local fixes (`0009` to `0011`): thumbnails,
+(`0001` to `0008`) plus local fixes (`0009` to `0011`): thumbnails,
 notifications, colors, Bluetooth, and a throttle on raw Hyprland events.
 `0009` (trust devices on pair) depends on this repo: ii's sidebar registers
 no BlueZ agent, so pairing needs the `bluetooth-agent` root service
@@ -343,16 +344,10 @@ muted.
 ### `09-end4pc-fixes`
 
 Later [pctrade/end4-pC](https://github.com/pctrade/end4-pC) fixes on top of
-`08`, one commit each, the fork commit named in its message: `NotifTimer`
-ignores a removed notification, the `lspci` GPU fallback prefers the discrete
-card, `setModel` matches ids case-insensitively, the Gemini wallpaper script
-decodes one video frame, the time notification icon is `schedule`, player
-de-duplication compares absolute differences, the thumbnail script creates its
-cache directory, screenshots reach the clipboard as `image/png`, the overview
-stays open while a window preview is dragged, and `PlayerControl.qml` shows
-data-URI and raw-path album art (a reimplementation: the fork commit patches
-files that do not exist here). The fork's `SidebarRightContent.qml` and
-`RegionSelector.qml` hunks are not ported.
+`08`, one commit each; each message names the fork commit it ports. Not
+ported: the other hunks of `e3bb865`, the proxy-mask half of `18b00f2`, and
+the fork's `SidebarRightContent.qml` and `RegionSelector.qml` hunks. `d6c8d5d`
+is a reimplementation: the fork commit patches files that do not exist here.
 
 ### Workflow
 
