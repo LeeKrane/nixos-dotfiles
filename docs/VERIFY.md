@@ -84,3 +84,10 @@ Every host autologins into Hyprland (`initial_session` in `modules/nixos/desktop
 - After a screenshot copy, `wl-paste --list-types` lists `image/png`.
 - Dragging a window preview in the overview does not close it.
 - Play something with data-URI or raw-path art (for example Telegram): the art shows. Plain http art still shows.
+
+### Left sidebar icon picker
+
+- Settings > Bar > "Left sidebar button" lists the built-in icons and highlights the current one.
+- Picking an icon and a color changes the bar button at once and survives a shell restart.
+- A folder of `.svg` or `.png` files in "Custom icons folder" replaces the grid; picking one shows it on the button. Emptying the field blanks the button until a built-in icon is picked again.
+- With AI, translator and anime off and Agents on, the button is visible; with Agents off too it is hidden.

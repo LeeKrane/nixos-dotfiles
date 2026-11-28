@@ -256,7 +256,7 @@ is lost.
 
 `patches/ii/` holds one `git format-patch` series per sub-project:
 `01-fixes`, `02-translator`, `04-agents`, `05-settings`, `06-notifications`,
-`07-idle`, `08-bar-popouts` and `09-end4pc-fixes`. `lib/mk-host.nix` applies
+`07-idle`, `08-bar-popouts`, `09-end4pc-fixes` and `10-icon-picker`. `lib/mk-host.nix` applies
 them with `applyPatches`, after `patches/illogical-flake-cheatsheet-fkeys.patch`,
 to build the `dots-hyprland-patched` source the soymou module copies:
 directories in
@@ -348,6 +348,10 @@ Later [pctrade/end4-pC](https://github.com/pctrade/end4-pC) fixes on top of
 ported: the other hunks of `e3bb865`, the proxy-mask half of `18b00f2`, and
 the fork's `SidebarRightContent.qml` and `RegionSelector.qml` hunks. `d6c8d5d`
 is a reimplementation: the fork commit patches files that do not exist here.
+
+### `10-icon-picker`
+
+Settings, Bar, "Left sidebar button" picks the icon of the left sidebar button, its color and an optional folder of icons. The keys sit under `bar` in `config.json`: `topLeftIcon` (a bare built-in name, to which the button appends `-symbolic`; the file name as is for an icon from the custom folder; or `distro` for the OS logo), `topLeftIconColor` (a color role such as `primary`; empty is the theme color) and `topLeftIconsPath` (a folder of `.svg` and `.png` files, `~` allowed; empty is `assets/icons`). Changing the folder does not migrate `topLeftIcon`: pick the icon again. The button also shows when only the Agents tab is enabled. Drop when pinned ii has an icon picker for this button.
 
 ### Workflow
 

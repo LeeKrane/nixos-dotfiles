@@ -1,0 +1,60 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: pctrade <pablo78celi@gmail>
+Date: Wed, 30 Sep 2026 18:41:22 -0500
+Subject: [PATCH] icon-picker: load icons from a custom folder
+
+CustomIcon only reads assets/icons, so the left sidebar button cannot show an icon from the user's own folder.
+
+Backport of pctrade/end4-pC 52814a6, FileUtils.folderUrl and CustomIcon.customFolder only. The picker, the Settings section and the button follow in the next commit.
+
+Drop when the pinned CustomIcon takes a custom icon folder.
+---
+ .../ii/modules/common/functions/FileUtils.qml        | 12 ++++++++++++
+ .../ii/modules/common/widgets/CustomIcon.qml         |  4 +++-
+ 2 files changed, 15 insertions(+), 1 deletion(-)
+
+diff --git a/dots/.config/quickshell/ii/modules/common/functions/FileUtils.qml b/dots/.config/quickshell/ii/modules/common/functions/FileUtils.qml
+index e7f5e610..5638ad7f 100644
+--- a/dots/.config/quickshell/ii/modules/common/functions/FileUtils.qml
++++ b/dots/.config/quickshell/ii/modules/common/functions/FileUtils.qml
+@@ -15,6 +15,18 @@ Singleton {
+         return s.startsWith("file://") ? s.slice(7) : s;
+     }
+ 
++    /**
++     * Turns a user typed folder path into a file url, expanding a leading ~
++     * @param {string} path
++     * @returns {string} file url, or an empty string when the path is empty
++     */
++    function folderUrl(path) {
++        const trimmed = root.trimFileProtocol(path ?? "").trim();
++        if (trimmed === "") return "";
++        const expanded = trimmed.startsWith("~") ? Quickshell.env("HOME") + trimmed.slice(1) : trimmed;
++        return "file://" + expanded.replace(/\/+$/, "");
++    }
++
+     /**
+      * Extracts the file name from a file path
+      * @param {string} str
+diff --git a/dots/.config/quickshell/ii/modules/common/widgets/CustomIcon.qml b/dots/.config/quickshell/ii/modules/common/widgets/CustomIcon.qml
+index d7a1c634..9655ab67 100644
+--- a/dots/.config/quickshell/ii/modules/common/widgets/CustomIcon.qml
++++ b/dots/.config/quickshell/ii/modules/common/widgets/CustomIcon.qml
+@@ -2,6 +2,7 @@ import QtQuick
+ import Quickshell
+ import Quickshell.Widgets
+ import Qt5Compat.GraphicalEffects
++import qs.modules.common.functions
+ 
+ Item {
+     id: root
+@@ -9,7 +10,8 @@ Item {
+     property bool colorize: false
+     property color color
+     property string source: ""
+-    property string iconFolder: Qt.resolvedUrl(Quickshell.shellPath("assets/icons"))  // The folder to check first
++    property string customFolder: ""
++    property string iconFolder: FileUtils.folderUrl(root.customFolder) || Qt.resolvedUrl(Quickshell.shellPath("assets/icons"))
+     width: 30
+     height: 30
+     

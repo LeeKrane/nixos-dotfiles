@@ -1,0 +1,208 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Sat, 28 Nov 2026 17:22:06 +0100
+Subject: [PATCH] feat(bar): choose the left sidebar button icon, color and
+ icon folder
+
+The left sidebar button icon could only be changed by editing config.json, it had no color setting, and with AI, translator and anime off the button hid itself, which left the Agents tab unreachable.
+
+Port of pctrade/end4-pC 52814a6 onto bar.topLeftIcon: new bar.topLeftIconColor and bar.topLeftIconsPath, IconPickerGrid and a Left sidebar button section in Settings, Bar. The fork keeps these under custom.* and has a colorize switch; neither is adopted. The picker stores the bare name, the button appends -symbolic for built-in icons only, an icon from the custom folder keeps its file name. The button also shows when sidebar.agents.enable is on.
+
+Drop when the pinned ii has an icon picker for the left sidebar button.
+---
+ .../quickshell/ii/modules/common/Config.qml   |  2 +
+ .../modules/common/widgets/IconPickerGrid.qml | 80 +++++++++++++++++++
+ .../ii/modules/ii/bar/LeftSidebarButton.qml   | 16 +++-
+ .../ii/modules/settings/BarConfig.qml         | 37 +++++++++
+ 4 files changed, 132 insertions(+), 3 deletions(-)
+ create mode 100644 dots/.config/quickshell/ii/modules/common/widgets/IconPickerGrid.qml
+
+diff --git a/dots/.config/quickshell/ii/modules/common/Config.qml b/dots/.config/quickshell/ii/modules/common/Config.qml
+index c9a2b3e3..0f011f5b 100644
+--- a/dots/.config/quickshell/ii/modules/common/Config.qml
++++ b/dots/.config/quickshell/ii/modules/common/Config.qml
+@@ -267,6 +267,8 @@ Singleton {
+                 property bool floatStyleShadow: true // Show shadow behind bar when cornerStyle == 1 (Float)
+                 property bool borderless: false // true for no grouping of items
+                 property string topLeftIcon: "spark" // Options: "distro" or any icon name in ~/.config/quickshell/ii/assets/icons
++                property string topLeftIconColor: ""
++                property string topLeftIconsPath: ""
+                 property bool showBackground: true
+                 property bool iconPopouts: true
+                 property bool verbose: true
+diff --git a/dots/.config/quickshell/ii/modules/common/widgets/IconPickerGrid.qml b/dots/.config/quickshell/ii/modules/common/widgets/IconPickerGrid.qml
+new file mode 100644
+index 00000000..16be8642
+--- /dev/null
++++ b/dots/.config/quickshell/ii/modules/common/widgets/IconPickerGrid.qml
+@@ -0,0 +1,80 @@
++import QtQuick
++import QtQuick.Layouts
++import Quickshell
++import Qt.labs.folderlistmodel
++import qs.modules.common
++import qs.modules.common.widgets
++import qs.modules.common.functions
++
++Flow {
++    id: root
++    property string currentValue: ""
++    property string customFolder: ""
++    property string colorName: ""
++    property real minCellSize: 44
++    readonly property bool builtin: FileUtils.folderUrl(customFolder) === ""
++    readonly property color iconColor: colorName
++        ? (Appearance.colors[`col${colorName.charAt(0).toUpperCase()}${colorName.slice(1)}`] ?? Appearance.colors.colOnLayer0)
++        : Appearance.colors.colOnLayer0
++    readonly property int columns: Math.max(1, Math.floor((width + spacing) / (minCellSize + spacing)))
++    readonly property real cellSize: width > 0 ? (width + spacing) / columns - spacing : minCellSize
++    signal selected(string name)
++
++    Layout.fillWidth: true
++    spacing: 6
++
++    FolderListModel {
++        id: folderModel
++        folder: FileUtils.folderUrl(root.customFolder) || "file://" + Quickshell.shellPath("assets/icons")
++        nameFilters: ["*.svg", "*.png"]
++        showDirs: false
++    }
++
++    Repeater {
++        model: folderModel
++        delegate: Item {
++            id: cell
++            required property string fileName
++            readonly property string iconName: root.builtin ? fileName.replace(/-symbolic\.(svg|png)$/, "") : fileName
++            readonly property bool isSelected: root.currentValue === iconName
++            implicitWidth: root.cellSize
++            implicitHeight: root.cellSize
++
++            Rectangle {
++                anchors.fill: parent
++                radius: cell.isSelected ? Appearance.rounding.normal : Appearance.rounding.small
++                color: cell.isSelected ? Appearance.colors.colSecondaryContainer : (mouseArea.containsMouse ? Appearance.colors.colLayer2Hover : Appearance.colors.colLayer2)
++                border.width: cell.isSelected ? 2 : 0
++                border.color: Appearance.colors.colPrimary
++
++                Behavior on radius {
++                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
++                }
++            }
++
++            CustomIcon {
++                anchors.centerIn: parent
++                width: root.cellSize * 0.5
++                height: root.cellSize * 0.5
++                source: cell.fileName
++                customFolder: root.customFolder
++                colorize: true
++                color: root.iconColor
++            }
++
++            MouseArea {
++                id: mouseArea
++                anchors.fill: parent
++                hoverEnabled: true
++                cursorShape: Qt.PointingHandCursor
++                onClicked: root.selected(cell.iconName)
++
++                StyledToolTip {
++                    extraVisibleCondition: false
++                    alternativeVisibleCondition: mouseArea.containsMouse
++                    text: cell.fileName.replace(/(-symbolic)?\.(svg|png)$/, "")
++                }
++            }
++        }
++    }
++}
+diff --git a/dots/.config/quickshell/ii/modules/ii/bar/LeftSidebarButton.qml b/dots/.config/quickshell/ii/modules/ii/bar/LeftSidebarButton.qml
+index 6c73ca72..699241ad 100644
+--- a/dots/.config/quickshell/ii/modules/ii/bar/LeftSidebarButton.qml
++++ b/dots/.config/quickshell/ii/modules/ii/bar/LeftSidebarButton.qml
+@@ -3,6 +3,7 @@ import qs
+ import qs.services
+ import qs.modules.common
+ import qs.modules.common.widgets
++import qs.modules.common.functions
+ 
+ RippleButton {
+     id: root
+@@ -12,7 +13,15 @@ RippleButton {
+     property bool aiChatEnabled: Config.options.policies.ai !== 0
+     property bool translatorEnabled: Config.options.sidebar.translator.enable
+     property bool animeEnabled: Config.options.policies.weeb !== 0
+-    visible: aiChatEnabled || translatorEnabled || animeEnabled
++    property bool agentsEnabled: Config.options.sidebar.agents.enable
++    visible: aiChatEnabled || translatorEnabled || animeEnabled || agentsEnabled
++
++    readonly property string iconName: Config.options.bar.topLeftIcon
++    readonly property bool customFolderIcon: FileUtils.folderUrl(Config.options.bar.topLeftIconsPath) !== ""
++    readonly property color iconColor: {
++        const name = Config.options.bar.topLeftIconColor;
++        return name ? (Appearance.colors[`col${name.charAt(0).toUpperCase()}${name.slice(1)}`] ?? Appearance.colors.colOnLayer0) : Appearance.colors.colOnLayer0;
++    }
+ 
+     property real buttonPadding: 5
+     implicitWidth: distroIcon.width + buttonPadding * 2
+@@ -57,9 +66,10 @@ RippleButton {
+         anchors.centerIn: parent
+         width: 19.5
+         height: 19.5
+-        source: Config.options.bar.topLeftIcon == 'distro' ? SystemInfo.distroIcon : `${Config.options.bar.topLeftIcon}-symbolic`
++        source: root.iconName == 'distro' ? SystemInfo.distroIcon : (root.customFolderIcon ? root.iconName : `${root.iconName}-symbolic`)
++        customFolder: root.iconName == 'distro' ? "" : Config.options.bar.topLeftIconsPath
+         colorize: true
+-        color: Appearance.colors.colOnLayer0
++        color: root.iconColor
+ 
+         Rectangle {
+             opacity: root.showPing ? 1 : 0
+diff --git a/dots/.config/quickshell/ii/modules/settings/BarConfig.qml b/dots/.config/quickshell/ii/modules/settings/BarConfig.qml
+index 313282b0..31183279 100644
+--- a/dots/.config/quickshell/ii/modules/settings/BarConfig.qml
++++ b/dots/.config/quickshell/ii/modules/settings/BarConfig.qml
+@@ -197,6 +197,43 @@ ContentPage {
+             }
+         }
+ 
++        ContentSection {
++            icon: "right_panel_open"
++            shape: MaterialShape.Shape.Pentagon
++            title: Translation.tr("Left sidebar button")
++
++            GroupedList {
++                IconPickerGrid {
++                    customFolder: Config.options.bar.topLeftIconsPath
++                    currentValue: Config.options.bar.topLeftIcon
++                    colorName: Config.options.bar.topLeftIconColor
++                    onSelected: name => { Config.options.bar.topLeftIcon = name }
++                }
++                ConfigTextArea {
++                    id: iconsPathField
++                    Layout.fillWidth: true
++                    buttonIcon: "folder_open"
++                    text: Translation.tr("Custom icons folder")
++                    placeholderText: Translation.tr("Leave empty to use the built-in icons, e.g. ~/Pictures/icons")
++                    value: Config.options.bar.topLeftIconsPath
++                    onValueChanged: iconsPathDebounce.restart()
++
++                    Timer {
++                        id: iconsPathDebounce
++                        interval: 600
++                        onTriggered: Config.options.bar.topLeftIconsPath = iconsPathField.value
++                    }
++                }
++                ColorSelectionArray {
++                    icon: "palette"
++                    text: Translation.tr("Icon color")
++                    options: ["onLayer0", "primary", "secondary", "tertiary", "onPrimaryContainer", "onSecondaryContainer", "onTertiaryContainer"]
++                    currentValue: Config.options.bar.topLeftIconColor
++                    onSelected: newValue => { Config.options.bar.topLeftIconColor = newValue }
++                }
++            }
++        }
++
+         ContentSection {
+             icon: "notifications"
+             shape: MaterialShape.Shape.Bun
