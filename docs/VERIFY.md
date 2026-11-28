@@ -100,7 +100,7 @@ Run on a host with two monitors (tariognatha). Lock with `qs -c ii ipc call lock
 - With the pointer on each monitor in turn, lock and unlock: the pointer position and the focused monitor (`hyprctl monitors -j | jq -r '.[] | select(.focused).name'`) are back where they were.
 - In Settings > Hyprland > Displays, select each monitor and press "Make main monitor" (the selected main monitor shows "This is the main monitor" instead of the button): the password prompt, clock and weather appear only there, the other monitor shows the wallpaper, typing works with the pointer on either monitor, and the password unlocks.
 - Click the wallpaper-only monitor while locked: nothing happens (no suspend, reboot or power-off).
-- With "Automatic (first monitor)" selected, and with a saved name whose monitor is unplugged: the prompt appears on the first monitor, whichever one has the pointer.
+- With `lock.mainMonitor` empty in `~/.config/illogical-impulse/config.json`, or naming an unplugged monitor: the prompt appears on the first monitor, whichever one has the pointer.
 - Unplug the prompt monitor while locked: the prompt moves to the remaining monitor.
 - Boot with `launchOnStartup` on, with "Main monitor" set and then empty: a prompt appears either way.
 - Turn "Enable blur" off: the monitor without the prompt shows the unblurred wallpaper.
