@@ -2,45 +2,56 @@
 
 ## Goal
 
-Fix two lock screen problems reported in pctrade/end4-pC#72 and add a main-monitor setting. Output: new series `patches/ii/09-lock/`, exported with the workflow in `docs/II-INTEGRATION.md`.
+Fix two lock screen problems reported in pctrade/end4-pC#72 and add a main-monitor setting. Output: new series `patches/ii/11-lock/`, exported with the workflow in `docs/II-INTEGRATION.md`. `11-lock` applies last; it stacks after `05-settings`, `08-bar-popouts`, `09-end4pc-fixes` and `10-icon-picker`.
 
 Paths are relative to `dots/.config/quickshell/ii/` in the `krane` branch.
 
 ## Problems
 
-1. The cursor jumps to the last monitor. `modules/ii/lock/Lock.qml` focuses each monitor in turn in the lock batch and again in the restore batch, so the last monitor keeps focus and the pointer warps there. Cause verified by reading the code.
-2. The lock UI appears on every monitor. The reporter wants it on one monitor, with the others locked but showing no UI. In our tree `modules/common/panels/lock/LockScreen.qml` creates one `LockSurface` per screen. Why the reporter saw blank monitors is not established; it is not needed to implement the target behavior.
+1. The cursor jumps to the last monitor. `modules/ii/lock/Lock.qml` focuses each monitor in turn in the lock batch and again in the restore batch, so the last monitor keeps focus, and Hyprland moves the pointer there.
+2. The lock UI (password field, clock, weather) shows on every monitor. The wanted result: the prompt and widgets on one monitor, the other monitors locked and showing only the blurred wallpaper. The wallpaper and blur come from `modules/ii/background/Background.qml` on every screen; it shows through the transparent lock surface because ii sets `session_lock_xray = true`. The clock and weather widgets also come from `Background.qml` (`WidgetCanvas`), not from `LockSurface`.
 
 ## Design
 
+### Prompt screen
+
+One screen is the prompt screen, chosen live from `Quickshell.screens` in this order: the screen named by `lock.mainMonitor` if connected; else the monitor focused at lock time if connected; else `Quickshell.screens[0]`. Some screen always qualifies, so a bad name or a missing record never leaves the session without a prompt. The choice is re-evaluated when screens change, so unplugging the main monitor while locked moves the prompt to a remaining screen. The result is a property on `GlobalStates` (`lockPromptScreen`, a screen name).
+
+### Where the prompt shows
+
+- `LockScreen.qml` stays shared with the waffle lock (`modules/waffle/lock/WaffleLock.qml`). It gets a property that defaults to "every screen"; only `modules/ii/lock/Lock.qml` sets it, so the waffle lock is unchanged.
+- `LockSurface` stays loaded on every screen, so the password context (`LockContext.currentText`) takes typing from any screen. Its visible content is shown only on the prompt screen. This avoids keyboard input landing on a screen with no field.
+- `Background.qml` hides `WidgetCanvas` (clock, weather) on non-prompt screens while locked. Those screens show the wallpaper, blurred when `lock.blur.enable` is on and unblurred when it is off.
+
 ### Cursor and focus
 
-`Lock.qml` records the focused monitor before the lock batch. Both batches (lock and restore) end with one `hl.dsp.focus({monitor = <recorded>})`. This keeps the pointer where it was and, as far as the session-lock protocol allows, gives keyboard focus to the original monitor. Verify keyboard input reaches the password field on the main monitor.
+`Lock.qml` records the focused monitor and the cursor position (`hyprctl cursorpos`) before the lock batch. Both batches end with one `hl.dsp.focus({monitor = <recorded>})` and a cursor move back to the recorded position. Focusing a monitor moves the pointer to its centre, so the position restore is part of the fix.
 
 ### Nearest empty workspace
 
-Port fork commit 03b134b into the same file. When locking, each monitor's workspace moves to the next workspace id that has no windows and is not another monitor's current workspace, instead of `2147483647 - ws`. The push is skipped when targets are unchanged, and the state is cleared on restore. It reads `Hyprland.workspaces.values[].toplevels`. The bar may briefly show a low-numbered real workspace during the lock. The fork's `lastProcessedLockWall` and `MaterialThemeLoader` parts are not ported. The hunks do not apply as written, so this is a hand-port of about 50 lines.
+Port fork commit 03b134b into `Lock.qml`. When locking, each monitor's workspace moves to the next workspace id that has no windows and is not another monitor's current workspace, instead of `2147483647 - ws`. It reads `Hyprland.workspaces.values[].toplevels`. The fork's `pushedTargets` skip logic is not ported: there is one caller. The fork's `lastProcessedLockWall` and `MaterialThemeLoader` parts are not ported either. The search skips ids that a workspace rule pins to a monitor (tariognatha pins workspace 1 to DP-2 in `hosts/tariognatha/display.nix`), so a lock never pulls focus to another monitor. The hunks do not apply as written, so this is a hand-port of about 50 lines.
 
 ### Main monitor setting
 
-- New option `lock.mainMonitor` (string, default empty) in `modules/common/Config.qml`, declared like `05-settings/0001`. A row in the settings app on the Lock page picks it from the connected monitors, by name (for example `DP-1`).
-- In the `LockScreen.qml` loader, the full `LockSurface` (clock, password field) is active only on the screen whose name equals `lock.mainMonitor`.
-- Every other screen shows the blurred wallpaper and nothing else. It still holds the session-lock surface, so the session stays locked and no input reaches it.
-- Fallback: when `lock.mainMonitor` is empty, or names a monitor that is not connected, the monitor that was focused at lock time is used. A bad name must never leave the session with no password prompt.
+- New option `lock.mainMonitor` (string, default empty) inside the existing `lock` object in `modules/common/Config.qml`. The patch does not change the `property bool launchOnStartup: false` line next to it, which a `kraneIiPatches` sed rewrites.
+- A row in the Interface page's "Lock screen" section (`modules/settings/InterfaceConfig.qml`), a `ConfigComboBox` of the connected monitor names with an empty first entry, "Focused monitor". A saved name whose monitor is unplugged is still shown.
 
 ## Not doing
 
-- Other settings on the lock page.
-- The waffle lock (`modules/waffle/lock/WaffleLock.qml`).
+- A separate Lock settings page, and other lock settings.
+- Changes to the waffle lock.
 
 ## Verification
 
 Runs on tariognatha, which has 2 monitors.
 
 - `git am -3` over all series, then `nixos-rebuild build`.
-- Lock with the pointer on each monitor: the pointer stays put; after unlock, focus returns to the original monitor.
-- With `lock.mainMonitor` set to each monitor: the prompt appears only there; the other monitor shows the blurred wallpaper; typing the password unlocks.
+- Lock with the pointer on each monitor: after unlock, the pointer and focus are back on the original monitor.
+- With `lock.mainMonitor` set to each monitor: the prompt, clock and weather appear only there; the other monitor shows the wallpaper; typing works with the pointer on either monitor; the password unlocks.
 - With an empty name and with a disconnected name: the prompt appears on the focused monitor.
-- Lock while windows are open on both monitors: workspaces move to empty ones and return after unlock; a third workspace in use is not taken.
-- Hotplug a monitor while locked: it does not expose the session.
-- `docs/II-INTEGRATION.md` gets a `### 09-lock` section; `docs/VERIFY.md` gets the checks above.
+- Unplug the prompt monitor while locked: the prompt moves to the remaining screen.
+- Boot through lock-on-start with the name set and with it empty: a prompt appears.
+- `lock.blur.enable` off: the other monitor shows the unblurred wallpaper.
+- Lock with windows open on both monitors: workspaces move to empty ones and return after unlock; a workspace in use and a workspace pinned by a rule are not taken.
+- Waffle lock, if enabled on a host: unchanged.
+- `docs/II-INTEGRATION.md`: add `08-bar-popouts` (missing today) and `11-lock` to the series list in "Backported fork fixes", and a `### 11-lock` section. `docs/VERIFY.md`: add the checks above, next to "Autologin and lock-on-start".
