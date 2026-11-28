@@ -16,10 +16,6 @@
   },
   "monitors": {
     "DP-1": {
-      "bootConfirmed": false,
-      "bootPrevious": {
-        "position": "2560x0"
-      },
       "position": "2560x0"
     },
     "DP-2": {
