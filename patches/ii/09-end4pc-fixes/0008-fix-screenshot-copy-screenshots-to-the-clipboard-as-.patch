@@ -1,0 +1,60 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Sat, 28 Nov 2026 17:14:03 +0100
+Subject: [PATCH] fix(screenshot): copy screenshots to the clipboard as
+ image/png
+
+Backport of pctrade/end4-pC 6de2c5f
+https://github.com/pctrade/end4-pC/commit/6de2c5f
+Problem: magick wrote the crop to stdout without a format and wl-copy got no MIME type, so clipboard-aware apps did not recognise the image and pasting failed on Wayland.
+Port: RegionSelector.qml not ported (its grim line is absent here)
+Drop when: the pinned ScreenshotAction.qml and Recorder.qml force PNG:- and wl-copy --type image/png.
+---
+ .../quickshell/ii/modules/common/utils/ScreenshotAction.qml | 6 +++---
+ .../quickshell/ii/modules/ii/overlay/recorder/Recorder.qml  | 2 +-
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/dots/.config/quickshell/ii/modules/common/utils/ScreenshotAction.qml b/dots/.config/quickshell/ii/modules/common/utils/ScreenshotAction.qml
+index c4eae679..c1e53ef2 100644
+--- a/dots/.config/quickshell/ii/modules/common/utils/ScreenshotAction.qml
++++ b/dots/.config/quickshell/ii/modules/common/utils/ScreenshotAction.qml
+@@ -33,7 +33,7 @@ Singleton {
+         const rh = Math.round(height);
+         const cropBase = `magick ${StringUtils.shellSingleQuoteEscape(screenshotPath)} `
+             + `-crop ${rw}x${rh}+${rx}+${ry} +repage`
+-        const cropToStdout = `${cropBase} -`
++        const cropToStdout = `${cropBase} PNG:-`
+         const cropInPlace = `${cropBase} '${StringUtils.shellSingleQuoteEscape(screenshotPath)}'`
+         const cleanup = `rm '${StringUtils.shellSingleQuoteEscape(screenshotPath)}'`
+         const slurpRegion = `${rx},${ry} ${rw}x${rh}`
+@@ -45,7 +45,7 @@ Singleton {
+             case ScreenshotAction.Action.Copy:
+                 if (saveDir === "") {
+                     // not saving the screenshot, just copy to clipboard
+-                    return ["bash", "-c", `${cropToStdout} | wl-copy && ${cleanup}`]
++                    return ["bash", "-c", `${cropToStdout} | wl-copy --type image/png && ${cleanup}`]
+                     break;
+                 }
+                 return [
+@@ -53,7 +53,7 @@ Singleton {
+                     `mkdir -p '${StringUtils.shellSingleQuoteEscape(saveDir)}' && \
+                     saveFileName="screenshot-$(date '+%Y-%m-%d_%H.%M.%S').png" && \
+                     savePath="${saveDir}/$saveFileName" && \
+-                    ${cropToStdout} | tee >(wl-copy) > "$savePath" && \
++                    ${cropToStdout} | tee >(wl-copy --type image/png) > "$savePath" && \
+                     ${cleanup}`
+                 ]
+ 
+diff --git a/dots/.config/quickshell/ii/modules/ii/overlay/recorder/Recorder.qml b/dots/.config/quickshell/ii/modules/ii/overlay/recorder/Recorder.qml
+index 81288412..6a643895 100644
+--- a/dots/.config/quickshell/ii/modules/ii/overlay/recorder/Recorder.qml
++++ b/dots/.config/quickshell/ii/modules/ii/overlay/recorder/Recorder.qml
+@@ -40,7 +40,7 @@ StyledOverlayWidget {
+                     name: "Screenshot"
+                     onClicked: {
+                         GlobalStates.overlayOpen = false;
+-                        Quickshell.execDetached(["bash", "-c", "grim - | wl-copy"]);
++                        Quickshell.execDetached(["bash", "-c", "grim - | wl-copy --type image/png"]);
+                     }
+                 }
+ 

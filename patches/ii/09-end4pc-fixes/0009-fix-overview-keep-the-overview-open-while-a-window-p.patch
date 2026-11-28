@@ -1,0 +1,42 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Sat, 28 Nov 2026 17:15:00 +0100
+Subject: [PATCH] fix(overview): keep the overview open while a window preview
+ is dragged
+
+Backport of pctrade/end4-pC 18b00f2 (drag half)
+https://github.com/pctrade/end4-pC/commit/18b00f2
+Problem: dragging a window preview moves the pointer outside the input mask, Hyprland ends the focus grab and the overview closes.
+Port: hand-port; mask the whole screen while draggingFromWorkspace is set; the proxy-mask half is not ported (columnLayout is not scaled here)
+Drop when: the pinned Overview.qml masks the whole screen during a window drag.
+---
+ .../quickshell/ii/modules/ii/overview/Overview.qml        | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/dots/.config/quickshell/ii/modules/ii/overview/Overview.qml b/dots/.config/quickshell/ii/modules/ii/overview/Overview.qml
+index 1d2f5e5c..269a4ed1 100644
+--- a/dots/.config/quickshell/ii/modules/ii/overview/Overview.qml
++++ b/dots/.config/quickshell/ii/modules/ii/overview/Overview.qml
+@@ -27,8 +27,9 @@ Scope {
+         WlrLayershell.keyboardFocus: GlobalStates.overviewOpen ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+         color: "transparent"
+ 
++        readonly property bool windowDragging: (overviewLoader.item?.draggingFromWorkspace ?? -1) !== -1
+         mask: Region {
+-            item: GlobalStates.overviewOpen ? columnLayout : null
++            item: GlobalStates.overviewOpen ? (panelWindow.windowDragging ? fullscreenMask : columnLayout) : null
+         }
+ 
+         anchors {
+@@ -68,6 +69,11 @@ Scope {
+             searchWidget.focusFirstItem();
+         }
+ 
++        Item {
++            id: fullscreenMask
++            anchors.fill: parent
++        }
++
+         Column {
+             id: columnLayout
+             visible: GlobalStates.overviewOpen

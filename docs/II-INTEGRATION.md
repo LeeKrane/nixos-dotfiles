@@ -255,8 +255,8 @@ is lost.
 ## Backported fork fixes
 
 `patches/ii/` holds one `git format-patch` series per sub-project:
-`01-fixes`, `02-translator`, `04-agents`, `05-settings`, `06-notifications`
-and `07-idle`. `lib/mk-host.nix` applies them with `applyPatches`, after
+`01-fixes`, `02-translator`, `04-agents`, `05-settings`, `06-notifications`,
+`07-idle`, `08-bar-popouts` and `09-end4pc-fixes`. `lib/mk-host.nix` applies them with `applyPatches`, after
 `patches/illogical-flake-cheatsheet-fkeys.patch`, to build the
 `dots-hyprland-patched` source the soymou module copies: directories in
 lexical order, files in each directory in lexical order, which is commit
@@ -273,7 +273,7 @@ the sed entry goes in the same commit.
 ### `01-fixes`
 
 Fixes backported from [pctrade/end4-pC](https://github.com/pctrade/end4-pC)
-(`0001` to `0008`) plus local fixes (`0009` to `0011`): thumbnails,
+(`0001` to `0008`; later ones are in `09-end4pc-fixes`) plus local fixes (`0009` to `0011`): thumbnails,
 notifications, colors, Bluetooth, and a throttle on raw Hyprland events.
 `0009` (trust devices on pair) depends on this repo: ii's sidebar registers
 no BlueZ agent, so pairing needs the `bluetooth-agent` root service
@@ -339,6 +339,20 @@ their own files, a per-screen popout window with its own focus grab
 controls it and keeps the speaker and mic icons always visible. With it off,
 indicator clicks open the sidebar and the speaker and mic icons show only when
 muted.
+
+### `09-end4pc-fixes`
+
+Later [pctrade/end4-pC](https://github.com/pctrade/end4-pC) fixes on top of
+`08`, one commit each, the fork commit named in its message: `NotifTimer`
+ignores a removed notification, the `lspci` GPU fallback prefers the discrete
+card, `setModel` matches ids case-insensitively, the Gemini wallpaper script
+decodes one video frame, the time notification icon is `schedule`, player
+de-duplication compares absolute differences, the thumbnail script creates its
+cache directory, screenshots reach the clipboard as `image/png`, the overview
+stays open while a window preview is dragged, and `PlayerControl.qml` shows
+data-URI and raw-path album art (a reimplementation: the fork commit patches
+files that do not exist here). The fork's `SidebarRightContent.qml` and
+`RegionSelector.qml` hunks are not ported.
 
 ### Workflow
 

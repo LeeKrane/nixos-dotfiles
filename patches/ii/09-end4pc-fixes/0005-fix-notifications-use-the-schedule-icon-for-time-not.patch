@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Sat, 28 Nov 2026 17:13:07 +0100
+Subject: [PATCH] fix(notifications): use the schedule icon for time
+ notifications
+
+Backport of pctrade/end4-pC e3bb865 (icon hunk only)
+https://github.com/pctrade/end4-pC/commit/e3bb865
+Problem: the time notification icon was the nonexistent Material symbol "scheduleb".
+Port: hand-port, one line; the other hunks of the fork commit are not ported
+Drop when: the pinned NotificationUtils maps "time" to "schedule".
+---
+ .../ii/modules/common/functions/NotificationUtils.qml           | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/dots/.config/quickshell/ii/modules/common/functions/NotificationUtils.qml b/dots/.config/quickshell/ii/modules/common/functions/NotificationUtils.qml
+index d6adcc0f..a56f1c2c 100644
+--- a/dots/.config/quickshell/ii/modules/common/functions/NotificationUtils.qml
++++ b/dots/.config/quickshell/ii/modules/common/functions/NotificationUtils.qml
+@@ -18,7 +18,7 @@ Singleton {
+             'power': 'power',
+             'screenshot': 'screenshot_monitor',
+             'welcome': 'waving_hand',
+-            'time': 'scheduleb',
++            'time': 'schedule',
+             'installed': 'download',
+             'configuration reloaded': 'reset_wrench',
+             'unable': 'question_mark',

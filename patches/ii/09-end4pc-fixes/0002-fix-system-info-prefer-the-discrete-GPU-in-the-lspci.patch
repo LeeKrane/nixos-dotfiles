@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Sat, 28 Nov 2026 17:13:01 +0100
+Subject: [PATCH] fix(system-info): prefer the discrete GPU in the lspci
+ fallback
+
+Backport of pctrade/end4-pC ebeef46
+https://github.com/pctrade/end4-pC/commit/ebeef46
+Problem: the lspci fallback took the first display controller, usually the iGPU, and the space left before "(rev xx)" stopped the bracket extraction from matching.
+Port: clean (offset)
+Drop when: the pinned getGpu picks a non-Intel controller first and strips the space before "(rev xx)".
+---
+ dots/.config/quickshell/ii/services/SystemInfo.qml | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/dots/.config/quickshell/ii/services/SystemInfo.qml b/dots/.config/quickshell/ii/services/SystemInfo.qml
+index 5c0a30ba..ff25e57f 100644
+--- a/dots/.config/quickshell/ii/services/SystemInfo.qml
++++ b/dots/.config/quickshell/ii/services/SystemInfo.qml
+@@ -145,9 +145,13 @@ Singleton {
+         command: ["bash", "-c", `
+             gpu=$(glxinfo 2>/dev/null | grep 'renderer string' | grep -o 'Intel(R) HD Graphics [0-9]\\{4\\}' | sed 's/Intel(R)/Intel®/')
+             if [ -z "$gpu" ]; then
+-                gpu=$(lspci | grep -iE 'vga|3d|display' | head -1 | sed -E '
++                # Prefer a discrete card: the iGPU usually sits first on the bus
++                gpus=$(lspci | grep -iE 'vga|3d|display')
++                line=$(echo "$gpus" | grep -vi 'Intel Corporation' | head -1)
++                [ -z "$line" ] && line=$(echo "$gpus" | head -1)
++                gpu=$(echo "$line" | sed -E '
+                     s/.*: //;
+-                    s/\\(rev [0-9a-f]+\\)//;
++                    s/ *\\(rev [0-9a-f]+\\)//;
+                     s/Advanced Micro Devices, Inc\\. \\[AMD\\/ATI\\]//;
+                     s/NVIDIA Corporation//;
+                     s/Intel Corporation//;

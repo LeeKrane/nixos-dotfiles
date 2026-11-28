@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Sat, 28 Nov 2026 17:14:02 +0100
+Subject: [PATCH] fix(thumbnails): create the thumbnail cache directory before
+ generating into it
+
+Backport of pctrade/end4-pC a25766e
+https://github.com/pctrade/end4-pC/commit/a25766e
+Problem: nothing creates genericCache/thumbnails/<size>, so magick cannot open its temp file, the script exits 2 and the thumbnail never renders.
+Port: hand-port onto the 05-settings/0022 one-liner ($1 source, $2 destination); the chain is && throughout
+Drop when: the pinned ThumbnailImage.qml creates the thumbnail directory before writing into it.
+---
+ .../quickshell/ii/modules/common/widgets/ThumbnailImage.qml     | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/dots/.config/quickshell/ii/modules/common/widgets/ThumbnailImage.qml b/dots/.config/quickshell/ii/modules/common/widgets/ThumbnailImage.qml
+index 6d81f584..de8dd429 100644
+--- a/dots/.config/quickshell/ii/modules/common/widgets/ThumbnailImage.qml
++++ b/dots/.config/quickshell/ii/modules/common/widgets/ThumbnailImage.qml
+@@ -46,7 +46,7 @@ StyledImage {
+             // Paths go in as $1/$2, never into the script text (shell injection).
+             return ["bash", "-c",
+                 // Temp file + mv: concurrent runs or a mid-generation close cannot leave a half-written thumbnail.
+-                `[ -f "$2" ] && exit 0 || { tmp="$2.$$.tmp.png"; magick "$1" -resize ${maxSize}x${maxSize} "$tmp" && mv "$tmp" "$2" && exit 1; exit 2; }`,
++                `[ -f "$2" ] && exit 0 || { mkdir -p "$(dirname "$2")" && tmp="$2.$$.tmp.png" && magick "$1" -resize ${maxSize}x${maxSize} "$tmp" && mv "$tmp" "$2" && exit 1; exit 2; }`,
+                 "_", root.sourcePath, thumbPath
+             ]
+         }

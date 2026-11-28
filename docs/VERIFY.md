@@ -74,3 +74,13 @@ Every host autologins into Hyprland (`initial_session` in `modules/nixos/desktop
 - With Settings > Bar > Icon popouts off, speaker and mic icons appear only when muted and every click opens the sidebar.
 - The sidebar volume dialogs and the overlay mixer show the new mute button and slider, nothing else changed.
 - The look (card size, spacing, shadow, corners) fits the rest of the shell.
+
+### End4-pC fixes
+
+- Dismiss a notification before its 7 s timeout; `qs log -c ii` has no new `TypeError`.
+- The About page shows the discrete GPU (tariognatha). The `lspci` fallback only runs when the `glxinfo` Intel match is empty; otherwise read `getGpu` in `services/SystemInfo.qml`.
+- `sed '/^esac/q' ~/.config/quickshell/ii/scripts/ai/gemini-categorize-wallpaper.sh | bash -s -- <video>` ends in seconds and leaves a 200 px `/tmp/quickshell/ai/wallpaper.jpg` (no network call).
+- `rm -rf ~/.cache/thumbnails/<size>`, then open the wallpaper selector: thumbnails appear.
+- After a screenshot copy, `wl-paste --list-types` lists `image/png`.
+- Dragging a window preview in the overview does not close it.
+- Play something with data-URI or raw-path art (for example Telegram): the art shows. Plain http art still shows.

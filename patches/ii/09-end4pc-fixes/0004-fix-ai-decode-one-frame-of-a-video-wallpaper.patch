@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Sat, 28 Nov 2026 17:13:02 +0100
+Subject: [PATCH] fix(ai): decode one frame of a video wallpaper
+
+Backport of pctrade/end4-pC 5f1b4b4
+https://github.com/pctrade/end4-pC/commit/5f1b4b4
+Problem: magick on a video decodes every frame (12.9 GB of RAM, over 10 minutes), once per wallpaper switch while aiStyling is on; an animated GIF produced wallpaper-0.jpg, -1.jpg, ...
+Port: clean
+Drop when: the pinned gemini-categorize-wallpaper.sh grabs a single frame of a video and uses [0] for images.
+---
+ .../ii/scripts/ai/gemini-categorize-wallpaper.sh       | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/dots/.config/quickshell/ii/scripts/ai/gemini-categorize-wallpaper.sh b/dots/.config/quickshell/ii/scripts/ai/gemini-categorize-wallpaper.sh
+index ead46561..62bb1298 100755
+--- a/dots/.config/quickshell/ii/scripts/ai/gemini-categorize-wallpaper.sh
++++ b/dots/.config/quickshell/ii/scripts/ai/gemini-categorize-wallpaper.sh
+@@ -15,7 +15,15 @@ RESIZED_IMG_PATH="/tmp/quickshell/ai/wallpaper.jpg"
+ 
+ # Resize image for speed
+ mkdir -p "$(dirname "$RESIZED_IMG_PATH")"
+-magick "$SOURCE_IMG_PATH" -resize 200x -quality 50 "$RESIZED_IMG_PATH"
++case "${SOURCE_IMG_PATH,,}" in
++    # magick would decode every frame of a video: grab only the first one
++    *.mp4|*.webm|*.mkv|*.avi|*.mov)
++        ffmpeg -y -loglevel error -i "$SOURCE_IMG_PATH" -frames:v 1 -vf scale=200:-2 -q:v 10 "$RESIZED_IMG_PATH"
++        ;;
++    *)
++        magick "$SOURCE_IMG_PATH[0]" -resize 200x -quality 50 "$RESIZED_IMG_PATH"
++        ;;
++esac
+ 
+ # Get API key
+ API_KEY=$(secret-tool lookup 'application' 'illogical-impulse' | jq -r '.apiKeys.gemini')

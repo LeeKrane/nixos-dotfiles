@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Sat, 28 Nov 2026 17:13:01 +0100
+Subject: [PATCH] fix(notifications): destroy a notification timer whose
+ notification is gone
+
+Backport of pctrade/end4-pC 584cd9e
+https://github.com/pctrade/end4-pC/commit/584cd9e
+Problem: NotifTimer fires after its notification was dismissed or discarded; findIndex returns -1 and notifObject.isTransient throws a TypeError, which also skips destroy().
+Port: clean (offset)
+Drop when: the pinned NotifTimer.onTriggered returns when its notification is no longer in the list.
+---
+ dots/.config/quickshell/ii/services/Notifications.qml | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/dots/.config/quickshell/ii/services/Notifications.qml b/dots/.config/quickshell/ii/services/Notifications.qml
+index 7f09ad51..98aec0f0 100644
+--- a/dots/.config/quickshell/ii/services/Notifications.qml
++++ b/dots/.config/quickshell/ii/services/Notifications.qml
+@@ -66,6 +66,11 @@ Singleton {
+         running: true
+         onTriggered: () => {
+             const index = root.list.findIndex((notif) => notif.notificationId === notificationId);
++            // Already dismissed or discarded while the timer was running
++            if (index === -1) {
++                destroy();
++                return;
++            }
+             const notifObject = root.list[index];
+             print("[Notifications] Notification timer triggered for ID: " + notificationId + ", transient: " + notifObject?.isTransient);
+             if (notifObject.isTransient) root.discardNotification(notificationId);
