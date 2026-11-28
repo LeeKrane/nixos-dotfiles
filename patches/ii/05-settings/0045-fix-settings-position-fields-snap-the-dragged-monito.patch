@@ -1,0 +1,61 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Sat, 28 Nov 2026 15:07:54 +0100
+Subject: [PATCH] fix(settings): position fields snap the dragged monitor into
+ the gap-free layout
+
+Problem: typing a position in the X or Y field saved it as typed, so the layout could gap or overlap, unlike a canvas drag.
+Fix: the fields go through the canvas layout (moveTo) after the edit, so the same snap, group pull and overlap refusal apply; the field rebinds to the resulting position.
+---
+ .../ii/modules/common/widgets/MonitorCanvas.qml    |  5 +++++
+ .../ii/modules/settings/HyprlandConfig.qml         | 14 ++++++++------
+ 2 files changed, 13 insertions(+), 6 deletions(-)
+
+diff --git a/dots/.config/quickshell/ii/modules/common/widgets/MonitorCanvas.qml b/dots/.config/quickshell/ii/modules/common/widgets/MonitorCanvas.qml
+index 53a8505d..42512030 100644
+--- a/dots/.config/quickshell/ii/modules/common/widgets/MonitorCanvas.qml
++++ b/dots/.config/quickshell/ii/modules/common/widgets/MonitorCanvas.qml
+@@ -73,6 +73,11 @@ Item {
+         root.dragHasOverlap = res.overlap
+     }
+ 
++    function moveTo(idx, newX, newY) {
++        updatePreview(idx, newX, newY)
++        commitPreview()
++    }
++
+     // Every monitor the drag moved goes into one try, so one confirm or revert covers all.
+     function commitPreview() {
+         const mons = monitorConfig.monitors
+diff --git a/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml b/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
+index a22c37d7..ceb73d29 100644
+--- a/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
++++ b/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
+@@ -203,9 +203,10 @@ ContentPage {
+                         value: monitorConfig.monitors[monitorCanvas.selectedIndex]?.x ?? 0
+                         from: -16384; to: 16384; stepSize: 1
+                         onValueModified: {
+-                            if (value === (monitorConfig.monitors[monitorCanvas.selectedIndex]?.x ?? 0)) return
+-                            monitorConfig.updateMonitor(monitorCanvas.selectedIndex, { x: value })
+-                            monitorConfig.save(monitorCanvas.selectedIndex)
++                            const m = monitorConfig.monitors[monitorCanvas.selectedIndex]
++                            if (!m || value === m.x) return
++                            monitorCanvas.moveTo(monitorCanvas.selectedIndex, value, m.y)
++                            value = Qt.binding(() => monitorConfig.monitors[monitorCanvas.selectedIndex]?.x ?? 0)
+                         }
+                     }
+ 
+@@ -216,9 +217,10 @@ ContentPage {
+                         value: monitorConfig.monitors[monitorCanvas.selectedIndex]?.y ?? 0
+                         from: -16384; to: 16384; stepSize: 1
+                         onValueModified: {
+-                            if (value === (monitorConfig.monitors[monitorCanvas.selectedIndex]?.y ?? 0)) return
+-                            monitorConfig.updateMonitor(monitorCanvas.selectedIndex, { y: value })
+-                            monitorConfig.save(monitorCanvas.selectedIndex)
++                            const m = monitorConfig.monitors[monitorCanvas.selectedIndex]
++                            if (!m || value === m.y) return
++                            monitorCanvas.moveTo(monitorCanvas.selectedIndex, m.x, value)
++                            value = Qt.binding(() => monitorConfig.monitors[monitorCanvas.selectedIndex]?.y ?? 0)
+                         }
+                     }
+                 }
