@@ -162,7 +162,9 @@
     "tooltips": {
       "clickToShow": false
     },
-    "topLeftIcon": "spark",
+    "topLeftIcon": "claude-code",
+    "topLeftIconColor": "onLayer0",
+    "topLeftIconsPath": "",
     "utilButtons": {
       "showColorPicker": true,
       "showDarkModeToggle": false,
@@ -298,6 +300,7 @@
     },
     "centerClock": true,
     "launchOnStartup": true,
+    "mainMonitor": "DP-2",
     "materialShapeChars": true,
     "security": {
       "requirePasswordToPower": false,
