@@ -13,7 +13,7 @@ Drop when upstream shows the lock prompt on one monitor.
  3 files changed, 5 insertions(+), 1 deletion(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/common/panels/lock/LockScreen.qml b/dots/.config/quickshell/ii/modules/common/panels/lock/LockScreen.qml
-index 0569eb77..bab16c03 100644
+index 96c4600c..2ae867c0 100644
 --- a/dots/.config/quickshell/ii/modules/common/panels/lock/LockScreen.qml
 +++ b/dots/.config/quickshell/ii/modules/common/panels/lock/LockScreen.qml
 @@ -14,13 +14,15 @@ Scope {
@@ -31,7 +31,7 @@ index 0569eb77..bab16c03 100644
 +            readonly property bool onPromptScreen: root.promptScreen === "" || sessionLockSurface.screen?.name === root.promptScreen
 +            opacity: active && onPromptScreen ? 1 : 0
              Behavior on opacity {
-                 animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
              }
 diff --git a/dots/.config/quickshell/ii/modules/ii/background/Background.qml b/dots/.config/quickshell/ii/modules/ii/background/Background.qml
 index 7841fe1d..fabb876e 100644
@@ -46,7 +46,7 @@ index 7841fe1d..fabb876e 100644
                      var f = Config.options.background.parallax.widgetsFactor;
                      return f / bgRoot.parallaxRation;
 diff --git a/dots/.config/quickshell/ii/modules/ii/lock/Lock.qml b/dots/.config/quickshell/ii/modules/ii/lock/Lock.qml
-index 16c4832b..b49d10ac 100644
+index c80c0b50..f03ebf10 100644
 --- a/dots/.config/quickshell/ii/modules/ii/lock/Lock.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/lock/Lock.qml
 @@ -14,6 +14,7 @@ LockScreen {

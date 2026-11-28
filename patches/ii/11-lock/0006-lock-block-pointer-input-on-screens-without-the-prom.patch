@@ -11,7 +11,7 @@ Drop with the prompt screen selection.
  1 file changed, 9 insertions(+)
 
 diff --git a/dots/.config/quickshell/ii/modules/common/panels/lock/LockScreen.qml b/dots/.config/quickshell/ii/modules/common/panels/lock/LockScreen.qml
-index bab16c03..d60c0b6b 100644
+index 2ae867c0..f0ff5131 100644
 --- a/dots/.config/quickshell/ii/modules/common/panels/lock/LockScreen.qml
 +++ b/dots/.config/quickshell/ii/modules/common/panels/lock/LockScreen.qml
 @@ -19,6 +19,7 @@ Scope {

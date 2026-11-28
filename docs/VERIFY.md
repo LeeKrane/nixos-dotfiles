@@ -88,6 +88,7 @@ Every host autologins into Hyprland (`initial_session` in `modules/nixos/desktop
 ### Left sidebar icon picker
 
 - Settings > Bar > "Left sidebar button" lists the built-in icons and highlights the current one.
+- The grid includes the Claude Code icon (`claude-code`).
 - Picking an icon and a color changes the bar button at once and survives a shell restart.
 - A folder of `.svg` or `.png` files in "Custom icons folder" replaces the grid; picking one shows it on the button in its own colors. A folder name with spaces or `#` works. Emptying the field, or removing the picked file, shows `spark`.
 - With AI, translator and anime off and Agents on, the button is visible; with Agents off too it is hidden.
@@ -99,7 +100,7 @@ Run on a host with two monitors (tariognatha). Lock with `qs -c ii ipc call lock
 - With the pointer on each monitor in turn, lock and unlock: the pointer position and the focused monitor (`hyprctl monitors -j | jq -r '.[] | select(.focused).name'`) are back where they were.
 - Set Settings > Interface > "Lock screen" > "Main monitor" to each monitor: the password prompt, clock and weather appear only there, the other monitor shows the wallpaper, typing works with the pointer on either monitor, and the password unlocks.
 - Click the wallpaper-only monitor while locked: nothing happens (no suspend, reboot or power-off).
-- With "Focused monitor" selected, and with a saved name whose monitor is unplugged: the prompt appears on the monitor that was focused at lock time.
+- With "Automatic (first monitor)" selected, and with a saved name whose monitor is unplugged: the prompt appears on the first monitor, whichever one has the pointer.
 - Unplug the prompt monitor while locked: the prompt moves to the remaining monitor.
 - Boot with `launchOnStartup` on, with "Main monitor" set and then empty: a prompt appears either way.
 - Turn "Enable blur" off: the monitor without the prompt shows the unblurred wallpaper.

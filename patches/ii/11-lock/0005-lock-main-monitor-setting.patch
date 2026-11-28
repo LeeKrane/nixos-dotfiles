@@ -24,7 +24,7 @@ index 0f011f5b..7eecabbb 100644
  
              property JsonObject media: JsonObject {
 diff --git a/dots/.config/quickshell/ii/modules/settings/InterfaceConfig.qml b/dots/.config/quickshell/ii/modules/settings/InterfaceConfig.qml
-index 2c1640dc..3acdba7b 100644
+index 2c1640dc..3091252f 100644
 --- a/dots/.config/quickshell/ii/modules/settings/InterfaceConfig.qml
 +++ b/dots/.config/quickshell/ii/modules/settings/InterfaceConfig.qml
 @@ -1,5 +1,6 @@
@@ -48,7 +48,7 @@ index 2c1640dc..3acdba7b 100644
 +                        const saved = Config.options.lock.mainMonitor
 +                        const names = Quickshell.screens.map(s => s.name)
 +                        if (saved && !names.includes(saved)) names.push(saved)
-+                        return [{ displayName: Translation.tr("Focused monitor"), value: "" }, ...names.map(name => ({ displayName: name, value: name }))]
++                        return [{ displayName: Translation.tr("Automatic (first monitor)"), value: "" }, ...names.map(name => ({ displayName: name, value: name }))]
 +                    }
 +                    currentValue: Config.options.lock.mainMonitor
 +                    onSelected: newValue => { Config.options.lock.mainMonitor = newValue }

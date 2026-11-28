@@ -1,0 +1,17 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Sat, 28 Nov 2026 18:32:29 +0100
+Subject: [PATCH] icon-picker: add claude code icon
+
+---
+ dots/.config/quickshell/ii/assets/icons/claude-code-symbolic.svg | 1 +
+ 1 file changed, 1 insertion(+)
+ create mode 100644 dots/.config/quickshell/ii/assets/icons/claude-code-symbolic.svg
+
+diff --git a/dots/.config/quickshell/ii/assets/icons/claude-code-symbolic.svg b/dots/.config/quickshell/ii/assets/icons/claude-code-symbolic.svg
+new file mode 100644
+index 00000000..e5662699
+--- /dev/null
++++ b/dots/.config/quickshell/ii/assets/icons/claude-code-symbolic.svg
+@@ -0,0 +1 @@
++<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="#000000" fill-rule="evenodd" d="M5 7h14v8H5zM2 10h3v3H2zM19 10h3v3h-3zM6 15h2v3H6zM9 15h2v3H9zM13 15h2v3h-2zM16 15h2v3h-2zM8 9h2v3H8zM14 9h2v3h-2z"/></svg>

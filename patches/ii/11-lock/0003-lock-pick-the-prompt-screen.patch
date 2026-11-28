@@ -7,9 +7,10 @@ GlobalStates.lockPromptScreen holds the name of the screen that shows the lock p
 
 Drop when upstream chooses one lock prompt screen.
 ---
- dots/.config/quickshell/ii/GlobalStates.qml       |  1 +
- .../quickshell/ii/modules/ii/lock/Lock.qml        | 15 +++++++++++++++
- 2 files changed, 16 insertions(+)
+ dots/.config/quickshell/ii/GlobalStates.qml        |  1 +
+ .../ii/modules/common/panels/lock/LockScreen.qml   |  2 +-
+ .../.config/quickshell/ii/modules/ii/lock/Lock.qml | 14 ++++++++++++++
+ 3 files changed, 16 insertions(+), 1 deletion(-)
 
 diff --git a/dots/.config/quickshell/ii/GlobalStates.qml b/dots/.config/quickshell/ii/GlobalStates.qml
 index 8415ff3e..d30e22a7 100644
@@ -23,11 +24,24 @@ index 8415ff3e..d30e22a7 100644
      property bool screenUnlockFailed: false
      property bool screenTranslatorOpen: false
      property bool sessionOpen: false
+diff --git a/dots/.config/quickshell/ii/modules/common/panels/lock/LockScreen.qml b/dots/.config/quickshell/ii/modules/common/panels/lock/LockScreen.qml
+index 0569eb77..96c4600c 100644
+--- a/dots/.config/quickshell/ii/modules/common/panels/lock/LockScreen.qml
++++ b/dots/.config/quickshell/ii/modules/common/panels/lock/LockScreen.qml
+@@ -22,7 +22,7 @@ Scope {
+             anchors.fill: parent
+             opacity: active ? 1 : 0
+             Behavior on opacity {
+-                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
++                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+             }
+             sourceComponent: root.lockSurface
+         }
 diff --git a/dots/.config/quickshell/ii/modules/ii/lock/Lock.qml b/dots/.config/quickshell/ii/modules/ii/lock/Lock.qml
-index de95f7fd..16c4832b 100644
+index de95f7fd..c80c0b50 100644
 --- a/dots/.config/quickshell/ii/modules/ii/lock/Lock.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/lock/Lock.qml
-@@ -26,6 +26,21 @@ LockScreen {
+@@ -26,6 +26,20 @@ LockScreen {
          restoreMode: Binding.RestoreNone
      }
  
@@ -35,7 +49,6 @@ index de95f7fd..16c4832b 100644
 +        const names = Quickshell.screens.map(s => s.name)
 +        const main = Config.options.lock.mainMonitor
 +        if (main && names.includes(main)) return main
-+        if (names.includes(root.focusedMonitorAtLock)) return root.focusedMonitorAtLock
 +        return names[0] ?? ""
 +    }
 +
