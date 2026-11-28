@@ -98,7 +98,7 @@ Every host autologins into Hyprland (`initial_session` in `modules/nixos/desktop
 Run on a host with two monitors (tariognatha). Lock with `qs -c ii ipc call lock activate`.
 
 - With the pointer on each monitor in turn, lock and unlock: the pointer position and the focused monitor (`hyprctl monitors -j | jq -r '.[] | select(.focused).name'`) are back where they were.
-- Set Settings > Interface > "Lock screen" > "Main monitor" to each monitor: the password prompt, clock and weather appear only there, the other monitor shows the wallpaper, typing works with the pointer on either monitor, and the password unlocks.
+- Set Settings > Hyprland > Displays > "Lock screen" > "Main monitor" to each monitor (entries read "Model (DP-x)"): the password prompt, clock and weather appear only there, the other monitor shows the wallpaper, typing works with the pointer on either monitor, and the password unlocks.
 - Click the wallpaper-only monitor while locked: nothing happens (no suspend, reboot or power-off).
 - With "Automatic (first monitor)" selected, and with a saved name whose monitor is unplugged: the prompt appears on the first monitor, whichever one has the pointer.
 - Unplug the prompt monitor while locked: the prompt moves to the remaining monitor.
