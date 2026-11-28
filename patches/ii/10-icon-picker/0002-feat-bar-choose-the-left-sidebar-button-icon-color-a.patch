@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: krane <chris@krane.dev>
-Date: Sat, 28 Nov 2026 17:22:06 +0100
+Date: Sat, 28 Nov 2026 17:26:50 +0100
 Subject: [PATCH] feat(bar): choose the left sidebar button icon, color and
  icon folder
 
@@ -10,13 +10,29 @@ Port of pctrade/end4-pC 52814a6 onto bar.topLeftIcon: new bar.topLeftIconColor a
 
 Drop when the pinned ii has an icon picker for the left sidebar button.
 ---
+ .../ii/modules/common/Appearance.qml          |  4 +
  .../quickshell/ii/modules/common/Config.qml   |  2 +
- .../modules/common/widgets/IconPickerGrid.qml | 80 +++++++++++++++++++
- .../ii/modules/ii/bar/LeftSidebarButton.qml   | 16 +++-
- .../ii/modules/settings/BarConfig.qml         | 37 +++++++++
- 4 files changed, 132 insertions(+), 3 deletions(-)
+ .../modules/common/widgets/IconPickerGrid.qml | 78 +++++++++++++++++++
+ .../ii/modules/ii/bar/LeftSidebarButton.qml   | 13 +++-
+ .../ii/modules/settings/BarConfig.qml         | 41 ++++++++++
+ 5 files changed, 135 insertions(+), 3 deletions(-)
  create mode 100644 dots/.config/quickshell/ii/modules/common/widgets/IconPickerGrid.qml
 
+diff --git a/dots/.config/quickshell/ii/modules/common/Appearance.qml b/dots/.config/quickshell/ii/modules/common/Appearance.qml
+index 6b88688c..c6a7642f 100644
+--- a/dots/.config/quickshell/ii/modules/common/Appearance.qml
++++ b/dots/.config/quickshell/ii/modules/common/Appearance.qml
+@@ -34,6 +34,10 @@ Singleton {
+     property real backgroundTransparency: Config?.options.appearance.transparency.enable ? Config?.options.appearance.transparency.automatic ? autoBackgroundTransparency : Config?.options.appearance.transparency.backgroundTransparency : 0
+     property real contentTransparency: Config?.options.appearance.transparency.automatic ? autoContentTransparency : Config?.options.appearance.transparency.contentTransparency
+ 
++    function roleColor(name) {
++        return (name ? colors[`col${name.charAt(0).toUpperCase()}${name.slice(1)}`] : undefined) ?? colors.colOnLayer0
++    }
++
+     function getColorFromName(name) {
+         switch (name) {
+             case "primary":            return colors.colPrimary
 diff --git a/dots/.config/quickshell/ii/modules/common/Config.qml b/dots/.config/quickshell/ii/modules/common/Config.qml
 index c9a2b3e3..0f011f5b 100644
 --- a/dots/.config/quickshell/ii/modules/common/Config.qml
@@ -32,10 +48,10 @@ index c9a2b3e3..0f011f5b 100644
                  property bool verbose: true
 diff --git a/dots/.config/quickshell/ii/modules/common/widgets/IconPickerGrid.qml b/dots/.config/quickshell/ii/modules/common/widgets/IconPickerGrid.qml
 new file mode 100644
-index 00000000..16be8642
+index 00000000..b5486faa
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/modules/common/widgets/IconPickerGrid.qml
-@@ -0,0 +1,80 @@
+@@ -0,0 +1,78 @@
 +import QtQuick
 +import QtQuick.Layouts
 +import Quickshell
@@ -51,9 +67,7 @@ index 00000000..16be8642
 +    property string colorName: ""
 +    property real minCellSize: 44
 +    readonly property bool builtin: FileUtils.folderUrl(customFolder) === ""
-+    readonly property color iconColor: colorName
-+        ? (Appearance.colors[`col${colorName.charAt(0).toUpperCase()}${colorName.slice(1)}`] ?? Appearance.colors.colOnLayer0)
-+        : Appearance.colors.colOnLayer0
++    readonly property color iconColor: Appearance.roleColor(colorName)
 +    readonly property int columns: Math.max(1, Math.floor((width + spacing) / (minCellSize + spacing)))
 +    readonly property real cellSize: width > 0 ? (width + spacing) / columns - spacing : minCellSize
 +    signal selected(string name)
@@ -117,7 +131,7 @@ index 00000000..16be8642
 +    }
 +}
 diff --git a/dots/.config/quickshell/ii/modules/ii/bar/LeftSidebarButton.qml b/dots/.config/quickshell/ii/modules/ii/bar/LeftSidebarButton.qml
-index 6c73ca72..699241ad 100644
+index 6c73ca72..0e2920b1 100644
 --- a/dots/.config/quickshell/ii/modules/ii/bar/LeftSidebarButton.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/bar/LeftSidebarButton.qml
 @@ -3,6 +3,7 @@ import qs
@@ -128,7 +142,7 @@ index 6c73ca72..699241ad 100644
  
  RippleButton {
      id: root
-@@ -12,7 +13,15 @@ RippleButton {
+@@ -12,7 +13,12 @@ RippleButton {
      property bool aiChatEnabled: Config.options.policies.ai !== 0
      property bool translatorEnabled: Config.options.sidebar.translator.enable
      property bool animeEnabled: Config.options.policies.weeb !== 0
@@ -137,21 +151,18 @@ index 6c73ca72..699241ad 100644
 +    visible: aiChatEnabled || translatorEnabled || animeEnabled || agentsEnabled
 +
 +    readonly property string iconName: Config.options.bar.topLeftIcon
-+    readonly property bool customFolderIcon: FileUtils.folderUrl(Config.options.bar.topLeftIconsPath) !== ""
-+    readonly property color iconColor: {
-+        const name = Config.options.bar.topLeftIconColor;
-+        return name ? (Appearance.colors[`col${name.charAt(0).toUpperCase()}${name.slice(1)}`] ?? Appearance.colors.colOnLayer0) : Appearance.colors.colOnLayer0;
-+    }
++    readonly property bool customFolderIcon: FileUtils.folderUrl(Config.options.bar.topLeftIconsPath) !== "" && /\.(svg|png)$/.test(iconName)
++    readonly property color iconColor: Appearance.roleColor(Config.options.bar.topLeftIconColor)
  
      property real buttonPadding: 5
      implicitWidth: distroIcon.width + buttonPadding * 2
-@@ -57,9 +66,10 @@ RippleButton {
+@@ -57,9 +63,10 @@ RippleButton {
          anchors.centerIn: parent
          width: 19.5
          height: 19.5
 -        source: Config.options.bar.topLeftIcon == 'distro' ? SystemInfo.distroIcon : `${Config.options.bar.topLeftIcon}-symbolic`
 +        source: root.iconName == 'distro' ? SystemInfo.distroIcon : (root.customFolderIcon ? root.iconName : `${root.iconName}-symbolic`)
-+        customFolder: root.iconName == 'distro' ? "" : Config.options.bar.topLeftIconsPath
++        customFolder: root.customFolderIcon ? Config.options.bar.topLeftIconsPath : ""
          colorize: true
 -        color: Appearance.colors.colOnLayer0
 +        color: root.iconColor
@@ -159,10 +170,10 @@ index 6c73ca72..699241ad 100644
          Rectangle {
              opacity: root.showPing ? 1 : 0
 diff --git a/dots/.config/quickshell/ii/modules/settings/BarConfig.qml b/dots/.config/quickshell/ii/modules/settings/BarConfig.qml
-index 313282b0..31183279 100644
+index 313282b0..6d92a8c9 100644
 --- a/dots/.config/quickshell/ii/modules/settings/BarConfig.qml
 +++ b/dots/.config/quickshell/ii/modules/settings/BarConfig.qml
-@@ -197,6 +197,43 @@ ContentPage {
+@@ -197,6 +197,47 @@ ContentPage {
              }
          }
  
@@ -190,7 +201,11 @@ index 313282b0..31183279 100644
 +                    Timer {
 +                        id: iconsPathDebounce
 +                        interval: 600
-+                        onTriggered: Config.options.bar.topLeftIconsPath = iconsPathField.value
++                        onTriggered: {
++                            if (iconsPathField.value === Config.options.bar.topLeftIconsPath) return;
++                            Config.options.bar.topLeftIconsPath = iconsPathField.value;
++                            Config.options.bar.topLeftIcon = "spark";
++                        }
 +                    }
 +                }
 +                ColorSelectionArray {

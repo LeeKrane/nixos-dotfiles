@@ -351,7 +351,7 @@ is a reimplementation: the fork commit patches files that do not exist here.
 
 ### `10-icon-picker`
 
-Settings, Bar, "Left sidebar button" picks the icon of the left sidebar button, its color and an optional folder of icons. The keys sit under `bar` in `config.json`: `topLeftIcon` (a bare built-in name, to which the button appends `-symbolic`; the file name as is for an icon from the custom folder; or `distro` for the OS logo), `topLeftIconColor` (a color role such as `primary`; empty is the theme color) and `topLeftIconsPath` (a folder of `.svg` and `.png` files, `~` allowed; empty is `assets/icons`). Changing the folder does not migrate `topLeftIcon`: pick the icon again. The button also shows when only the Agents tab is enabled. Drop when pinned ii has an icon picker for this button.
+Settings, Bar, "Left sidebar button" sets the button's icon, color and an optional icon folder. An icon from the folder is stored by file name, a built-in one by bare name; changing the folder resets the icon to `spark`. Only absolute or `~/` folder paths count. The button also shows when only the Agents tab is on. Drop when pinned ii has an icon picker for this button.
 
 ### Workflow
 

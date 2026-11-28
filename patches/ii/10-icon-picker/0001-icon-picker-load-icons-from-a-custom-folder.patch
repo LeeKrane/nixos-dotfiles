@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: pctrade <pablo78celi@gmail>
-Date: Wed, 30 Sep 2026 18:41:22 -0500
+From: krane <chris@krane.dev>
+Date: Sat, 28 Nov 2026 17:26:50 +0100
 Subject: [PATCH] icon-picker: load icons from a custom folder
 
 CustomIcon only reads assets/icons, so the left sidebar button cannot show an icon from the user's own folder.
@@ -9,35 +9,36 @@ Backport of pctrade/end4-pC 52814a6, FileUtils.folderUrl and CustomIcon.customFo
 
 Drop when the pinned CustomIcon takes a custom icon folder.
 ---
- .../ii/modules/common/functions/FileUtils.qml        | 12 ++++++++++++
- .../ii/modules/common/widgets/CustomIcon.qml         |  4 +++-
- 2 files changed, 15 insertions(+), 1 deletion(-)
+ .../ii/modules/common/functions/FileUtils.qml       | 13 +++++++++++++
+ .../ii/modules/common/widgets/CustomIcon.qml        |  7 +++++--
+ 2 files changed, 18 insertions(+), 2 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/common/functions/FileUtils.qml b/dots/.config/quickshell/ii/modules/common/functions/FileUtils.qml
-index e7f5e610..5638ad7f 100644
+index e7f5e610..bf0fd503 100644
 --- a/dots/.config/quickshell/ii/modules/common/functions/FileUtils.qml
 +++ b/dots/.config/quickshell/ii/modules/common/functions/FileUtils.qml
-@@ -15,6 +15,18 @@ Singleton {
+@@ -15,6 +15,19 @@ Singleton {
          return s.startsWith("file://") ? s.slice(7) : s;
      }
  
 +    /**
-+     * Turns a user typed folder path into a file url, expanding a leading ~
-+     * @param {string} path
-+     * @returns {string} file url, or an empty string when the path is empty
++     * Turns a user typed folder path into a percent-encoded file url, expanding a leading ~
++     * @param {string} path absolute or starting with ~/
++     * @returns {string} file url, or an empty string when the path is empty or not absolute
 +     */
 +    function folderUrl(path) {
 +        const trimmed = root.trimFileProtocol(path ?? "").trim();
-+        if (trimmed === "") return "";
-+        const expanded = trimmed.startsWith("~") ? Quickshell.env("HOME") + trimmed.slice(1) : trimmed;
-+        return "file://" + expanded.replace(/\/+$/, "");
++        const expanded = trimmed === "~" || trimmed.startsWith("~/") ? Quickshell.env("HOME") + trimmed.slice(1) : trimmed;
++        if (!expanded.startsWith("/")) return "";
++        const clean = expanded.replace(/\/+$/, "") || "/";
++        return "file://" + clean.split("/").map(encodeURIComponent).join("/");
 +    }
 +
      /**
       * Extracts the file name from a file path
       * @param {string} str
 diff --git a/dots/.config/quickshell/ii/modules/common/widgets/CustomIcon.qml b/dots/.config/quickshell/ii/modules/common/widgets/CustomIcon.qml
-index d7a1c634..9655ab67 100644
+index d7a1c634..b09d39a3 100644
 --- a/dots/.config/quickshell/ii/modules/common/widgets/CustomIcon.qml
 +++ b/dots/.config/quickshell/ii/modules/common/widgets/CustomIcon.qml
 @@ -2,6 +2,7 @@ import QtQuick
@@ -58,3 +59,13 @@ index d7a1c634..9655ab67 100644
      width: 30
      height: 30
      
+@@ -17,7 +19,8 @@ Item {
+         id: iconImage
+         anchors.fill: parent
+         source: {
+-            const fullPathWhenSourceIsIconName = iconFolder + "/" + root.source;
++            const name = root.customFolder ? root.source.split("/").map(encodeURIComponent).join("/") : root.source;
++            const fullPathWhenSourceIsIconName = iconFolder + "/" + name;
+             if (iconFolder && fullPathWhenSourceIsIconName) {
+                 return fullPathWhenSourceIsIconName
+             }
