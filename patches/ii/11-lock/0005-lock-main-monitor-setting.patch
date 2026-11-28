@@ -1,0 +1,58 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Sat, 28 Nov 2026 17:25:53 +0100
+Subject: [PATCH] lock: main monitor setting
+
+lock.mainMonitor names the monitor that shows the lock prompt; empty means the focused monitor. Settings, Interface, ...
+
+Drop when upstream has a lock monitor setting.
+---
+ .../quickshell/ii/modules/common/Config.qml      |  1 +
+ .../ii/modules/settings/InterfaceConfig.qml      | 16 ++++++++++++++++
+ 2 files changed, 17 insertions(+)
+
+diff --git a/dots/.config/quickshell/ii/modules/common/Config.qml b/dots/.config/quickshell/ii/modules/common/Config.qml
+index 0f011f5b..7eecabbb 100644
+--- a/dots/.config/quickshell/ii/modules/common/Config.qml
++++ b/dots/.config/quickshell/ii/modules/common/Config.qml
+@@ -418,6 +418,7 @@ Singleton {
+                     property bool requirePasswordToPower: false
+                 }
+                 property bool materialShapeChars: true
++                property string mainMonitor: ""
+             }
+ 
+             property JsonObject media: JsonObject {
+diff --git a/dots/.config/quickshell/ii/modules/settings/InterfaceConfig.qml b/dots/.config/quickshell/ii/modules/settings/InterfaceConfig.qml
+index 2c1640dc..3acdba7b 100644
+--- a/dots/.config/quickshell/ii/modules/settings/InterfaceConfig.qml
++++ b/dots/.config/quickshell/ii/modules/settings/InterfaceConfig.qml
+@@ -1,5 +1,6 @@
+ import QtQuick
+ import QtQuick.Layouts
++import Quickshell
+ import qs
+ import qs.services
+ import qs.modules.common
+@@ -658,6 +659,21 @@ ContentPage {
+                     checked: Config.options.lock.launchOnStartup
+                     onCheckedChanged: { Config.options.lock.launchOnStartup = checked }
+                 }
++                ConfigComboBox {
++                    Layout.fillWidth: true
++                    buttonIcon: "monitor"
++                    text: Translation.tr("Main monitor")
++                    description: Translation.tr("Shows the password prompt, clock and weather. Other monitors show the wallpaper only.")
++                    fieldWidth: 240
++                    model: {
++                        const saved = Config.options.lock.mainMonitor
++                        const names = Quickshell.screens.map(s => s.name)
++                        if (saved && !names.includes(saved)) names.push(saved)
++                        return [{ displayName: Translation.tr("Focused monitor"), value: "" }, ...names.map(name => ({ displayName: name, value: name }))]
++                    }
++                    currentValue: Config.options.lock.mainMonitor
++                    onSelected: newValue => { Config.options.lock.mainMonitor = newValue }
++                }
+             }
+ 
+             ContentSubsection {

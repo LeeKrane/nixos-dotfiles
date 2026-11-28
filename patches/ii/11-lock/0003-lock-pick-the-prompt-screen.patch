@@ -1,0 +1,51 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Sat, 28 Nov 2026 17:25:37 +0100
+Subject: [PATCH] lock: pick the prompt screen
+
+GlobalStates.lockPromptScreen holds the name of the screen that shows the lock prompt: lock.mainMonitor if connected, else the monitor focused at lock time, else the first screen. It follows Quickshell.screens, so unplugging the prompt screen while locked moves it. Nothing reads it yet.
+
+Drop when upstream chooses one lock prompt screen.
+---
+ dots/.config/quickshell/ii/GlobalStates.qml       |  1 +
+ .../quickshell/ii/modules/ii/lock/Lock.qml        | 15 +++++++++++++++
+ 2 files changed, 16 insertions(+)
+
+diff --git a/dots/.config/quickshell/ii/GlobalStates.qml b/dots/.config/quickshell/ii/GlobalStates.qml
+index 8415ff3e..d30e22a7 100644
+--- a/dots/.config/quickshell/ii/GlobalStates.qml
++++ b/dots/.config/quickshell/ii/GlobalStates.qml
+@@ -26,6 +26,7 @@ Singleton {
+     property bool searchOpen: false
+     property bool screenLocked: false
+     property bool screenLockContainsCharacters: false
++    property string lockPromptScreen: ""
+     property bool screenUnlockFailed: false
+     property bool screenTranslatorOpen: false
+     property bool sessionOpen: false
+diff --git a/dots/.config/quickshell/ii/modules/ii/lock/Lock.qml b/dots/.config/quickshell/ii/modules/ii/lock/Lock.qml
+index de95f7fd..16c4832b 100644
+--- a/dots/.config/quickshell/ii/modules/ii/lock/Lock.qml
++++ b/dots/.config/quickshell/ii/modules/ii/lock/Lock.qml
+@@ -26,6 +26,21 @@ LockScreen {
+         restoreMode: Binding.RestoreNone
+     }
+ 
++    readonly property string promptScreenName: {
++        const names = Quickshell.screens.map(s => s.name)
++        const main = Config.options.lock.mainMonitor
++        if (main && names.includes(main)) return main
++        if (names.includes(root.focusedMonitorAtLock)) return root.focusedMonitorAtLock
++        return names[0] ?? ""
++    }
++
++    Binding {
++        target: GlobalStates
++        property: "lockPromptScreen"
++        value: root.promptScreenName
++        when: GlobalStates.screenLocked
++    }
++
+     function focusRestoreBatch() {
+         const mon = root.focusedMonitorAtLock
+         if (!Quickshell.screens.some(s => s.name === mon)) return ""

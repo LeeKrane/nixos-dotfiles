@@ -1,0 +1,123 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Sat, 28 Nov 2026 17:25:28 +0100
+Subject: [PATCH] lock: move monitors to the nearest empty workspace
+
+The lock sent each monitor to workspace 2147483647 - n. Port of end4-pC 03b134b, which does not apply as written: pick the next workspace id with no windows that is not another monitor's current workspace. Also skip ids a workspace rule pins to a monitor (hyprctl workspacerules -j), or focusing one would pull focus to another monitor.
+
+Not ported: pushedTargets, lastProcessedLockWall, MaterialThemeLoader.
+
+Drop when the pinned ii picks an empty workspace on lock.
+---
+ .../quickshell/ii/modules/ii/lock/Lock.qml    | 81 +++++++++++++++----
+ 1 file changed, 65 insertions(+), 16 deletions(-)
+
+diff --git a/dots/.config/quickshell/ii/modules/ii/lock/Lock.qml b/dots/.config/quickshell/ii/modules/ii/lock/Lock.qml
+index e843338d..de95f7fd 100644
+--- a/dots/.config/quickshell/ii/modules/ii/lock/Lock.qml
++++ b/dots/.config/quickshell/ii/modules/ii/lock/Lock.qml
+@@ -34,31 +34,79 @@ LockScreen {
+         return batch
+     }
+ 
+-    function pushWorkspaces() {
+-        var next = {}
+-        var batch = "keyword animation workspaces,1,7,menu_decel,slidevert; "
+-        for (var i = 0; i < Quickshell.screens.length; ++i) {
+-            var mon = Quickshell.screens[i].name
+-            var mData = HyprlandData.monitors.find(m => m.name === mon)
+-            if (mData?.activeWorkspace == undefined) {
+-                return;
++    function pinnedWorkspaceIds(rules) {
++        var ids = new Set()
++        for (var r = 0; r < rules.length; ++r) {
++            if (!rules[r].monitor && !rules[r].persistent) continue
++            const ws = String(rules[r].workspaceString)
++            const range = /^r\[(\d+)-(\d+)\]$/.exec(ws)
++            if (range) {
++                for (var n = parseInt(range[1]); n <= parseInt(range[2]) && n < parseInt(range[1]) + 64; ++n) ids.add(n)
++            } else if (/^\d+$/.test(ws)) {
++                ids.add(parseInt(ws))
+             }
+-            var ws = (mData?.activeWorkspace?.id ?? 1)
+-            next[mon] = ws
+-            batch += `hyprctl dispatch 'hl.dsp.focus({monitor="${mon}"})'; hyprctl dispatch 'hl.dsp.focus({workspace=${2147483647 - ws}})';`
+         }
+-        root.savedWorkspaces = next
++        return ids
++    }
++
++    function nearestEmptyWorkspace(from, taken) {
++        var id = Math.max(from, 0) + 1
++        while (taken.has(id)) {
++            id++
++        }
++        return id
++    }
++
++    function pushWorkspaces(snapshot) {
++        var taken = root.pinnedWorkspaceIds(snapshot.rules)
++        for (var k = 0; k < snapshot.workspaces.length; ++k) {
++            if (snapshot.workspaces[k].windows > 0) taken.add(snapshot.workspaces[k].id)
++        }
++        var currents = {}
++        for (var i = 0; i < Quickshell.screens.length; ++i) {
++            var name = Quickshell.screens[i].name
++            var current = snapshot.monitors.find(m => m.name === name)?.activeWorkspace?.id
++            if (current == undefined) continue
++            currents[name] = current
++            taken.add(current)
++        }
++        var batch = "keyword animation workspaces,1,7,menu_decel,slidevert; "
++        for (var mon in currents) {
++            var target = snapshot.legacy ? 2147483647 - currents[mon] : root.nearestEmptyWorkspace(currents[mon], taken)
++            taken.add(target)
++            batch += `hyprctl dispatch 'hl.dsp.focus({monitor="${mon}"})'; hyprctl dispatch 'hl.dsp.focus({workspace=${target}})';`
++        }
++        root.savedWorkspaces = currents
+         Quickshell.execDetached(["bash", "-c", batch + root.focusRestoreBatch()])
+     }
+ 
++    property bool snapshotRerun: false
++
+     Process {
+         id: snapshotProc
+-        command: ["hyprctl", "cursorpos", "-j"]
++        command: ["bash", "-c", "printf '{\"cursor\":%s,\"rules\":%s,\"workspaces\":%s,\"monitors\":%s}' \"$(hyprctl cursorpos -j)\" \"$(hyprctl workspacerules -j)\" \"$(hyprctl workspaces -j)\" \"$(hyprctl monitors -j)\""]
+         stdout: StdioCollector {
+             id: snapshotCollector
+             onStreamFinished: {
+-                root.cursorAtLock = JSON.parse(snapshotCollector.text)
+-                root.pushWorkspaces()
++                if (root.snapshotRerun) {
++                    root.snapshotRerun = false
++                    Qt.callLater(() => { snapshotProc.running = true })
++                    return
++                }
++                if (!GlobalStates.screenLocked) return
++                var snapshot
++                try {
++                    snapshot = JSON.parse(snapshotCollector.text)
++                } catch (e) {
++                    snapshot = { cursor: null, rules: [], workspaces: HyprlandData.workspaces, monitors: HyprlandData.monitors, legacy: false }
++                    if (snapshot.monitors.length === 0) {
++                        console.warn("lock snapshot failed and HyprlandData is empty; moving monitors to the far workspace", e)
++                        snapshot.monitors = Quickshell.screens.map(s => ({ name: s.name, activeWorkspace: { id: Hyprland.monitorFor(s)?.activeWorkspace?.id } }))
++                        snapshot.legacy = true
++                    }
++                }
++                root.cursorAtLock = snapshot.cursor
++                root.pushWorkspaces(snapshot)
+             }
+         }
+     }
+@@ -97,7 +145,8 @@ LockScreen {
+                 root.trackFocus = false
+                 root.cursorAtLock = null
+                 root.savedWorkspaces = ({})
+-                snapshotProc.running = true
++                if (snapshotProc.running) root.snapshotRerun = true
++                else snapshotProc.running = true
+             } else {
+                 restoreTimer.start()
+             }

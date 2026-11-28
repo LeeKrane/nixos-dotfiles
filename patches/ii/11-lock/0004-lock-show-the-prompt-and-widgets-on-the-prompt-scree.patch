@@ -1,0 +1,59 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Sat, 28 Nov 2026 17:25:38 +0100
+Subject: [PATCH] lock: show the prompt and widgets on the prompt screen only
+
+Every monitor showed the password field, clock and weather. LockScreen gets promptScreen (empty: every screen; only the ii lock sets it, so the waffle lock is unchanged). Other screens keep the lock surface loaded at zero opacity, so typing on any monitor still reaches the password field. Background hides the widget canvas on those screens while locked; they keep the wallpaper and blur.
+
+Drop when upstream shows the lock prompt on one monitor.
+---
+ .../quickshell/ii/modules/common/panels/lock/LockScreen.qml   | 4 +++-
+ .../quickshell/ii/modules/ii/background/Background.qml        | 1 +
+ dots/.config/quickshell/ii/modules/ii/lock/Lock.qml           | 1 +
+ 3 files changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/dots/.config/quickshell/ii/modules/common/panels/lock/LockScreen.qml b/dots/.config/quickshell/ii/modules/common/panels/lock/LockScreen.qml
+index 0569eb77..bab16c03 100644
+--- a/dots/.config/quickshell/ii/modules/common/panels/lock/LockScreen.qml
++++ b/dots/.config/quickshell/ii/modules/common/panels/lock/LockScreen.qml
+@@ -14,13 +14,15 @@ Scope {
+ 
+     required property Component lockSurface
+     property alias context: lockContext
++    property string promptScreen: ""
+     property Component sessionLockSurface: WlSessionLockSurface {
+         id: sessionLockSurface
+         color: "transparent"
+         Loader {
+             active: GlobalStates.screenLocked
+             anchors.fill: parent
+-            opacity: active ? 1 : 0
++            readonly property bool onPromptScreen: root.promptScreen === "" || sessionLockSurface.screen?.name === root.promptScreen
++            opacity: active && onPromptScreen ? 1 : 0
+             Behavior on opacity {
+                 animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+             }
+diff --git a/dots/.config/quickshell/ii/modules/ii/background/Background.qml b/dots/.config/quickshell/ii/modules/ii/background/Background.qml
+index 7841fe1d..fabb876e 100644
+--- a/dots/.config/quickshell/ii/modules/ii/background/Background.qml
++++ b/dots/.config/quickshell/ii/modules/ii/background/Background.qml
+@@ -228,6 +228,7 @@ Variants {
+                 id: widgetCanvas
+                 width: parent.width
+                 height: parent.height
++                visible: !GlobalStates.screenLocked || GlobalStates.lockPromptScreen === "" || bgRoot.modelData.name === GlobalStates.lockPromptScreen
+                 readonly property real parallaxFactor: {
+                     var f = Config.options.background.parallax.widgetsFactor;
+                     return f / bgRoot.parallaxRation;
+diff --git a/dots/.config/quickshell/ii/modules/ii/lock/Lock.qml b/dots/.config/quickshell/ii/modules/ii/lock/Lock.qml
+index 16c4832b..b49d10ac 100644
+--- a/dots/.config/quickshell/ii/modules/ii/lock/Lock.qml
++++ b/dots/.config/quickshell/ii/modules/ii/lock/Lock.qml
+@@ -14,6 +14,7 @@ LockScreen {
+ 
+     // Monitor name -> workspace id to restore on unlock (set when locking)
+     property var savedWorkspaces: ({})
++    promptScreen: root.promptScreenName
+     property string focusedMonitorAtLock: ""
+     property bool trackFocus: true
+     property var cursorAtLock: null

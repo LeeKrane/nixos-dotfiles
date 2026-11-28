@@ -256,7 +256,7 @@ is lost.
 
 `patches/ii/` holds one `git format-patch` series per sub-project:
 `01-fixes`, `02-translator`, `04-agents`, `05-settings`, `06-notifications`,
-`07-idle`, `08-bar-popouts`, `09-end4pc-fixes` and `10-icon-picker`. `lib/mk-host.nix` applies
+`07-idle`, `08-bar-popouts`, `09-end4pc-fixes`, `10-icon-picker` and `11-lock`. `lib/mk-host.nix` applies
 them with `applyPatches`, after `patches/illogical-flake-cheatsheet-fkeys.patch`,
 to build the `dots-hyprland-patched` source the soymou module copies:
 directories in
@@ -352,6 +352,15 @@ is a reimplementation: the fork commit patches files that do not exist here.
 ### `10-icon-picker`
 
 Ports pctrade/end4-pC 52814a6 (`FileUtils.folderUrl` and `CustomIcon.customFolder` only) and adds a "Left sidebar button" section to Settings, Bar: icon, color (`bar.topLeftIconColor`) and an optional icon folder (`bar.topLeftIconsPath`, absolute or `~/`). An icon from the folder is stored by file name, a built-in one by bare name. A name that does not resolve falls back to `spark`, and folder icons keep their own colors. The button also shows when only the Agents tab is on. Drop when pinned ii has an icon picker for this button.
+
+### `11-lock`
+
+Lock screen fixes (pctrade/end4-pC#72) and a main-monitor setting.
+
+- `0001`: lock and unlock leave focus and the pointer on the monitor that was focused at lock time.
+- `0002`: lock moves each monitor to the nearest empty workspace. Window counts, monitors and workspace rules come from one `hyprctl` snapshot taken at lock time. Workspaces pinned by a monitor or persistent rule are skipped. If the snapshot fails, the lock still moves monitors, using `HyprlandData` and no rules, or the far workspace `2147483647 - n` when `HyprlandData` is empty.
+- `0003` to `0005`: the prompt, clock and weather show on one monitor, `GlobalStates.lockPromptScreen`, set only while the ii lock is locked: `lock.mainMonitor` (Settings, Interface, "Lock screen", "Main monitor") if connected, else the monitor focused at lock time, else the first screen. The choice follows `Quickshell.screens`. Other monitors show the wallpaper only. `LockSurface` stays loaded on every monitor at zero opacity there, so typing on any monitor reaches the password field. `LockScreen.promptScreen` defaults to every screen and only `Lock.qml` sets it, so the waffle lock is unchanged.
+- `0006`: a `MouseArea` stops clicks, hover and wheel reaching the hidden lock surface on screens without the prompt.
 
 ### Workflow
 

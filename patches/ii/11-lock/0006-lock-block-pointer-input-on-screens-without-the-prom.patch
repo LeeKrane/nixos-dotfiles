@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: krane <chris@krane.dev>
+Date: Sat, 28 Nov 2026 17:29:26 +0100
+Subject: [PATCH] lock: block pointer input on screens without the prompt
+
+Opacity 0 does not stop mouse input, so the hidden lock surface still took clicks, hover and wheel: a click on the wallpaper-only monitor could press its power buttons. Cover it with a MouseArea that eats buttons, hover and wheel while the surface is not on the prompt screen; keyboard input is unaffected.
+
+Drop with the prompt screen selection.
+---
+ .../ii/modules/common/panels/lock/LockScreen.qml         | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/dots/.config/quickshell/ii/modules/common/panels/lock/LockScreen.qml b/dots/.config/quickshell/ii/modules/common/panels/lock/LockScreen.qml
+index bab16c03..d60c0b6b 100644
+--- a/dots/.config/quickshell/ii/modules/common/panels/lock/LockScreen.qml
++++ b/dots/.config/quickshell/ii/modules/common/panels/lock/LockScreen.qml
+@@ -19,6 +19,7 @@ Scope {
+         id: sessionLockSurface
+         color: "transparent"
+         Loader {
++            id: surfaceLoader
+             active: GlobalStates.screenLocked
+             anchors.fill: parent
+             readonly property bool onPromptScreen: root.promptScreen === "" || sessionLockSurface.screen?.name === root.promptScreen
+@@ -28,6 +29,14 @@ Scope {
+             }
+             sourceComponent: root.lockSurface
+         }
++        MouseArea {
++            anchors.fill: parent
++            z: 1
++            visible: !surfaceLoader.onPromptScreen
++            acceptedButtons: Qt.AllButtons
++            hoverEnabled: true
++            onWheel: wheel => wheel.accepted = true
++        }
+     }
+ 
+     Process {
