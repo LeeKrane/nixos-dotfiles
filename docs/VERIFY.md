@@ -89,5 +89,5 @@ Every host autologins into Hyprland (`initial_session` in `modules/nixos/desktop
 
 - Settings > Bar > "Left sidebar button" lists the built-in icons and highlights the current one.
 - Picking an icon and a color changes the bar button at once and survives a shell restart.
-- A folder of `.svg` or `.png` files in "Custom icons folder" replaces the grid and the button falls back to `spark`; picking one shows it on the button. Emptying the field restores the built-in grid and `spark`. A folder name with spaces or `#` works.
+- A folder of `.svg` or `.png` files in "Custom icons folder" replaces the grid; picking one shows it on the button in its own colors. A folder name with spaces or `#` works. Emptying the field, or removing the picked file, shows `spark`.
 - With AI, translator and anime off and Agents on, the button is visible; with Agents off too it is hidden.

@@ -13,9 +13,9 @@ Drop when the pinned ii has an icon picker for the left sidebar button.
  .../ii/modules/common/Appearance.qml          |  4 +
  .../quickshell/ii/modules/common/Config.qml   |  2 +
  .../modules/common/widgets/IconPickerGrid.qml | 78 +++++++++++++++++++
- .../ii/modules/ii/bar/LeftSidebarButton.qml   | 13 +++-
- .../ii/modules/settings/BarConfig.qml         | 41 ++++++++++
- 5 files changed, 135 insertions(+), 3 deletions(-)
+ .../ii/modules/ii/bar/LeftSidebarButton.qml   | 35 +++++++--
+ .../ii/modules/settings/BarConfig.qml         | 40 ++++++++++
+ 5 files changed, 154 insertions(+), 5 deletions(-)
  create mode 100644 dots/.config/quickshell/ii/modules/common/widgets/IconPickerGrid.qml
 
 diff --git a/dots/.config/quickshell/ii/modules/common/Appearance.qml b/dots/.config/quickshell/ii/modules/common/Appearance.qml
@@ -48,7 +48,7 @@ index c9a2b3e3..0f011f5b 100644
                  property bool verbose: true
 diff --git a/dots/.config/quickshell/ii/modules/common/widgets/IconPickerGrid.qml b/dots/.config/quickshell/ii/modules/common/widgets/IconPickerGrid.qml
 new file mode 100644
-index 00000000..b5486faa
+index 00000000..12599910
 --- /dev/null
 +++ b/dots/.config/quickshell/ii/modules/common/widgets/IconPickerGrid.qml
 @@ -0,0 +1,78 @@
@@ -110,7 +110,7 @@ index 00000000..b5486faa
 +                height: root.cellSize * 0.5
 +                source: cell.fileName
 +                customFolder: root.customFolder
-+                colorize: true
++                colorize: root.builtin
 +                color: root.iconColor
 +            }
 +
@@ -131,7 +131,7 @@ index 00000000..b5486faa
 +    }
 +}
 diff --git a/dots/.config/quickshell/ii/modules/ii/bar/LeftSidebarButton.qml b/dots/.config/quickshell/ii/modules/ii/bar/LeftSidebarButton.qml
-index 6c73ca72..0e2920b1 100644
+index 6c73ca72..31f914b0 100644
 --- a/dots/.config/quickshell/ii/modules/ii/bar/LeftSidebarButton.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/bar/LeftSidebarButton.qml
 @@ -3,6 +3,7 @@ import qs
@@ -142,7 +142,7 @@ index 6c73ca72..0e2920b1 100644
  
  RippleButton {
      id: root
-@@ -12,7 +13,12 @@ RippleButton {
+@@ -12,7 +13,13 @@ RippleButton {
      property bool aiChatEnabled: Config.options.policies.ai !== 0
      property bool translatorEnabled: Config.options.sidebar.translator.enable
      property bool animeEnabled: Config.options.policies.weeb !== 0
@@ -152,28 +152,53 @@ index 6c73ca72..0e2920b1 100644
 +
 +    readonly property string iconName: Config.options.bar.topLeftIcon
 +    readonly property bool customFolderIcon: FileUtils.folderUrl(Config.options.bar.topLeftIconsPath) !== "" && /\.(svg|png)$/.test(iconName)
++    readonly property string builtinSource: iconName == 'distro' ? SystemInfo.distroIcon : `${/\.(svg|png)$/.test(iconName) ? "spark" : iconName}-symbolic`
 +    readonly property color iconColor: Appearance.roleColor(Config.options.bar.topLeftIconColor)
  
      property real buttonPadding: 5
      implicitWidth: distroIcon.width + buttonPadding * 2
-@@ -57,9 +63,10 @@ RippleButton {
+@@ -52,14 +59,32 @@ RippleButton {
+         }
+     }
+ 
+-    CustomIcon {
++    Item {
+         id: distroIcon
          anchors.centerIn: parent
          width: 19.5
          height: 19.5
 -        source: Config.options.bar.topLeftIcon == 'distro' ? SystemInfo.distroIcon : `${Config.options.bar.topLeftIcon}-symbolic`
-+        source: root.iconName == 'distro' ? SystemInfo.distroIcon : (root.customFolderIcon ? root.iconName : `${root.iconName}-symbolic`)
-+        customFolder: root.customFolderIcon ? Config.options.bar.topLeftIconsPath : ""
-         colorize: true
+-        colorize: true
 -        color: Appearance.colors.colOnLayer0
-+        color: root.iconColor
++
++        Loader {
++            id: customIcon
++            anchors.fill: parent
++            active: root.customFolderIcon
++            visible: active && item && item.status !== Image.Error
++            sourceComponent: CustomIcon {
++                width: customIcon.width
++                height: customIcon.height
++                source: root.iconName
++                customFolder: Config.options.bar.topLeftIconsPath
++            }
++        }
++
++        CustomIcon {
++            anchors.fill: parent
++            visible: !customIcon.visible
++            source: root.builtinSource
++            colorize: true
++            color: root.iconColor
++        }
  
          Rectangle {
              opacity: root.showPing ? 1 : 0
 diff --git a/dots/.config/quickshell/ii/modules/settings/BarConfig.qml b/dots/.config/quickshell/ii/modules/settings/BarConfig.qml
-index 313282b0..6d92a8c9 100644
+index 313282b0..0b70e3e6 100644
 --- a/dots/.config/quickshell/ii/modules/settings/BarConfig.qml
 +++ b/dots/.config/quickshell/ii/modules/settings/BarConfig.qml
-@@ -197,6 +197,47 @@ ContentPage {
+@@ -197,6 +197,46 @@ ContentPage {
              }
          }
  
@@ -202,9 +227,8 @@ index 313282b0..6d92a8c9 100644
 +                        id: iconsPathDebounce
 +                        interval: 600
 +                        onTriggered: {
-+                            if (iconsPathField.value === Config.options.bar.topLeftIconsPath) return;
-+                            Config.options.bar.topLeftIconsPath = iconsPathField.value;
-+                            Config.options.bar.topLeftIcon = "spark";
++                            if (iconsPathField.value !== Config.options.bar.topLeftIconsPath)
++                                Config.options.bar.topLeftIconsPath = iconsPathField.value;
 +                        }
 +                    }
 +                }

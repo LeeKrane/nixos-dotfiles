@@ -351,7 +351,7 @@ is a reimplementation: the fork commit patches files that do not exist here.
 
 ### `10-icon-picker`
 
-Settings, Bar, "Left sidebar button" sets the button's icon, color and an optional icon folder. An icon from the folder is stored by file name, a built-in one by bare name; changing the folder resets the icon to `spark`. Only absolute or `~/` folder paths count. The button also shows when only the Agents tab is on. Drop when pinned ii has an icon picker for this button.
+Ports pctrade/end4-pC 52814a6 (`FileUtils.folderUrl` and `CustomIcon.customFolder` only) and adds a "Left sidebar button" section to Settings, Bar: icon, color (`bar.topLeftIconColor`) and an optional icon folder (`bar.topLeftIconsPath`, absolute or `~/`). An icon from the folder is stored by file name, a built-in one by bare name. A name that does not resolve falls back to `spark`, and folder icons keep their own colors. The button also shows when only the Agents tab is on. Drop when pinned ii has an icon picker for this button.
 
 ### Workflow
 

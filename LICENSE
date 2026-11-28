@@ -49,8 +49,8 @@ being modified is copyright end-4 and the dots-hyprland contributors. The
 patches in `patches/ii/01-fixes/` that say "Backport of pctrade/end4-pC"
 are backported from pctrade's end4-pC (https://github.com/pctrade/end4-pC),
 and the settings pages, widgets and scripts in `patches/ii/05-settings/` are
-ported from it (at dc2ca2600ee6), and `patches/ii/10-icon-picker/` is ported from its commit 52814a6. All are GPL-3.0 and remain copyright
-their original authors. Each patch's `From:` and `Date:` headers record who
+ported from it (at dc2ca2600ee6). So is `patches/ii/10-icon-picker/` (commit
+52814a6). All are GPL-3.0 and remain copyright their original authors. Each patch's `From:` and `Date:` headers record who
 modified it and when.
 
 `patches/illogical-flake-*.patch` modify soymou's illogical-flake

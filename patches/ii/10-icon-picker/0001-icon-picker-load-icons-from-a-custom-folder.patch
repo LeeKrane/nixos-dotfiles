@@ -10,8 +10,8 @@ Backport of pctrade/end4-pC 52814a6, FileUtils.folderUrl and CustomIcon.customFo
 Drop when the pinned CustomIcon takes a custom icon folder.
 ---
  .../ii/modules/common/functions/FileUtils.qml       | 13 +++++++++++++
- .../ii/modules/common/widgets/CustomIcon.qml        |  7 +++++--
- 2 files changed, 18 insertions(+), 2 deletions(-)
+ .../ii/modules/common/widgets/CustomIcon.qml        |  8 ++++++--
+ 2 files changed, 19 insertions(+), 2 deletions(-)
 
 diff --git a/dots/.config/quickshell/ii/modules/common/functions/FileUtils.qml b/dots/.config/quickshell/ii/modules/common/functions/FileUtils.qml
 index e7f5e610..bf0fd503 100644
@@ -38,7 +38,7 @@ index e7f5e610..bf0fd503 100644
       * Extracts the file name from a file path
       * @param {string} str
 diff --git a/dots/.config/quickshell/ii/modules/common/widgets/CustomIcon.qml b/dots/.config/quickshell/ii/modules/common/widgets/CustomIcon.qml
-index d7a1c634..b09d39a3 100644
+index d7a1c634..83738ed0 100644
 --- a/dots/.config/quickshell/ii/modules/common/widgets/CustomIcon.qml
 +++ b/dots/.config/quickshell/ii/modules/common/widgets/CustomIcon.qml
 @@ -2,6 +2,7 @@ import QtQuick
@@ -49,22 +49,23 @@ index d7a1c634..b09d39a3 100644
  
  Item {
      id: root
-@@ -9,7 +10,8 @@ Item {
+@@ -9,7 +10,9 @@ Item {
      property bool colorize: false
      property color color
      property string source: ""
 -    property string iconFolder: Qt.resolvedUrl(Quickshell.shellPath("assets/icons"))  // The folder to check first
 +    property string customFolder: ""
 +    property string iconFolder: FileUtils.folderUrl(root.customFolder) || Qt.resolvedUrl(Quickshell.shellPath("assets/icons"))
++    readonly property int status: iconImage.status
      width: 30
      height: 30
      
-@@ -17,7 +19,8 @@ Item {
+@@ -17,7 +20,8 @@ Item {
          id: iconImage
          anchors.fill: parent
          source: {
 -            const fullPathWhenSourceIsIconName = iconFolder + "/" + root.source;
-+            const name = root.customFolder ? root.source.split("/").map(encodeURIComponent).join("/") : root.source;
++            const name = FileUtils.folderUrl(root.customFolder) !== "" ? root.source.split("/").map(encodeURIComponent).join("/") : root.source;
 +            const fullPathWhenSourceIsIconName = iconFolder + "/" + name;
              if (iconFolder && fullPathWhenSourceIsIconName) {
                  return fullPathWhenSourceIsIconName
