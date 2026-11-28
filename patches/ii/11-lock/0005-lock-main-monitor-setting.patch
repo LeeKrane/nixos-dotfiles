@@ -8,9 +8,9 @@ lock.mainMonitor names the monitor that shows the lock prompt; empty means the f
 Drop when upstream has a lock monitor setting.
 ---
  .../quickshell/ii/modules/common/Config.qml   |  1 +
- .../ii/modules/settings/HyprlandConfig.qml    | 38 +++++++++++++++++++
+ .../ii/modules/settings/HyprlandConfig.qml    | 31 +++++++++++++++++++
  .../ii/modules/settings/InterfaceConfig.qml   |  1 +
- 3 files changed, 40 insertions(+)
+ 3 files changed, 33 insertions(+)
 
 diff --git a/dots/.config/quickshell/ii/modules/common/Config.qml b/dots/.config/quickshell/ii/modules/common/Config.qml
 index 0f011f5b..7eecabbb 100644
@@ -25,14 +25,13 @@ index 0f011f5b..7eecabbb 100644
  
              property JsonObject media: JsonObject {
 diff --git a/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml b/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
-index ceb73d29..180b9d77 100644
+index ceb73d29..ff8f39aa 100644
 --- a/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
 +++ b/dots/.config/quickshell/ii/modules/settings/HyprlandConfig.qml
-@@ -223,6 +223,44 @@ ContentPage {
-                             value = Qt.binding(() => monitorConfig.monitors[monitorCanvas.selectedIndex]?.y ?? 0)
+@@ -142,6 +142,37 @@ ContentPage {
                          }
                      }
-+
+ 
 +                    RowLayout {
 +                        id: mainRow
 +                        readonly property string monitorName: monitorConfig.monitors[monitorCanvas.selectedIndex]?.name ?? ""
@@ -52,27 +51,21 @@ index ceb73d29..180b9d77 100644
 +                        }
 +                        StyledText {
 +                            Layout.fillWidth: true
-+                            text: Translation.tr("Main monitor (lock screen prompt, clock, weather)")
++                            text: Translation.tr("Main monitor")
 +                            color: Appearance.colors.colOnSecondaryContainer
 +                        }
-+                        StyledText {
-+                            visible: mainRow.isMain
-+                            text: Translation.tr("This is the main monitor")
-+                            font.pixelSize: Appearance.font.pixelSize.smaller
-+                            color: Appearance.colors.colSubtext
-+                        }
 +                        RippleButtonWithIcon {
-+                            visible: !mainRow.isMain
 +                            Layout.fillWidth: false
-+                            buttonRadius: Appearance.rounding.small
-+                            materialIcon: "star"
-+                            mainText: Translation.tr("Make main monitor")
++                            enabled: !mainRow.isMain
++                            materialIcon: mainRow.isMain ? "" : "star"
++                            mainText: mainRow.isMain ? Translation.tr("This is the main monitor") : Translation.tr("Make main monitor")
 +                            onClicked: Config.options.lock.mainMonitor = mainRow.monitorName
 +                        }
 +                    }
-                 }
-             }
- 
++
+                     ConfigComboBox {
+                         Layout.fillWidth: true
+                         buttonIcon: "aspect_ratio"
 diff --git a/dots/.config/quickshell/ii/modules/settings/InterfaceConfig.qml b/dots/.config/quickshell/ii/modules/settings/InterfaceConfig.qml
 index 2c1640dc..c75e3419 100644
 --- a/dots/.config/quickshell/ii/modules/settings/InterfaceConfig.qml
